@@ -1,4 +1,5 @@
-import { Store } from '@tanstack/react-store'
+// src/libs/store/appActions.tsx
+import { Store } from '@tanstack/store'
 
 interface AppState {
     sidebarOpen: boolean
@@ -12,6 +13,7 @@ export const appStore = new Store<AppState>({
     language: 'fa',
 })
 
+// App Store Actions
 export const appActions = {
     toggleSidebar: () => {
         appStore.setState((state) => ({
@@ -24,20 +26,6 @@ export const appActions = {
         appStore.setState((state) => ({
             ...state,
             sidebarOpen: open,
-        }))
-    },
-
-    openSidebar: () => {
-        appStore.setState((state) => ({
-            ...state,
-            sidebarOpen: true,
-        }))
-    },
-
-    closeSidebar: () => {
-        appStore.setState((state) => ({
-            ...state,
-            sidebarOpen: false,
         }))
     },
 

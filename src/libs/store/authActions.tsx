@@ -1,4 +1,5 @@
-import { Store } from '@tanstack/react-store'
+// src/libs/store/authActions.tsx
+import { Store } from '@tanstack/store'
 import type { User } from '../store'
 
 interface AuthState {
@@ -19,19 +20,10 @@ export const authStore = new Store<AuthState>({
     permissions: [],
 })
 
-const hasStorage = () => typeof window !== 'undefined' && typeof localStorage !== 'undefined'
-
+// Auth Store Actions
 export const authActions = {
-    login: (
-        userName: string,
-        token: string,
-        roles: string[],
-        nationalId: string,
-        fullName?: string,
-        branchName?: string,
-        permissions: string[] = [],
-    ) => {
-        const user: User = {
+    login: (userName: string, token: string, roles: string[], nationalId: string, fullName?: string, branchName?: string) => {
+        const user = {
             id: nationalId,
             username: userName,
             full_name: fullName || userName,
@@ -48,28 +40,15 @@ export const authActions = {
             isLoading: false,
             fullName,
             branchName,
-            permissions,
         }))
 
-        if (!hasStorage()) return
-
+        // Store in localStorage
         localStorage.setItem('auth_token', token)
         localStorage.setItem('auth_user', JSON.stringify(userName))
         localStorage.setItem('roles', JSON.stringify(roles))
-        localStorage.setItem('permissions', JSON.stringify(permissions))
         localStorage.setItem('auth_national_Id', JSON.stringify(nationalId))
-
-        if (fullName) {
-            localStorage.setItem('auth_fullName', fullName)
-        } else {
-            localStorage.removeItem('auth_fullName')
-        }
-
-        if (branchName) {
-            localStorage.setItem('auth_branchName', branchName)
-        } else {
-            localStorage.removeItem('auth_branchName')
-        }
+        if (fullName) localStorage.setItem('auth_fullName', fullName)
+        if (branchName) localStorage.setItem('auth_branchName', branchName)
     },
 
     setPermissions: (permissions: string[]) => {
@@ -77,14 +56,11 @@ export const authActions = {
             ...state,
             permissions,
         }))
-
-        if (!hasStorage()) return
         localStorage.setItem('permissions', JSON.stringify(permissions))
     },
 
     logout: () => {
-        authStore.setState((state) => ({
-            ...state,
+        authStore.setState(() => ({
             isAuthenticated: false,
             user: null,
             token: null,
@@ -93,9 +69,7 @@ export const authActions = {
             branchName: undefined,
             permissions: [],
         }))
-
-        if (!hasStorage()) return
-
+        // Clear localStorage
         localStorage.removeItem('auth_token')
         localStorage.removeItem('auth_user')
         localStorage.removeItem('roles')
@@ -113,8 +87,6 @@ export const authActions = {
     },
 
     initializeFromStorage: () => {
-        if (!hasStorage()) return
-
         const token = localStorage.getItem('auth_token')
         const userStr = localStorage.getItem('auth_user')
         const fullName = localStorage.getItem('auth_fullName') || undefined
@@ -123,39 +95,36 @@ export const authActions = {
         const rolesStr = localStorage.getItem('roles')
         const permissionsStr = localStorage.getItem('permissions')
 
-        if (!token || !userStr) return
+        if (token && userStr) {
+            try {
+                const userName = JSON.parse(userStr)
+                const roles = rolesStr ? JSON.parse(rolesStr) : []
+                const permissions = permissionsStr ? JSON.parse(permissionsStr) : []
+                const nationalIdValue = nationalId ? JSON.parse(nationalId) : ''
 
-        try {
-            const userName = JSON.parse(userStr)
-            const roles = rolesStr ? JSON.parse(rolesStr) : []
-            const permissions = permissionsStr ? JSON.parse(permissionsStr) : []
-            const nationalIdValue = nationalId ? JSON.parse(nationalId) : ''
+                const user = {
+                    id: nationalIdValue,
+                    username: userName,
+                    full_name: fullName || userName,
+                    roles: Array.isArray(roles) ? roles.join(',') : roles,
+                    fullName,
+                    branchName,
+                }
 
-            const normalizedRoles = Array.isArray(roles) ? roles : []
-            const normalizedPermissions = Array.isArray(permissions) ? permissions : []
-
-            const user: User = {
-                id: nationalIdValue,
-                username: userName,
-                full_name: fullName || userName,
-                roles: normalizedRoles.join(','),
-                fullName,
-                branchName,
+                authStore.setState((state) => ({
+                    ...state,
+                    isAuthenticated: true,
+                    user,
+                    token,
+                    isLoading: false,
+                    fullName,
+                    branchName,
+                    permissions: Array.isArray(permissions) ? permissions : [],
+                }))
+            } catch (error) {
+                console.error('Failed to parse stored user data:', error)
+                authActions.logout()
             }
-
-            authStore.setState((state) => ({
-                ...state,
-                isAuthenticated: true,
-                user,
-                token,
-                isLoading: false,
-                fullName,
-                branchName,
-                permissions: normalizedPermissions,
-            }))
-        } catch (error) {
-            console.error('Failed to parse stored user data:', error)
-            authActions.logout()
         }
     },
 }

@@ -9,8 +9,13 @@ export const ErrorPage = ({ error }: ErrorPageProps) => {
     const { isAuthenticated } = useAuthStore()
 
     // Debug: log the error to see what we're getting
-    console.log('ErrorPage error:', error)
-    console.log('Is authenticated:', isAuthenticated)
+    if (error) {
+        console.error('ErrorPage error details:', {
+            message: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : null,
+            raw: error
+        });
+    }    console.log('Is authenticated:', isAuthenticated)
 
     // Check if this is a session expiry error
     const isSessionExpired = !isAuthenticated ||
@@ -69,4 +74,4 @@ export const ErrorPage = ({ error }: ErrorPageProps) => {
             </div>
         </div>
     )
-} 
+}

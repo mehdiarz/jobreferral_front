@@ -1,13 +1,14 @@
 import { authActions, authStore } from './store/authActions'
 import { getApiBaseUrl } from './appConfig'
 
-const LOCAL_BASE_URL = `http://localhost:5688/smart-trust`;
+const LOCAL_BASE_URL = "/job-referral-api";
 
 export class ApiClient {
     public async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
         const baseUrl = getApiBaseUrl();
         const url = `${baseUrl}${endpoint.startsWith("/") ? endpoint : "/" + endpoint}`;
-        const token = authStore.state.token
+        const token = authStore.state.token ||
+            localStorage.getItem("auth_token");
         const config: RequestInit = {
             headers: {
                 'Content-Type': 'application/json',
@@ -102,6 +103,9 @@ export const queryKeys = {
     },
     levels: {
         all: ['levels', 'all'] as const,
+    },
+    regions: {
+        all: ["regions", "all"] as const,
     },
 } as const
 

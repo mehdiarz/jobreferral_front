@@ -5,6 +5,8 @@ import './index.css'
 import { createAppRouter } from './libs/router'
 import { QueryProvider } from './libs/queryClient'
 import { loadConfig, getBasePath } from './libs/appConfig'
+import { ToastProvider } from './libs/toastContext'
+
 
 async function bootstrap() {
     await loadConfig()
@@ -13,7 +15,9 @@ async function bootstrap() {
     createRoot(document.getElementById('root')!).render(
         <StrictMode>
             <QueryProvider>
+                <ToastProvider>
                 <RouterProvider router={router} />
+                </ToastProvider>
             </QueryProvider>
         </StrictMode>
     )

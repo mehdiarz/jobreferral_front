@@ -1,5 +1,5 @@
 // src/libs/store/menuActions.tsx
-import { Store } from '@tanstack/react-store'
+import { Store } from '@tanstack/store'
 import type { MenuItem } from '../store'
 
 interface MenuState {
@@ -14,6 +14,7 @@ export const menuStore = new Store<MenuState>({
     error: null,
 })
 
+// Menu Store Actions
 export const menuActions = {
     setItems: (items: MenuItem[]) => {
         menuStore.setState((state) => ({

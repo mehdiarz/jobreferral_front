@@ -5,6 +5,7 @@ import { appStore } from './store/appActions'
 import { menuStore } from './store/menuActions'
 import { authStore } from './store/authActions'
 
+// Types
 export interface User {
     id: string
     username: string
@@ -17,22 +18,21 @@ export interface User {
 export interface MenuItem {
     id: string
     title: string
-    icon?: string
+    icon: string
     path?: string
     permissions?: string[]
-    children?: MenuItem[]
+    children?: MenuItemBase[]
 }
 
-export type ToastType = 'success' | 'error' | 'warning' | 'info'
-
-export interface Toast {
-    message: string
-    type: ToastType
-    duration?: number
-    detail?: string
-    position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
+export interface MenuItemBase {
+    id: string
+    title: string
+    icon: string
+    path: string
+    permissions?: string[]
 }
 
+// React hooks for using stores
 export const useAuthStore = () => useStore(authStore)
 export const useMenuStore = () => useStore(menuStore)
 export const useAppStore = () => useStore(appStore)

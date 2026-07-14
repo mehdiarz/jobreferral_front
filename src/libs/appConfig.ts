@@ -4,7 +4,7 @@
  * Single source of truth: config.json
  */
 
-const DEFAULT_API_BASE = "https://10.35.23.11/JobReferral/api";
+const DEFAULT_API_BASE = "/job-referral-api";
 
 let apiBaseUrl = DEFAULT_API_BASE;
 let uploadHubUrl: string | null = null;

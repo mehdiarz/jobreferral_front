@@ -1,8 +1,8 @@
-// src/lib/createFormStore.ts
-import { Store, useStore } from '@tanstack/react-store';
+// src/libs/store/globalFormStore.tsx
+import { Store } from '@tanstack/store';
+import { useStore } from '@tanstack/react-store';
 import React, { createContext, useContext } from 'react';
 
-// تایپ جنریک برای داده فرم
 export type FormData = Record<string, any>;
 
 export function createFormStore<T extends FormData>(initialData: T) {
