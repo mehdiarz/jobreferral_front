@@ -1,6 +1,9 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
+import { Pencil, Trash2, Loader2  } from "lucide-react";
+import { FileDown } from "lucide-react";
+
 
 import { MainLayout } from "../../baseComponents/MainLayout";
 import { FluidGrid } from "../../baseComponents/FluidGrid";
@@ -176,17 +179,22 @@ export default function ExpertsPage() {
             const filteredItems = filterValue
                 ? items.filter((expert) => {
                     switch (filterKey) {
-                        case "fullName":
+                        case "fullName": {
                             return getExpertFullName(expert).toLocaleLowerCase("fa").includes(filterValue.toLocaleLowerCase("fa"));
-                        case "code":
+                        }
+                        case "code": {
                             return getExpertCode(expert).toLocaleLowerCase("fa").includes(filterValue.toLocaleLowerCase("fa"));
-                        case "expertiseZone":
+                        }
+                        case "expertiseZone": {
                             return getExpertiseZoneTitle(expert, zoneOptionsRef.current).toLocaleLowerCase("fa").includes(filterValue.toLocaleLowerCase("fa"));
-                        case "licenseNumber":
+                        }
+                        case "licenseNumber": {
                             return safeText(expert.licenseNumber).toLocaleLowerCase("fa").includes(filterValue.toLocaleLowerCase("fa"));
-                        default:
+                        }
+                        default: {
                             const searchText = `${getExpertFullName(expert)} ${getExpertCode(expert)} ${safeText(expert.licenseNumber)}`.toLocaleLowerCase("fa");
                             return searchText.includes(filterValue.toLocaleLowerCase("fa"));
+                        }
                     }
                 })
                 : items;
@@ -206,7 +214,7 @@ export default function ExpertsPage() {
     const regionsQuery = useQuery({ queryKey: ["regions"], queryFn: getAllRegions });
 
     const zoneOptions: SelectOption[] = useMemo(() => {
-        if (!zonesQuery.data) return zoneOptionsRef.current;
+        if (!zonesQuery.data) return [];
         const zones = getArrayData(zonesQuery.data);
         const result: SelectOption[] = [];
         for (const zone of zones) {
@@ -214,9 +222,12 @@ export default function ExpertsPage() {
             const title = safeText((zone as ZoneItem)?.title ?? (zone as ZoneItem)?.name ?? (zone as ZoneItem)?.caption ?? "");
             if (id && title) result.push({ id, title });
         }
-        zoneOptionsRef.current = result;
         return result;
     }, [zonesQuery.data]);
+
+    useEffect(() => {
+        zoneOptionsRef.current = zoneOptions;
+    }, [zoneOptions]);
 
     const regionOptions: SelectOption[] = useMemo(() => {
         if (!regionsQuery.data) return [];
@@ -305,13 +316,34 @@ export default function ExpertsPage() {
         { accessorKey: "licenseNumber", header: "شماره پروانه کارشناسی", cell: ({ row }) => safeText(row.original.licenseNumber) },
         { id: "licenseExpirationDate", header: "تاریخ انقضا پروانه", cell: ({ row }) => getLicenseExpirationDate(row.original) },
         { id: "status", header: "وضعیت", cell: ({ row }) => getStatusTitle(row.original) },
-        { id: "actions", header: "عملیات", enableSorting: false,
+        {
+            id: "actions",
+            header: "عملیات",
+            enableSorting: false,
             cell: ({ row }) => {
                 const isDeleting = deleteMutation.isPending && deleteMutation.variables === row.original.id;
                 return (
-                    <div className="flex flex-wrap items-center gap-2">
-                        <FormButton title="ویرایش" size="sm" variant="primary" onClick={() => handleEditClick(row.original)} disabled={deleteMutation.isPending} />
-                        <FormButton title="حذف" size="sm" variant="danger" onClick={() => setExpertToDelete(row.original)} isLoading={isDeleting} disabled={deleteMutation.isPending} />
+                    <div className="flex items-center gap-1">
+                        <button
+                            onClick={() => handleEditClick(row.original)}
+                            disabled={deleteMutation.isPending}
+                            className="p-1.5 rounded-md text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                            title="ویرایش"
+                        >
+                            <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                            onClick={() => setExpertToDelete(row.original)}
+                            disabled={deleteMutation.isPending}
+                            className="p-1.5 rounded-md text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                            title="حذف"
+                        >
+                            {isDeleting ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <Trash2 className="w-4 h-4" />
+                            )}
+                        </button>
                     </div>
                 );
             },
@@ -354,38 +386,38 @@ export default function ExpertsPage() {
             <PageTitle title="ثبت کارشناسان دادگستری" />
             <div className="mb-6 rounded-lg bg-white p-4 shadow-sm">
                 <FluidGrid className="gap-4">
-                    <FluidCol colSpan={12}><FormInput id="firstName" name="firstName" label="نام" value={createForm.firstName} onChange={(v) => setCreateForm((p) => ({ ...p, firstName: v }))} dir="rtl" required /></FluidCol>
-                    <FluidCol colSpan={12}><FormInput id="lastName" name="lastName" label="نام خانوادگی" value={createForm.lastName} onChange={(v) => setCreateForm((p) => ({ ...p, lastName: v }))} dir="rtl" required /></FluidCol>
-                    <FluidCol colSpan={12}><FormInput id="code" name="code" label="کد ملی" value={createForm.code} onChange={(v) => setCreateForm((p) => ({ ...p, code: v }))} dir="ltr" maxLength={10} required /></FluidCol>
-                    <FluidCol colSpan={12}><FormSelect<string> id="expertiseZoneId" name="expertiseZoneId" label="حدود صلاحیت" value={createForm.expertiseZoneId} onChange={(v) => setCreateForm((p) => ({ ...p, expertiseZoneId: v }))} options={zoneOptions} required /></FluidCol>
-                    <FluidCol colSpan={12}><FormInput id="licenseNumber" name="licenseNumber" label="شماره پروانه کارشناسی" value={createForm.licenseNumber} onChange={(v) => setCreateForm((p) => ({ ...p, licenseNumber: v }))} dir="ltr" required /></FluidCol>
-                    <FluidCol colSpan={12}><FormInput id="licenseIssueDate" name="licenseIssueDate" label="تاریخ صدور پروانه" value={createForm.licenseIssueDate} onChange={(v) => setCreateForm((p) => ({ ...p, licenseIssueDate: v }))} dir="ltr" placeholder="1405-01-01" /></FluidCol>
-                    <FluidCol colSpan={12}><FormInput id="licenseExpirationDate" name="licenseExpirationDate" label="تاریخ انقضا پروانه" value={createForm.licenseExpirationDate} onChange={(v) => setCreateForm((p) => ({ ...p, licenseExpirationDate: v }))} dir="ltr" placeholder="1405-01-01" /></FluidCol>
-                    <FluidCol colSpan={12}><FormSelect<string> id="status" name="status" label="وضعیت" value={createForm.status} onChange={(v) => setCreateForm((p) => ({ ...p, status: v }))} options={statusOptions} /></FluidCol>
-                    <FluidCol colSpan={12}><FormInput id="mobileNumber" name="mobileNumber" label="موبایل" value={createForm.mobileNumber} onChange={(v) => setCreateForm((p) => ({ ...p, mobileNumber: v }))} dir="ltr" maxLength={11} /></FluidCol>
-                    <FluidCol colSpan={12}><FormInput id="phoneNumber" name="phoneNumber" label="تلفن" value={createForm.phoneNumber} onChange={(v) => setCreateForm((p) => ({ ...p, phoneNumber: v }))} dir="ltr" /></FluidCol>
-                    <FluidCol colSpan={12}><FormInput id="email" name="email" label="ایمیل" value={createForm.email} onChange={(v) => setCreateForm((p) => ({ ...p, email: v }))} dir="ltr" /></FluidCol>
-                    <FluidCol colSpan={12}><FormSelect<string> id="regionId" name="regionId" label="منطقه" value={createForm.regionId} onChange={(v) => setCreateForm((p) => ({ ...p, regionId: v }))} options={regionOptions} /></FluidCol>
-                    <FluidCol colSpan={12}><FormButton title="ذخیره" variant="success" onClick={handleCreate} isLoading={createMutation.isPending} disabled={createMutation.isPending} /></FluidCol>
+                    <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormInput id="firstName" name="firstName" label="نام" value={createForm.firstName} onChange={(v) => setCreateForm((p) => ({ ...p, firstName: v }))} dir="rtl" required /></FluidCol>
+                    <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormInput id="lastName" name="lastName" label="نام خانوادگی" value={createForm.lastName} onChange={(v) => setCreateForm((p) => ({ ...p, lastName: v }))} dir="rtl" required /></FluidCol>
+                    <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormInput id="code" name="code" label="کد ملی" value={createForm.code} onChange={(v) => setCreateForm((p) => ({ ...p, code: v }))} dir="ltr" maxLength={10} required /></FluidCol>
+                    <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormSelect<string> id="expertiseZoneId" name="expertiseZoneId" label="حدود صلاحیت" value={createForm.expertiseZoneId} onChange={(v) => setCreateForm((p) => ({ ...p, expertiseZoneId: v }))} options={zoneOptions} required /></FluidCol>
+                    <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormInput id="licenseNumber" name="licenseNumber" label="شماره پروانه کارشناسی" value={createForm.licenseNumber} onChange={(v) => setCreateForm((p) => ({ ...p, licenseNumber: v }))} dir="ltr" required /></FluidCol>
+                    <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormInput id="licenseIssueDate" name="licenseIssueDate" label="تاریخ صدور پروانه" value={createForm.licenseIssueDate} onChange={(v) => setCreateForm((p) => ({ ...p, licenseIssueDate: v }))} dir="ltr" placeholder="1405-01-01" /></FluidCol>
+                    <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormInput id="licenseExpirationDate" name="licenseExpirationDate" label="تاریخ انقضا پروانه" value={createForm.licenseExpirationDate} onChange={(v) => setCreateForm((p) => ({ ...p, licenseExpirationDate: v }))} dir="ltr" placeholder="1405-01-01" /></FluidCol>
+                    <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormSelect<string> id="status" name="status" label="وضعیت" value={createForm.status} onChange={(v) => setCreateForm((p) => ({ ...p, status: v }))} options={statusOptions} /></FluidCol>
+                    <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormInput id="mobileNumber" name="mobileNumber" label="موبایل" value={createForm.mobileNumber} onChange={(v) => setCreateForm((p) => ({ ...p, mobileNumber: v }))} dir="ltr" maxLength={11} /></FluidCol>
+                    <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormInput id="phoneNumber" name="phoneNumber" label="تلفن" value={createForm.phoneNumber} onChange={(v) => setCreateForm((p) => ({ ...p, phoneNumber: v }))} dir="ltr" /></FluidCol>
+                    <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormInput id="email" name="email" label="ایمیل" value={createForm.email} onChange={(v) => setCreateForm((p) => ({ ...p, email: v }))} dir="ltr" /></FluidCol>
+                    <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormSelect<string> id="regionId" name="regionId" label="منطقه" value={createForm.regionId} onChange={(v) => setCreateForm((p) => ({ ...p, regionId: v }))} options={regionOptions} /></FluidCol>
+                    <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormButton title="ذخیره" variant="success" onClick={handleCreate} isLoading={createMutation.isPending} disabled={createMutation.isPending} /></FluidCol>
                 </FluidGrid>
             </div>
             {editingExpert && (
                 <div className="mb-6 rounded-lg bg-blue-50 p-4 shadow-sm border border-blue-200">
                     <h3 className="mb-4 font-bold text-lg">ویرایش کارشناس</h3>
                     <FluidGrid className="gap-4">
-                        <FluidCol colSpan={12}><FormInput id="edit-firstName" name="firstName" label="نام" value={editForm.firstName} onChange={(v) => setEditForm((p) => ({ ...p, firstName: v }))} dir="rtl" required /></FluidCol>
-                        <FluidCol colSpan={12}><FormInput id="edit-lastName" name="lastName" label="نام خانوادگی" value={editForm.lastName} onChange={(v) => setEditForm((p) => ({ ...p, lastName: v }))} dir="rtl" required /></FluidCol>
-                        <FluidCol colSpan={12}><FormInput id="edit-code" name="code" label="کد ملی" value={editForm.code} onChange={(v) => setEditForm((p) => ({ ...p, code: v }))} dir="ltr" maxLength={10} required /></FluidCol>
-                        <FluidCol colSpan={12}><FormSelect<string> id="edit-expertiseZoneId" name="expertiseZoneId" label="حدود صلاحیت" value={editForm.expertiseZoneId} onChange={(v) => setEditForm((p) => ({ ...p, expertiseZoneId: v }))} options={zoneOptions} required /></FluidCol>
-                        <FluidCol colSpan={12}><FormInput id="edit-licenseNumber" name="licenseNumber" label="شماره پروانه" value={editForm.licenseNumber} onChange={(v) => setEditForm((p) => ({ ...p, licenseNumber: v }))} dir="ltr" required /></FluidCol>
-                        <FluidCol colSpan={12}><FormInput id="edit-licenseIssueDate" name="licenseIssueDate" label="تاریخ صدور" value={editForm.licenseIssueDate} onChange={(v) => setEditForm((p) => ({ ...p, licenseIssueDate: v }))} dir="ltr" placeholder="1403/01/01" /></FluidCol>
-                        <FluidCol colSpan={12}><FormInput id="edit-licenseExpirationDate" name="licenseExpirationDate" label="تاریخ انقضا" value={editForm.licenseExpirationDate} onChange={(v) => setEditForm((p) => ({ ...p, licenseExpirationDate: v }))} dir="ltr" placeholder="1403/01/01" /></FluidCol>
-                        <FluidCol colSpan={12}><FormSelect<string> id="edit-status" name="status" label="وضعیت" value={editForm.status} onChange={(v) => setEditForm((p) => ({ ...p, status: v }))} options={statusOptions} /></FluidCol>
-                        <FluidCol colSpan={12}><FormInput id="edit-mobileNumber" name="mobileNumber" label="موبایل" value={editForm.mobileNumber} onChange={(v) => setEditForm((p) => ({ ...p, mobileNumber: v }))} dir="ltr" maxLength={11} /></FluidCol>
-                        <FluidCol colSpan={12}><FormInput id="edit-phoneNumber" name="phoneNumber" label="تلفن" value={editForm.phoneNumber} onChange={(v) => setEditForm((p) => ({ ...p, phoneNumber: v }))} dir="ltr" /></FluidCol>
-                        <FluidCol colSpan={12}><FormInput id="edit-email" name="email" label="ایمیل" value={editForm.email} onChange={(v) => setEditForm((p) => ({ ...p, email: v }))} dir="ltr" /></FluidCol>
-                        <FluidCol colSpan={12}><FormSelect<string> id="edit-regionId" name="regionId" label="منطقه" value={editForm.regionId} onChange={(v) => setEditForm((p) => ({ ...p, regionId: v }))} options={regionOptions} /></FluidCol>
-                        <FluidCol colSpan={12}><div className="flex gap-2">
+                        <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormInput id="edit-firstName" name="firstName" label="نام" value={editForm.firstName} onChange={(v) => setEditForm((p) => ({ ...p, firstName: v }))} dir="rtl" required /></FluidCol>
+                        <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormInput id="edit-lastName" name="lastName" label="نام خانوادگی" value={editForm.lastName} onChange={(v) => setEditForm((p) => ({ ...p, lastName: v }))} dir="rtl" required /></FluidCol>
+                        <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormInput id="edit-code" name="code" label="کد ملی" value={editForm.code} onChange={(v) => setEditForm((p) => ({ ...p, code: v }))} dir="ltr" maxLength={10} required /></FluidCol>
+                        <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormSelect<string> id="edit-expertiseZoneId" name="expertiseZoneId" label="حدود صلاحیت" value={editForm.expertiseZoneId} onChange={(v) => setEditForm((p) => ({ ...p, expertiseZoneId: v }))} options={zoneOptions} required /></FluidCol>
+                        <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormInput id="edit-licenseNumber" name="licenseNumber" label="شماره پروانه" value={editForm.licenseNumber} onChange={(v) => setEditForm((p) => ({ ...p, licenseNumber: v }))} dir="ltr" required /></FluidCol>
+                        <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormInput id="edit-licenseIssueDate" name="licenseIssueDate" label="تاریخ صدور" value={editForm.licenseIssueDate} onChange={(v) => setEditForm((p) => ({ ...p, licenseIssueDate: v }))} dir="ltr" placeholder="1403/01/01" /></FluidCol>
+                        <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormInput id="edit-licenseExpirationDate" name="licenseExpirationDate" label="تاریخ انقضا" value={editForm.licenseExpirationDate} onChange={(v) => setEditForm((p) => ({ ...p, licenseExpirationDate: v }))} dir="ltr" placeholder="1403/01/01" /></FluidCol>
+                        <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormSelect<string> id="edit-status" name="status" label="وضعیت" value={editForm.status} onChange={(v) => setEditForm((p) => ({ ...p, status: v }))} options={statusOptions} /></FluidCol>
+                        <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormInput id="edit-mobileNumber" name="mobileNumber" label="موبایل" value={editForm.mobileNumber} onChange={(v) => setEditForm((p) => ({ ...p, mobileNumber: v }))} dir="ltr" maxLength={11} /></FluidCol>
+                        <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormInput id="edit-phoneNumber" name="phoneNumber" label="تلفن" value={editForm.phoneNumber} onChange={(v) => setEditForm((p) => ({ ...p, phoneNumber: v }))} dir="ltr" /></FluidCol>
+                        <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormInput id="edit-email" name="email" label="ایمیل" value={editForm.email} onChange={(v) => setEditForm((p) => ({ ...p, email: v }))} dir="ltr" /></FluidCol>
+                        <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><FormSelect<string> id="edit-regionId" name="regionId" label="منطقه" value={editForm.regionId} onChange={(v) => setEditForm((p) => ({ ...p, regionId: v }))} options={regionOptions} /></FluidCol>
+                        <FluidCol colSpan="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3"><div className="flex gap-2">
                             <FormButton title="ثبت تغییرات" variant="primary" onClick={handleUpdate} isLoading={updateMutation.isPending} disabled={updateMutation.isPending} />
                             <FormButton title="انصراف" variant="secondary" onClick={handleCancelEdit} disabled={updateMutation.isPending} />
                         </div></FluidCol>
@@ -395,8 +427,24 @@ export default function ExpertsPage() {
             <div className="rounded-lg bg-white p-4 shadow-sm">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
-                        <FormButton title="خروجی اکسل" variant="secondary" onClick={handleExportExcel} />
-                        <FormButton title="PDF" variant="secondary" onClick={handleExportPdf} />
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={handleExportExcel}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30 transition-colors cursor-pointer text-sm font-medium"
+                                title="خروجی اکسل"
+                            >
+                                <FileDown className="w-4 h-4" />
+                                <span>Excel</span>
+                            </button>
+                            <button
+                                onClick={handleExportPdf}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30 transition-colors cursor-pointer text-sm font-medium"
+                                title="خروجی PDF"
+                            >
+                                <FileDown className="w-4 h-4" />
+                                <span>PDF</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <DataTable<Expert>

@@ -3,11 +3,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Loader2, Pencil, Trash2, FileDown } from "lucide-react";
 
-
 import { MainLayout } from "../../baseComponents/MainLayout";
 import { FluidGrid } from "../../baseComponents/FluidGrid";
 import { FluidCol } from "../../baseComponents/FluidCol";
 import FormInput from "../../baseComponents/FormInput";
+import FormSelect from "../../baseComponents/FormSelect";
 import FormTextarea from "../../baseComponents/FormTextarea";
 import FormButton from "../../baseComponents/FormButton";
 import PageTitle from "../../baseComponents/PageTitle";
@@ -15,20 +15,22 @@ import DataTable from "../../baseComponents/DataTable";
 import Modal from "../../baseComponents/Modal";
 import { useToast } from "../../libs/toastContext";
 
-import { createCollatralType } from "../../services/CollatralTypeCrud/create";
-import { getAllCollatralTypes } from "../../services/CollatralTypeCrud/getAll";
-import { editCollatralType } from "../../services/CollatralTypeCrud/update";
-import { deleteCollatralType } from "../../services/CollatralTypeCrud/delete";
+import { createDepartmentGrade } from "../../services/DepartmentGradeCrud/create";
+import { getAllDepartmentGrades } from "../../services/DepartmentGradeCrud/getAll";
+import { editDepartmentGrade } from "../../services/DepartmentGradeCrud/update";
+import { deleteDepartmentGrade } from "../../services/DepartmentGradeCrud/delete";
 import type {
-    CollatralTypeItem,
-    CreateCollatralTypeBody,
-    EditCollatralTypeBody,
-} from "../../services/CollatralTypeCrud/types";
+    DepartmentGradeItem,
+    CreateDepartmentGradeBody,
+    EditDepartmentGradeBody,
+} from "../../services/DepartmentGradeCrud/types";
 
-type CollateralTypeForm = {
+type DepartmentGradeForm = {
     code: string;
     title: string;
+    grade: string;
     description: string;
+    isActive: string;
 };
 
 type TableFilter = {
@@ -36,39 +38,44 @@ type TableFilter = {
     value: string;
 };
 
-type CollateralTypesApiResponse = {
-    items?: CollatralTypeItem[];
+type DepartmentGradesApiResponse = {
+    items?: DepartmentGradeItem[];
     result?: {
-        items?: CollatralTypeItem[];
+        items?: DepartmentGradeItem[];
     };
-    listResult?: CollatralTypeItem[];
-    data?: CollatralTypeItem[];
+    listResult?: DepartmentGradeItem[];
+    data?: DepartmentGradeItem[];
 };
 
-type CollateralTypesQueryData = {
-    listResult: CollatralTypeItem[];
+type DepartmentGradesQueryData = {
+    listResult: DepartmentGradeItem[];
     total: number;
     totalPages: number;
 };
 
-const emptyForm: CollateralTypeForm = {
+const emptyForm: DepartmentGradeForm = {
     code: "",
     title: "",
+    grade: "",
     description: "",
+    isActive: "",
 };
 
-export default function CollateralTypesPage() {
+const STATUS_OPTIONS = [
+    { id: "true", title: "فعال" },
+    { id: "false", title: "غیرفعال" },
+];
+
+export default function DepartmentGradePage() {
     const { showToast } = useToast();
     const queryClient = useQueryClient();
 
-    // state مدیریت مودال افزودن/ویرایش
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [formMode, setFormMode] = useState<"create" | "edit">("create");
-    const [formData, setFormData] = useState<CollateralTypeForm>(emptyForm);
+    const [formData, setFormData] = useState<DepartmentGradeForm>(emptyForm);
     const [editingId, setEditingId] = useState<number | null>(null);
 
-    // state حذف
-    const [itemToDelete, setItemToDelete] = useState<CollatralTypeItem | null>(null);
+    const [itemToDelete, setItemToDelete] = useState<DepartmentGradeItem | null>(null);
 
     const [pagination, setPagination] = useState({
         pageIndex: 0,
@@ -77,18 +84,18 @@ export default function CollateralTypesPage() {
 
     const [filters, setFilters] = useState<TableFilter[]>([]);
 
-    const collateralTypesQuery = useQuery({
+    const departmentGradesQuery = useQuery({
         queryKey: [
-            "collateral-types",
+            "department-grades",
             filters,
             pagination.pageIndex,
             pagination.pageSize,
         ],
-        queryFn: () => getAllCollatralTypes(),
-        select: (data): CollateralTypesQueryData => {
-            const apiData = data as CollateralTypesApiResponse;
+        queryFn: () => getAllDepartmentGrades(),
+        select: (data): DepartmentGradesQueryData => {
+            const apiData = data as DepartmentGradesApiResponse;
 
-            const allItems: CollatralTypeItem[] =
+            const allItems: DepartmentGradeItem[] =
                 apiData?.items ??
                 apiData?.result?.items ??
                 apiData?.listResult ??
@@ -149,100 +156,53 @@ export default function CollateralTypesPage() {
     });
 
     const createMutation = useMutation({
-        mutationFn: (body: CreateCollatralTypeBody) =>
-            createCollatralType(body),
+        mutationFn: (body: CreateDepartmentGradeBody) =>
+            createDepartmentGrade(body),
 
         onSuccess: () => {
-            showToast(
-                "نوع وثیقه با موفقیت ثبت شد",
-                "success"
-            );
-
+            showToast("رتبه دپارتمان با موفقیت ثبت شد", "success");
             closeFormModal();
-
-            setPagination((previous) => ({
-                ...previous,
-                pageIndex: 0,
-            }));
-
-            queryClient.invalidateQueries({
-                queryKey: ["collateral-types"],
-            });
+            setPagination((previous) => ({ ...previous, pageIndex: 0 }));
+            queryClient.invalidateQueries({ queryKey: ["department-grades"] });
         },
 
         onError: (error) => {
-            const apiMessage =
-                error instanceof Error ? error.message : undefined;
-
-            showToast(
-                "خطا در ثبت اطلاعات",
-                "error",
-                5000,
-                apiMessage
-            );
+            const apiMessage = error instanceof Error ? error.message : undefined;
+            showToast("خطا در ثبت اطلاعات", "error", 5000, apiMessage);
         },
     });
 
     const updateMutation = useMutation({
-        mutationFn: (body: EditCollatralTypeBody) =>
-            editCollatralType(body),
+        mutationFn: (body: EditDepartmentGradeBody) =>
+            editDepartmentGrade(body),
 
         onSuccess: () => {
-            showToast(
-                "تغییرات با موفقیت اعمال شد",
-                "success"
-            );
-
+            showToast("تغییرات با موفقیت اعمال شد", "success");
             closeFormModal();
-
-            queryClient.invalidateQueries({
-                queryKey: ["collateral-types"],
-            });
+            queryClient.invalidateQueries({ queryKey: ["department-grades"] });
         },
 
         onError: (error) => {
-            const apiMessage =
-                error instanceof Error ? error.message : undefined;
-
-            showToast(
-                "خطا در ویرایش اطلاعات",
-                "error",
-                5000,
-                apiMessage
-            );
+            const apiMessage = error instanceof Error ? error.message : undefined;
+            showToast("خطا در ویرایش اطلاعات", "error", 5000, apiMessage);
         },
     });
 
     const deleteMutation = useMutation({
-        mutationFn: (id: number) => deleteCollatralType(id),
+        mutationFn: (id: number) => deleteDepartmentGrade(id),
 
         onSuccess: () => {
-            showToast(
-                "نوع وثیقه با موفقیت حذف شد",
-                "success"
-            );
-
+            showToast("رتبه دپارتمان با موفقیت حذف شد", "success");
             setItemToDelete(null);
-
-            queryClient.invalidateQueries({
-                queryKey: ["collateral-types"],
-            });
+            queryClient.invalidateQueries({ queryKey: ["department-grades"] });
         },
 
         onError: (error) => {
-            const apiMessage =
-                error instanceof Error ? error.message : undefined;
-
-            showToast(
-                "عملیات حذف با خطا مواجه شد",
-                "error",
-                5000,
-                apiMessage
-            );
+            const apiMessage = error instanceof Error ? error.message : undefined;
+            showToast("عملیات حذف با خطا مواجه شد", "error", 5000, apiMessage);
         },
     });
 
-    // باز کردن مودال برای افزودن
     const handleOpenCreateModal = useCallback(() => {
         setFormMode("create");
         setFormData(emptyForm);
@@ -250,35 +210,35 @@ export default function CollateralTypesPage() {
         setIsFormModalOpen(true);
     }, []);
 
-    // باز کردن مودال برای ویرایش
-    const handleOpenEditModal = useCallback((item: CollatralTypeItem) => {
+    const handleOpenEditModal = useCallback((item: DepartmentGradeItem) => {
         setFormMode("edit");
         setFormData({
             code: item.code ?? "",
             title: item.title ?? "",
+            grade: item.grade?.toString() ?? "",
             description: item.description ?? "",
+            isActive: item.isActive?.toString() ?? "true",
         });
         setEditingId(item.id);
         setIsFormModalOpen(true);
     }, []);
 
-    // بستن مودال فرم
     const closeFormModal = useCallback(() => {
         setIsFormModalOpen(false);
         setFormData(emptyForm);
         setEditingId(null);
     }, []);
 
-    // باز کردن مودال حذف
-    const handleDeleteClick = useCallback((item: CollatralTypeItem) => {
+    const handleDeleteClick = useCallback((item: DepartmentGradeItem) => {
         setItemToDelete(item);
     }, []);
 
-    // ثبت فرم (افزودن یا ویرایش)
     const handleSubmitForm = () => {
         const code = formData.code.trim();
         const title = formData.title.trim();
+        const grade = formData.grade.trim();
         const description = formData.description.trim();
+        const isActive = formData.isActive === "true";
 
         if (!code) {
             showToast("وارد کردن کد الزامی است", "error");
@@ -290,33 +250,61 @@ export default function CollateralTypesPage() {
             return;
         }
 
+        if (!grade) {
+            showToast("وارد کردن رتبه الزامی است", "error");
+            return;
+        }
+
         if (formMode === "create") {
             createMutation.mutate({
                 code,
                 title,
+                grade: Number(grade),
                 description: description || undefined,
-            });
+                isActive,
+            } as CreateDepartmentGradeBody);
         } else if (formMode === "edit" && editingId !== null) {
             updateMutation.mutate({
                 id: editingId,
                 code,
                 title,
+                grade: Number(grade),
                 description: description || undefined,
-            });
+                isActive,
+            } as EditDepartmentGradeBody);
         }
     };
 
-    const columns = useMemo<ColumnDef<CollatralTypeItem, unknown>[]>(
+    const columns = useMemo<ColumnDef<DepartmentGradeItem, unknown>[]>(
         () => [
+            {
+                accessorKey: "title",
+                header: "عنوان",
+                cell: ({ row }) => String(row.original.title ?? "-"),
+            },
             {
                 accessorKey: "code",
                 header: "کد",
                 cell: ({ row }) => String(row.original.code ?? "-"),
             },
             {
-                accessorKey: "title",
-                header: "عنوان",
-                cell: ({ row }) => String(row.original.title ?? "-"),
+                accessorKey: "grade",
+                header: "رتبه",
+                cell: ({ row }) =>
+                    row.original.grade != null
+                        ? Number(row.original.grade).toLocaleString("fa-IR")
+                        : "-",
+            },
+            {
+                id: "description",
+                header: "توضیحات",
+                cell: ({ row }) => String(row.original.description ?? "-"),
+            },
+            {
+                id: "status",
+                header: "وضعیت",
+                cell: ({ row }) =>
+                    row.original.isActive ? "فعال" : "غیرفعال",
             },
             {
                 id: "actions",
@@ -356,8 +344,6 @@ export default function CollateralTypesPage() {
             },
         ],
         [
-            pagination.pageIndex,
-            pagination.pageSize,
             deleteMutation.isPending,
             deleteMutation.variables,
             handleOpenEditModal,
@@ -366,18 +352,20 @@ export default function CollateralTypesPage() {
     );
 
     const handleExportExcel = () => {
-        const rows = collateralTypesQuery.data?.listResult ?? [];
-
+        const rows = departmentGradesQuery.data?.listResult ?? [];
         if (!rows.length) {
             alert("داده‌ای برای خروجی وجود ندارد");
             return;
         }
 
-        const headers = ["کد", "عنوان"];
+        const headers = ["عنوان", "کد", "رتبه", "توضیحات", "وضعیت"];
 
         const csvRows = rows.map((item) => [
-            item.code ?? "",
             item.title ?? "",
+            item.code ?? "",
+            item.grade ?? "",
+            item.description ?? "",
+            item.isActive ? "فعال" : "غیرفعال",
         ]);
 
         const csvContent = [
@@ -395,17 +383,14 @@ export default function CollateralTypesPage() {
 
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
-
         link.href = url;
-        link.download = "collateral-types.csv";
+        link.download = "department-grades.csv";
         link.click();
-
         URL.revokeObjectURL(url);
     };
 
     const handleExportPdf = () => {
-        const rows = collateralTypesQuery.data?.listResult ?? [];
-
+        const rows = departmentGradesQuery.data?.listResult ?? [];
         if (!rows.length) {
             alert("داده‌ای برای خروجی وجود ندارد");
             return;
@@ -414,89 +399,63 @@ export default function CollateralTypesPage() {
         const tableRows = rows
             .map(
                 (item) => `
-            <tr>
-                <td>${item.code ?? ""}</td>
-                <td>${item.title ?? ""}</td>
-            </tr>
-        `
+                <tr>
+                    <td>${item.title ?? ""}</td>
+                    <td>${item.code ?? ""}</td>
+                    <td>${item.grade ?? ""}</td>
+                    <td>${item.description ?? ""}</td>
+                    <td>${item.isActive ? "فعال" : "غیرفعال"}</td>
+                </tr>
+            `
             )
             .join("");
 
         const printWindow = window.open("", "_blank");
-
         if (!printWindow) {
             alert("امکان باز کردن پنجره چاپ وجود ندارد");
             return;
         }
 
         printWindow.document.write(`
-    <html dir="rtl" lang="fa">
-        <head>
-            <title>PDF</title>
-            <style>
-                body {
-                    font-family: Arial, sans-serif;
-                    direction: rtl;
-                    padding: 24px;
-                }
-
-                table {
-                    width: 100%;
-                    border-collapse: collapse;
-                }
-
-                th, td {
-                    border: 1px solid #ddd;
-                    padding: 8px;
-                    text-align: right;
-                }
-
-                th {
-                    background: #f3f4f6;
-                }
-            </style>
-        </head>
-
-        <body>
-            <h2>لیست انواع وثیقه</h2>
-
-            <table>
-                <thead>
-                    <tr>
-                        <th>کد</th>
-                        <th>عنوان</th>
-                    </tr>
-                </thead>
-
-                <tbody>
-                    ${tableRows}
-                </tbody>
-            </table>
-
-            <script>
-                window.onload = function () {
-                    window.print();
-                };
-            </script>
-        </body>
-    </html>
-`);
-
+        <html dir="rtl" lang="fa">
+            <head>
+                <title>PDF</title>
+                <style>
+                    body { font-family: Arial, sans-serif; direction: rtl; padding: 24px; }
+                    table { width: 100%; border-collapse: collapse; }
+                    th, td { border: 1px solid #ddd; padding: 8px; text-align: right; }
+                    th { background: #f3f4f6; }
+                </style>
+            </head>
+            <body>
+                <h2>لیست رتبه‌های دپارتمان</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>عنوان</th>
+                            <th>کد</th>
+                            <th>رتبه</th>
+                            <th>توضیحات</th>
+                            <th>وضعیت</th>
+                        </tr>
+                    </thead>
+                    <tbody>${tableRows}</tbody>
+                </table>
+                <script>window.onload = function () { window.print(); };</script>
+            </body>
+        </html>
+        `);
         printWindow.document.close();
     };
 
-    // متن دکمه ثبت/ویرایش در مودال
     const submitButtonTitle = formMode === "create" ? "ثبت" : "ثبت تغییرات";
     const isSubmitting =
-        formMode === "create"
-            ? createMutation.isPending
-            : updateMutation.isPending;
+        formMode === "create" ? createMutation.isPending : updateMutation.isPending;
 
     return (
         <MainLayout.Main maxWidth="screen-xl">
-            <PageTitle title="انواع وثیقه" />
+            <PageTitle title="رتبه‌های دپارتمان" />
 
-            {/* جدول داده‌ها */}
             <div className="rounded-lg bg-white p-4 shadow-sm">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
@@ -505,7 +464,6 @@ export default function CollateralTypesPage() {
                             variant="success"
                             onClick={handleOpenCreateModal}
                         />
-
                         <button
                             onClick={handleExportExcel}
                             className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30 transition-colors cursor-pointer text-sm font-medium"
@@ -525,45 +483,31 @@ export default function CollateralTypesPage() {
                     </div>
                 </div>
 
-                <DataTable<CollatralTypeItem>
-                    query={collateralTypesQuery}
+                <DataTable<DepartmentGradeItem>
+                    query={departmentGradesQuery}
                     columns={columns}
                     pagination={pagination}
                     onPaginationChange={setPagination}
                     filters={filters}
                     onFiltersChange={(newFilters) => {
                         const latestFilter = newFilters.at(-1);
-
                         setFilters(latestFilter ? [latestFilter] : []);
-
-                        setPagination((previous) => ({
-                            ...previous,
-                            pageIndex: 0,
-                        }));
+                        setPagination((previous) => ({ ...previous, pageIndex: 0 }));
                     }}
                     filterFields={[
-                        {
-                            field: "title",
-                            label: "عنوان",
-                            placeholder: "جست‌وجو بر اساس عنوان",
-                        },
-                        {
-                            field: "code",
-                            label: "کد",
-                            placeholder: "جست‌وجو بر اساس کد",
-                        },
+                        { field: "title", label: "عنوان", placeholder: "جست‌وجو بر اساس عنوان" },
+                        { field: "code", label: "کد", placeholder: "جست‌وجو بر اساس کد" },
                     ]}
-                    skeletonColumns={3}
-                    emptyStateMessage="هیچ نوع وثیقه‌ای یافت نشد"
+                    skeletonColumns={6}
+                    emptyStateMessage="هیچ رتبه‌ای یافت نشد"
                     emptyStateDescription="موردی برای نمایش وجود ندارد."
                 />
             </div>
 
-            {/* مودال افزودن/ویرایش */}
             <Modal
                 isOpen={isFormModalOpen}
                 isRTL
-                header={formMode === "create" ? "افزودن نوع وثیقه" : "ویرایش نوع وثیقه"}
+                header={formMode === "create" ? "افزودن رتبه دپارتمان" : "ویرایش رتبه دپارتمان"}
                 onClose={closeFormModal}
                 overlayLock={isSubmitting}
                 footerButtons={
@@ -575,7 +519,6 @@ export default function CollateralTypesPage() {
                             isLoading={isSubmitting}
                             disabled={isSubmitting}
                         />
-
                         <FormButton
                             title="انصراف"
                             variant="secondary"
@@ -588,15 +531,26 @@ export default function CollateralTypesPage() {
                     <FluidGrid className="gap-4">
                         <FluidCol colSpan={12}>
                             <FormInput
+                                id="modal-title"
+                                name="modal-title"
+                                label="عنوان"
+                                value={formData.title}
+                                onChange={(value) =>
+                                    setFormData((previous) => ({ ...previous, title: value }))
+                                }
+                                dir="rtl"
+                                required
+                            />
+                        </FluidCol>
+
+                        <FluidCol colSpan={12}>
+                            <FormInput
                                 id="modal-code"
                                 name="modal-code"
                                 label="کد"
                                 value={formData.code}
                                 onChange={(value) =>
-                                    setFormData((previous) => ({
-                                        ...previous,
-                                        code: value,
-                                    }))
+                                    setFormData((previous) => ({ ...previous, code: value }))
                                 }
                                 dir="ltr"
                                 required
@@ -605,17 +559,15 @@ export default function CollateralTypesPage() {
 
                         <FluidCol colSpan={12}>
                             <FormInput
-                                id="modal-title"
-                                name="modal-title"
-                                label="عنوان"
-                                value={formData.title}
+                                id="modal-grade"
+                                name="modal-grade"
+                                label="رتبه"
+                                value={formData.grade}
                                 onChange={(value) =>
-                                    setFormData((previous) => ({
-                                        ...previous,
-                                        title: value,
-                                    }))
+                                    setFormData((previous) => ({ ...previous, grade: value }))
                                 }
-                                dir="rtl"
+                                dir="ltr"
+                                type="number"
                                 required
                             />
                         </FluidCol>
@@ -636,15 +588,28 @@ export default function CollateralTypesPage() {
                                 dir="rtl"
                             />
                         </FluidCol>
+
+                        <FluidCol colSpan={12}>
+                            <FormSelect
+                                id="modal-isActive"
+                                name="modal-isActive"
+                                label="وضعیت"
+                                value={formData.isActive}
+                                onChange={(value) =>
+                                    setFormData((previous) => ({ ...previous, isActive: value }))
+                                }
+                                options={STATUS_OPTIONS}
+                                required
+                            />
+                        </FluidCol>
                     </FluidGrid>
                 )}
             />
 
-            {/* مودال تأیید حذف */}
             <Modal
                 isOpen={!!itemToDelete}
                 isRTL
-                header="تأیید حذف نوع وثیقه"
+                header="تأیید حذف رتبه دپارتمان"
                 onClose={() => setItemToDelete(null)}
                 overlayLock={deleteMutation.isPending}
                 footerButtons={
@@ -659,7 +624,6 @@ export default function CollateralTypesPage() {
                                 }
                             }}
                         />
-
                         <FormButton
                             title="انصراف"
                             variant="secondary"

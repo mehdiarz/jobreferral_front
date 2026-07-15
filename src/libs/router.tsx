@@ -28,6 +28,8 @@ const CollateralTypesPage = lazy(() => import("../Features/BaseInfo/CollateralTy
 const CreditLimitAuthoritiesPage = lazy(
     () => import("../Features/BaseInfo/CreditLimitAuthoritiesPage"),
 );
+const DepartmentGradePage = lazy(() => import("../Features/BaseInfo/DepartmentGradePage"));
+const DepartmentPage = lazy(() => import("../Features/BaseInfo/DepartmentPage"));
 
 const getSafeErrorMessage = (error: unknown): string => {
     if (error instanceof Error) return error.message;
@@ -206,6 +208,27 @@ const creditLimitAuthoritiesRoute = createRoute({
     ),
 });
 
+const departmentGradeRoute = createRoute({
+    getParentRoute: () => dashboardLayoutRoute,
+    path: "/base-info/department-grades",
+    component: () => (
+        <SuspenseLoading>
+            <DepartmentGradePage />
+        </SuspenseLoading>
+    )
+});
+
+const departmentRoute = createRoute({
+    getParentRoute: () => dashboardLayoutRoute,
+    path: "/base-info/departments",
+    component: () => (
+        <SuspenseLoading>
+            <DepartmentPage />
+        </SuspenseLoading>
+    )
+});
+
+
 const routeTree = rootRoute.addChildren([
     indexRoute,
     dashboardLayoutRoute.addChildren([
@@ -220,6 +243,8 @@ const routeTree = rootRoute.addChildren([
         customersRoute,
         collateralTypesRoute,
         creditLimitAuthoritiesRoute,
+        departmentGradeRoute,
+        departmentRoute
     ]),
 ]);
 

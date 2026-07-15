@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
+import { Loader2, Pencil, Trash2, FileDown } from "lucide-react";
+
 
 import { MainLayout } from "../../baseComponents/MainLayout";
 import { FluidGrid } from "../../baseComponents/FluidGrid";
@@ -406,7 +408,7 @@ export default function CreditLimitAuthoritiesPage() {
             },
             {
                 id: "actions",
-                header: "وضعیت",
+                header: "عملیات",
                 enableSorting: false,
                 cell: ({ row }) => {
                     const item = row.original;
@@ -414,22 +416,27 @@ export default function CreditLimitAuthoritiesPage() {
                         deleteMutation.isPending && deleteMutation.variables === item.id;
 
                     return (
-                        <div className="flex flex-wrap items-center gap-2">
-                            <FormButton
-                                title="ویرایش"
-                                variant="primary"
-                                size="sm"
+                        <div className="flex items-center gap-1">
+                            <button
                                 onClick={() => handleOpenEditModal(item)}
                                 disabled={deleteMutation.isPending}
-                            />
-                            <FormButton
-                                title="حذف"
-                                variant="danger"
-                                size="sm"
+                                className="p-1.5 rounded-md text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                title="ویرایش"
+                            >
+                                <Pencil className="w-4 h-4" />
+                            </button>
+                            <button
                                 onClick={() => handleDeleteClick(item)}
-                                isLoading={isDeleting}
                                 disabled={deleteMutation.isPending}
-                            />
+                                className="p-1.5 rounded-md text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                title="حذف"
+                            >
+                                {isDeleting ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <Trash2 className="w-4 h-4" />
+                                )}
+                            </button>
                         </div>
                     );
                 },
@@ -540,8 +547,22 @@ export default function CreditLimitAuthoritiesPage() {
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                         <FormButton title="+ افزودن" variant="success" onClick={handleOpenCreateModal} />
-                        <FormButton title="خروجی اکسل" variant="secondary" onClick={handleExportExcel} />
-                        <FormButton title="PDF" variant="secondary" onClick={handleExportPdf} />
+                        <button
+                            onClick={handleExportExcel}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30 transition-colors cursor-pointer text-sm font-medium"
+                            title="خروجی اکسل"
+                        >
+                            <FileDown className="w-4 h-4" />
+                            <span>Excel</span>
+                        </button>
+                        <button
+                            onClick={handleExportPdf}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30 transition-colors cursor-pointer text-sm font-medium"
+                            title="خروجی PDF"
+                        >
+                            <FileDown className="w-4 h-4" />
+                            <span>PDF</span>
+                        </button>
                     </div>
                 </div>
 

@@ -11,7 +11,7 @@ export default function Footer() {
         <>
             <footer className="text-xs text-gray-500 px-4 py-2 flex justify-between bg-white rounded-lg mb-2 ml-2 dark:bg-slate-800 dark:text-white">
                 <span>نسخه {packageJson.version}</span>
-                <span>شنبه 16/10/1403</span>
+                <span>چهار شنبه 24/04/1405</span>
 
                 {toast && (
                     <div className="fixed left-5 bottom-5 max-w-sm w-full z-50" dir="rtl">

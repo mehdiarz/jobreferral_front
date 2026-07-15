@@ -11,6 +11,8 @@ export const Permissions = {
     Pages_Customers: "Pages.BaseInfo.Customers",
     Pages_CollateralTypes: "Pages.BaseInfo.CollateralTypes",
     Pages_CreditLimitAuthorities: "Pages.BaseInfo.CreditLimitAuthorities",
+    Pages_DepartmentGrades: "Pages.BaseInfo.DepartmentGrades",
+    Pages_Departments: "Pages.BaseInfo.Departments",
 } as const;
 
 export type PermissionName = (typeof Permissions)[keyof typeof Permissions];
@@ -47,6 +49,8 @@ export const defaultMenuItems = [
             { id: "customers", title: "لیست مشتریان", path: "/dashboard/base-info/customers" },
             { id: "collateral-types", title: "ثبت نوع وثیقه", path: "/dashboard/base-info/collateral-types" },
             { id: "credit-limits", title: "ثبت حدود اختیارات", path: "/dashboard/base-info/credit-limit-authorities" },
+            { id: "department-grades", title: "رتبه‌های دپارتمان", path: "/dashboard/base-info/department-grades" },
+            { id: "departments", title: "دپارتمان‌ها", path: "/dashboard/base-info/departments" },
         ]
     },
     {
