@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Loader2, Pencil, Trash2, FileDown } from "lucide-react";
 
-
 import { MainLayout } from "../../baseComponents/MainLayout";
 import { FluidGrid } from "../../baseComponents/FluidGrid";
 import { FluidCol } from "../../baseComponents/FluidCol";
@@ -20,417 +19,378 @@ import { getAllDocumentTypes } from "../../services/DocumentTypeCrud/getAll";
 import { editDocumentType } from "../../services/DocumentTypeCrud/update";
 import { deleteDocumentType } from "../../services/DocumentTypeCrud/delete";
 import type {
-    DocumentTypeItem,
-    CreateDocumentTypeBody,
-    EditDocumentTypeBody,
+  DocumentTypeItem,
+  CreateDocumentTypeBody,
+  EditDocumentTypeBody,
 } from "../../services/DocumentTypeCrud/types";
 
 type DocumentTypeForm = {
-    code: string;
-    title: string;
-    description: string;
+  code: string;
+  title: string;
+  description: string;
 };
 
 type TableFilter = {
-    key: string;
-    value: string;
+  key: string;
+  value: string;
 };
 
 type DocumentTypesApiResponse = {
+  items?: DocumentTypeItem[];
+  result?: {
     items?: DocumentTypeItem[];
-    result?: {
-        items?: DocumentTypeItem[];
-    };
-    listResult?: DocumentTypeItem[];
-    data?: DocumentTypeItem[];
+  };
+  listResult?: DocumentTypeItem[];
+  data?: DocumentTypeItem[];
 };
 
 type DocumentTypesQueryData = {
-    listResult: DocumentTypeItem[];
-    total: number;
-    totalPages: number;
+  listResult: DocumentTypeItem[];
+  total: number;
+  totalPages: number;
 };
 
 const emptyForm: DocumentTypeForm = {
-    code: "",
-    title: "",
-    description: "",
+  code: "",
+  title: "",
+  description: "",
 };
 
 export default function DocumentTypesPage() {
-    const { showToast } = useToast();
-    const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  const queryClient = useQueryClient();
 
-    const [createForm, setCreateForm] = useState<DocumentTypeForm>(emptyForm);
-    const [editForm, setEditForm] = useState<DocumentTypeForm>(emptyForm);
-    const [editingItem, setEditingItem] = useState<DocumentTypeItem | null>(null);
-    const [itemToDelete, setItemToDelete] = useState<DocumentTypeItem | null>(null);
+  const [createForm, setCreateForm] = useState<DocumentTypeForm>(emptyForm);
+  const [editForm, setEditForm] = useState<DocumentTypeForm>(emptyForm);
+  const [editingItem, setEditingItem] = useState<DocumentTypeItem | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<DocumentTypeItem | null>(
+    null,
+  );
 
-    const [pagination, setPagination] = useState({
+  const [pagination, setPagination] = useState({
+    pageIndex: 0,
+    pageSize: 10,
+  });
+
+  const [filters, setFilters] = useState<TableFilter[]>([]);
+
+  const documentTypesQuery = useQuery({
+    queryKey: [
+      "document-types",
+      filters,
+      pagination.pageIndex,
+      pagination.pageSize,
+    ],
+    queryFn: () => getAllDocumentTypes(),
+    select: (data): DocumentTypesQueryData => {
+      const apiData = data as DocumentTypesApiResponse;
+
+      const allItems: DocumentTypeItem[] =
+        apiData?.items ??
+        apiData?.result?.items ??
+        apiData?.listResult ??
+        apiData?.data ??
+        [];
+
+      const titleFilter =
+        filters
+          .find((filter) => filter.key === "title")
+          ?.value?.trim()
+          .toLocaleLowerCase("fa") ?? "";
+
+      const codeFilter =
+        filters
+          .find((filter) => filter.key === "code")
+          ?.value?.trim()
+          .toLocaleLowerCase("fa") ?? "";
+
+      const filteredItems = allItems.filter((item) => {
+        const itemTitle = String(item.title ?? "")
+          .trim()
+          .toLocaleLowerCase("fa");
+
+        const itemCode = String(item.code ?? "")
+          .trim()
+          .toLocaleLowerCase("fa");
+
+        const titleMatches = !titleFilter || itemTitle.includes(titleFilter);
+
+        const codeMatches = !codeFilter || itemCode.includes(codeFilter);
+
+        return titleMatches && codeMatches;
+      });
+
+      const total = filteredItems.length;
+
+      const totalPages = Math.max(1, Math.ceil(total / pagination.pageSize));
+
+      const startIndex = pagination.pageIndex * pagination.pageSize;
+
+      const paginatedItems = filteredItems.slice(
+        startIndex,
+        startIndex + pagination.pageSize,
+      );
+
+      return {
+        listResult: paginatedItems,
+        total,
+        totalPages,
+      };
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (body: CreateDocumentTypeBody) => createDocumentType(body),
+
+    onSuccess: () => {
+      showToast("نوع سند با موفقیت ثبت شد", "success");
+
+      setCreateForm(emptyForm);
+
+      setPagination((previous) => ({
+        ...previous,
         pageIndex: 0,
-        pageSize: 10,
+      }));
+
+      queryClient.invalidateQueries({
+        queryKey: ["document-types"],
+      });
+    },
+
+    onError: (error) => {
+      const apiMessage = error instanceof Error ? error.message : undefined;
+
+      showToast("خطا در ثبت اطلاعات", "error", 5000, apiMessage);
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (body: EditDocumentTypeBody) => editDocumentType(body),
+
+    onSuccess: () => {
+      showToast("تغییرات با موفقیت اعمال شد", "success");
+
+      setEditingItem(null);
+      setEditForm(emptyForm);
+
+      queryClient.invalidateQueries({
+        queryKey: ["document-types"],
+      });
+    },
+
+    onError: (error) => {
+      const apiMessage = error instanceof Error ? error.message : undefined;
+
+      showToast("خطا در ویرایش اطلاعات", "error", 5000, apiMessage);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deleteDocumentType(id),
+
+    onSuccess: () => {
+      showToast("نوع سند با موفقیت حذف شد", "success");
+
+      setItemToDelete(null);
+
+      queryClient.invalidateQueries({
+        queryKey: ["document-types"],
+      });
+    },
+
+    onError: (error) => {
+      const apiMessage = error instanceof Error ? error.message : undefined;
+
+      showToast("عملیات حذف با خطا مواجه شد", "error", 5000, apiMessage);
+    },
+  });
+
+  const handleEditClick = useCallback((item: DocumentTypeItem) => {
+    setEditingItem(item);
+    setEditForm({
+      code: item.code ?? "",
+      title: item.title ?? "",
+      description: item.description ?? "",
+    });
+  }, []);
+
+  const handleDeleteClick = useCallback((item: DocumentTypeItem) => {
+    setItemToDelete(item);
+  }, []);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditingItem(null);
+    setEditForm(emptyForm);
+  }, []);
+
+  const columns = useMemo<ColumnDef<DocumentTypeItem, unknown>[]>(
+    () => [
+      {
+        accessorKey: "code",
+        header: "کد",
+        cell: ({ row }) => String(row.original.code ?? "-"),
+      },
+      {
+        accessorKey: "title",
+        header: "عنوان",
+        cell: ({ row }) => String(row.original.title ?? "-"),
+      },
+      {
+        id: "actions",
+        header: "عملیات",
+        enableSorting: false,
+        cell: ({ row }) => {
+          const item = row.original;
+          const isDeleting =
+            deleteMutation.isPending && deleteMutation.variables === item.id;
+
+          return (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => handleEditClick(item)}
+                disabled={deleteMutation.isPending}
+                className="p-1.5 rounded-md text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                title="ویرایش"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => handleDeleteClick(item)}
+                disabled={deleteMutation.isPending}
+                className="p-1.5 rounded-md text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                title="حذف"
+              >
+                {isDeleting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+          );
+        },
+      },
+    ],
+    [
+      deleteMutation.isPending,
+      deleteMutation.variables,
+      handleEditClick,
+      handleDeleteClick,
+    ],
+  );
+
+  const handleCreate = () => {
+    const code = createForm.code.trim();
+    const title = createForm.title.trim();
+    const description = createForm.description.trim();
+
+    if (!code) {
+      showToast("وارد کردن کد الزامی است", "error");
+      return;
+    }
+
+    if (!title) {
+      showToast("وارد کردن عنوان الزامی است", "error");
+      return;
+    }
+
+    createMutation.mutate({
+      code,
+      title,
+      description: description || undefined,
+    });
+  };
+
+  const handleUpdate = () => {
+    if (!editingItem) return;
+
+    const code = editForm.code.trim();
+    const title = editForm.title.trim();
+
+    if (!code) {
+      showToast("کد نمی‌تواند خالی باشد", "error");
+      return;
+    }
+
+    if (!title) {
+      showToast("عنوان نمی‌تواند خالی باشد", "error");
+      return;
+    }
+
+    updateMutation.mutate({
+      id: editingItem.id,
+      code,
+      title,
+      description: editForm.description.trim() || undefined,
+    });
+  };
+
+  const handleExportExcel = () => {
+    const rows = documentTypesQuery.data?.listResult ?? [];
+
+    if (!rows.length) {
+      alert("داده‌ای برای خروجی وجود ندارد");
+      return;
+    }
+
+    const headers = ["کد", "عنوان"];
+
+    const csvRows = rows.map((item) => [item.code ?? "", item.title ?? ""]);
+
+    const csvContent = [
+      headers.join(","),
+      ...csvRows.map((row) =>
+        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","),
+      ),
+    ].join("\n");
+
+    const blob = new Blob(["\uFEFF" + csvContent], {
+      type: "text/csv;charset=utf-8;",
     });
 
-    const [filters, setFilters] = useState<TableFilter[]>([]);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
 
-    const documentTypesQuery = useQuery({
-        queryKey: [
-            "document-types",
-            filters,
-            pagination.pageIndex,
-            pagination.pageSize,
-        ],
-        queryFn: () => getAllDocumentTypes(),
-        select: (data): DocumentTypesQueryData => {
-            const apiData = data as DocumentTypesApiResponse;
+    link.href = url;
+    link.download = "document-types.csv";
+    link.click();
 
-            const allItems: DocumentTypeItem[] =
-                apiData?.items ??
-                apiData?.result?.items ??
-                apiData?.listResult ??
-                apiData?.data ??
-                [];
+    URL.revokeObjectURL(url);
+  };
 
-            const titleFilter =
-                filters
-                    .find((filter) => filter.key === "title")
-                    ?.value?.trim()
-                    .toLocaleLowerCase("fa") ?? "";
+  const handleExportPdf = () => {
+    const rows = documentTypesQuery.data?.listResult ?? [];
 
-            const codeFilter =
-                filters
-                    .find((filter) => filter.key === "code")
-                    ?.value?.trim()
-                    .toLocaleLowerCase("fa") ?? "";
+    if (!rows.length) {
+      alert("داده‌ای برای خروجی وجود ندارد");
+      return;
+    }
 
-            const filteredItems = allItems.filter((item) => {
-                const itemTitle = String(item.title ?? "")
-                    .trim()
-                    .toLocaleLowerCase("fa");
-
-                const itemCode = String(item.code ?? "")
-                    .trim()
-                    .toLocaleLowerCase("fa");
-
-                const titleMatches =
-                    !titleFilter || itemTitle.includes(titleFilter);
-
-                const codeMatches =
-                    !codeFilter || itemCode.includes(codeFilter);
-
-                return titleMatches && codeMatches;
-            });
-
-            const total = filteredItems.length;
-
-            const totalPages = Math.max(
-                1,
-                Math.ceil(total / pagination.pageSize)
-            );
-
-            const startIndex =
-                pagination.pageIndex * pagination.pageSize;
-
-            const paginatedItems = filteredItems.slice(
-                startIndex,
-                startIndex + pagination.pageSize
-            );
-
-            return {
-                listResult: paginatedItems,
-                total,
-                totalPages,
-            };
-        },
-    });
-
-    const createMutation = useMutation({
-        mutationFn: (body: CreateDocumentTypeBody) =>
-            createDocumentType(body),
-
-        onSuccess: () => {
-            showToast(
-                "نوع سند با موفقیت ثبت شد",
-                "success"
-            );
-
-            setCreateForm(emptyForm);
-
-            setPagination((previous) => ({
-                ...previous,
-                pageIndex: 0,
-            }));
-
-            queryClient.invalidateQueries({
-                queryKey: ["document-types"],
-            });
-        },
-
-        onError: (error) => {
-            const apiMessage =
-                error instanceof Error ? error.message : undefined;
-
-            showToast(
-                "خطا در ثبت اطلاعات",
-                "error",
-                5000,
-                apiMessage
-            );
-        },
-    });
-
-    const updateMutation = useMutation({
-        mutationFn: (body: EditDocumentTypeBody) =>
-            editDocumentType(body),
-
-        onSuccess: () => {
-            showToast(
-                "تغییرات با موفقیت اعمال شد",
-                "success"
-            );
-
-            setEditingItem(null);
-            setEditForm(emptyForm);
-
-            queryClient.invalidateQueries({
-                queryKey: ["document-types"],
-            });
-        },
-
-        onError: (error) => {
-            const apiMessage =
-                error instanceof Error ? error.message : undefined;
-
-            showToast(
-                "خطا در ویرایش اطلاعات",
-                "error",
-                5000,
-                apiMessage
-            );
-        },
-    });
-
-    const deleteMutation = useMutation({
-        mutationFn: (id: number) => deleteDocumentType(id),
-
-        onSuccess: () => {
-            showToast(
-                "نوع سند با موفقیت حذف شد",
-                "success"
-            );
-
-            setItemToDelete(null);
-
-            queryClient.invalidateQueries({
-                queryKey: ["document-types"],
-            });
-        },
-
-        onError: (error) => {
-            const apiMessage =
-                error instanceof Error ? error.message : undefined;
-
-            showToast(
-                "عملیات حذف با خطا مواجه شد",
-                "error",
-                5000,
-                apiMessage
-            );
-        },
-    });
-
-    const handleEditClick = useCallback((item: DocumentTypeItem) => {
-        setEditingItem(item);
-        setEditForm({
-            code: item.code ?? "",
-            title: item.title ?? "",
-            description: item.description ?? "",
-        });
-    }, []);
-
-    const handleDeleteClick = useCallback((item: DocumentTypeItem) => {
-        setItemToDelete(item);
-    }, []);
-
-    const handleCancelEdit = useCallback(() => {
-        setEditingItem(null);
-        setEditForm(emptyForm);
-    }, []);
-
-    const columns = useMemo<ColumnDef<DocumentTypeItem, unknown>[]>(
-        () => [
-            {
-                accessorKey: "code",
-                header: "کد",
-                cell: ({ row }) => String(row.original.code ?? "-"),
-            },
-            {
-                accessorKey: "title",
-                header: "عنوان",
-                cell: ({ row }) => String(row.original.title ?? "-"),
-            },
-            {
-                id: "actions",
-                header: "عملیات",
-                enableSorting: false,
-                cell: ({ row }) => {
-                    const item = row.original;
-                    const isDeleting =
-                        deleteMutation.isPending &&
-                        deleteMutation.variables === item.id;
-
-                    return (
-                        <div className="flex items-center gap-1">
-                            <button
-                                onClick={() => handleEditClick(item)}
-                                disabled={deleteMutation.isPending}
-                                className="p-1.5 rounded-md text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                                title="ویرایش"
-                            >
-                                <Pencil className="w-4 h-4" />
-                            </button>
-                            <button
-                                onClick={() => handleDeleteClick(item)}
-                                disabled={deleteMutation.isPending}
-                                className="p-1.5 rounded-md text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                                title="حذف"
-                            >
-                                {isDeleting ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                    <Trash2 className="w-4 h-4" />
-                                )}
-                            </button>
-                        </div>
-                    );
-                },
-            },
-        ],
-        [
-            deleteMutation.isPending,
-            deleteMutation.variables,
-            handleEditClick,
-            handleDeleteClick,
-        ]
-    );
-
-    const handleCreate = () => {
-        const code = createForm.code.trim();
-        const title = createForm.title.trim();
-        const description = createForm.description.trim();
-
-        if (!code) {
-            showToast("وارد کردن کد الزامی است", "error");
-            return;
-        }
-
-        if (!title) {
-            showToast("وارد کردن عنوان الزامی است", "error");
-            return;
-        }
-
-        createMutation.mutate({
-            code,
-            title,
-            description: description || undefined,
-        });
-    };
-
-    const handleUpdate = () => {
-        if (!editingItem) return;
-
-        const code = editForm.code.trim();
-        const title = editForm.title.trim();
-
-        if (!code) {
-            showToast("کد نمی‌تواند خالی باشد", "error");
-            return;
-        }
-
-        if (!title) {
-            showToast("عنوان نمی‌تواند خالی باشد", "error");
-            return;
-        }
-
-        updateMutation.mutate({
-            id: editingItem.id,
-            code,
-            title,
-            description: editForm.description.trim() || undefined,
-        });
-    };
-
-    const handleExportExcel = () => {
-        const rows = documentTypesQuery.data?.listResult ?? [];
-
-        if (!rows.length) {
-            alert("داده‌ای برای خروجی وجود ندارد");
-            return;
-        }
-
-        const headers = ["کد", "عنوان"];
-
-        const csvRows = rows.map((item) => [
-            item.code ?? "",
-            item.title ?? "",
-        ]);
-
-        const csvContent = [
-            headers.join(","),
-            ...csvRows.map((row) =>
-                row
-                    .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
-                    .join(",")
-            ),
-        ].join("\n");
-
-        const blob = new Blob(["\uFEFF" + csvContent], {
-            type: "text/csv;charset=utf-8;",
-        });
-
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-
-        link.href = url;
-        link.download = "document-types.csv";
-        link.click();
-
-        URL.revokeObjectURL(url);
-    };
-
-    const handleExportPdf = () => {
-        const rows = documentTypesQuery.data?.listResult ?? [];
-
-        if (!rows.length) {
-            alert("داده‌ای برای خروجی وجود ندارد");
-            return;
-        }
-
-        const tableRows = rows
-            .map(
-                (item) => `
+    const tableRows = rows
+      .map(
+        (item) => `
                 <tr>
                     <td>${item.code ?? ""}</td>
                     <td>${item.title ?? ""}</td>
                 </tr>
-            `
-            )
-            .join("");
+            `,
+      )
+      .join("");
 
-        const printWindow = window.open("", "_blank");
+    const printWindow = window.open("", "_blank");
 
-        if (!printWindow) {
-            alert("امکان باز کردن پنجره چاپ وجود ندارد");
-            return;
-        }
+    if (!printWindow) {
+      alert("امکان باز کردن پنجره چاپ وجود ندارد");
+      return;
+    }
 
-        printWindow.document.write(`
+    printWindow.document.write(`
         <html dir="rtl" lang="fa">
             <head>
                 <title>PDF</title>
                 <style>
                     body {
-                        font-family: Arial, sans-serif;
+                        font-family: Tahoma, Arial, sans-serif;
                         direction: rtl;
                         padding: 24px;
                     }
@@ -477,253 +437,252 @@ export default function DocumentTypesPage() {
         </html>
     `);
 
-        printWindow.document.close();
-    };
+    printWindow.document.close();
+  };
 
-    return (
-        <MainLayout.Main maxWidth="screen-xl">
-            <PageTitle title="انواع سند" />
+  return (
+    <MainLayout.Main maxWidth="screen-xl">
+      <PageTitle title="انواع سند" />
 
-            {/* فرم ثبت - فیلدها زیر هم colSpan={12} */}
-            <div className="mb-6 rounded-lg bg-white p-4 shadow-sm">
-                <FluidGrid className="gap-4">
-                    <FluidCol colSpan={12}>
-                        <FormInput
-                            id="code"
-                            name="code"
-                            label="کد"
-                            value={createForm.code}
-                            onChange={(value) =>
-                                setCreateForm((previous) => ({
-                                    ...previous,
-                                    code: value,
-                                }))
-                            }
-                            dir="ltr"
-                            required
-                        />
-                    </FluidCol>
-
-                    <FluidCol colSpan={12}>
-                        <FormInput
-                            id="title"
-                            name="title"
-                            label="عنوان"
-                            value={createForm.title}
-                            onChange={(value) =>
-                                setCreateForm((previous) => ({
-                                    ...previous,
-                                    title: value,
-                                }))
-                            }
-                            dir="rtl"
-                            required
-                        />
-                    </FluidCol>
-
-                    <FluidCol colSpan={12}>
-                        <FormTextarea
-                            id="description"
-                            name="description"
-                            label="توضیحات"
-                            value={createForm.description}
-                            onChange={(value) =>
-                                setCreateForm((previous) => ({
-                                    ...previous,
-                                    description: value,
-                                }))
-                            }
-                            rows={3}
-                            dir="rtl"
-                        />
-                    </FluidCol>
-
-                    <FluidCol colSpan={12}>
-                        <FormButton
-                            title="ذخیره"
-                            variant="success"
-                            onClick={handleCreate}
-                            isLoading={createMutation.isPending}
-                            disabled={createMutation.isPending}
-                        />
-                    </FluidCol>
-                </FluidGrid>
-            </div>
-
-            {/* بخش ویرایش */}
-            {editingItem && (
-                <div className="mb-6 rounded-lg bg-blue-50 p-4 shadow-sm border border-blue-200">
-                    <h3 className="mb-4 font-bold text-lg">
-                        ویرایش نوع سند
-                    </h3>
-
-                    <FluidGrid className="gap-4">
-                        <FluidCol colSpan={12}>
-                            <FormInput
-                                id="edit-code"
-                                name="edit-code"
-                                label="کد"
-                                value={editForm.code}
-                                onChange={(value) =>
-                                    setEditForm((previous) => ({
-                                        ...previous,
-                                        code: value,
-                                    }))
-                                }
-                                dir="ltr"
-                                required
-                            />
-                        </FluidCol>
-
-                        <FluidCol colSpan={12}>
-                            <FormInput
-                                id="edit-title"
-                                name="edit-title"
-                                label="عنوان"
-                                value={editForm.title}
-                                onChange={(value) =>
-                                    setEditForm((previous) => ({
-                                        ...previous,
-                                        title: value,
-                                    }))
-                                }
-                                dir="rtl"
-                                required
-                            />
-                        </FluidCol>
-
-                        <FluidCol colSpan={12}>
-                            <FormTextarea
-                                id="edit-description"
-                                name="edit-description"
-                                label="توضیحات"
-                                value={editForm.description}
-                                onChange={(value) =>
-                                    setEditForm((previous) => ({
-                                        ...previous,
-                                        description: value,
-                                    }))
-                                }
-                                rows={3}
-                                dir="rtl"
-                            />
-                        </FluidCol>
-
-                        <FluidCol colSpan={12}>
-                            <div className="flex gap-2">
-                                <FormButton
-                                    title="ثبت تغییرات"
-                                    variant="primary"
-                                    onClick={handleUpdate}
-                                    isLoading={updateMutation.isPending}
-                                    disabled={updateMutation.isPending}
-                                />
-
-                                <FormButton
-                                    title="انصراف"
-                                    variant="secondary"
-                                    onClick={handleCancelEdit}
-                                    disabled={updateMutation.isPending}
-                                />
-                            </div>
-                        </FluidCol>
-                    </FluidGrid>
-                </div>
-            )}
-
-            {/* جدول داده‌ها */}
-            <div className="rounded-lg bg-white p-4 shadow-sm">
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={handleExportExcel}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30 transition-colors cursor-pointer text-sm font-medium"
-                            title="خروجی اکسل"
-                        >
-                            <FileDown className="w-4 h-4" />
-                            <span>Excel</span>
-                        </button>
-                        <button
-                            onClick={handleExportPdf}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30 transition-colors cursor-pointer text-sm font-medium"
-                            title="خروجی PDF"
-                        >
-                            <FileDown className="w-4 h-4" />
-                            <span>PDF</span>
-                        </button>
-                    </div>
-                </div>
-
-                <DataTable<DocumentTypeItem>
-                    query={documentTypesQuery}
-                    columns={columns}
-                    pagination={pagination}
-                    onPaginationChange={setPagination}
-                    filters={filters}
-                    onFiltersChange={(newFilters) => {
-                        const latestFilter = newFilters.at(-1);
-
-                        setFilters(latestFilter ? [latestFilter] : []);
-
-                        setPagination((previous) => ({
-                            ...previous,
-                            pageIndex: 0,
-                        }));
-                    }}
-                    filterFields={[
-                        {
-                            field: "title",
-                            label: "عنوان",
-                            placeholder: "جست‌وجو بر اساس عنوان",
-                        },
-                        {
-                            field: "code",
-                            label: "کد",
-                            placeholder: "جست‌وجو بر اساس کد",
-                        },
-                    ]}
-                    skeletonColumns={3}
-                    emptyStateMessage="هیچ نوع سندی یافت نشد"
-                    emptyStateDescription="موردی برای نمایش وجود ندارد."
-                />
-            </div>
-
-            {/* مودال تأیید حذف */}
-            <Modal
-                isOpen={!!itemToDelete}
-                isRTL
-                header="تأیید حذف نوع سند"
-                onClose={() => setItemToDelete(null)}
-                overlayLock={deleteMutation.isPending}
-                footerButtons={
-                    <div className="flex gap-2">
-                        <FormButton
-                            title="حذف"
-                            variant="danger"
-                            isLoading={deleteMutation.isPending}
-                            onClick={() => {
-                                if (itemToDelete) {
-                                    deleteMutation.mutate(itemToDelete.id);
-                                }
-                            }}
-                        />
-
-                        <FormButton
-                            title="انصراف"
-                            variant="secondary"
-                            disabled={deleteMutation.isPending}
-                            onClick={() => setItemToDelete(null)}
-                        />
-                    </div>
-                }
-                renderContent={() => (
-                    <p>
-                        آیا از حذف{" "}
-                        <strong>{itemToDelete ? itemToDelete.title ?? "" : ""}</strong>{" "}
-                        اطمینان دارید؟
-                    </p>
-                )}
+      {/* فرم ثبت - فیلدها زیر هم colSpan={12} */}
+      <div className="mb-6 rounded-lg bg-white p-4 shadow-sm">
+        <FluidGrid className="gap-4">
+          <FluidCol colSpan={12}>
+            <FormInput
+              id="code"
+              name="code"
+              label="کد"
+              value={createForm.code}
+              onChange={(value) =>
+                setCreateForm((previous) => ({
+                  ...previous,
+                  code: value,
+                }))
+              }
+              dir="ltr"
+              required
             />
-        </MainLayout.Main>
-    );
+          </FluidCol>
+
+          <FluidCol colSpan={12}>
+            <FormInput
+              id="title"
+              name="title"
+              label="عنوان"
+              value={createForm.title}
+              onChange={(value) =>
+                setCreateForm((previous) => ({
+                  ...previous,
+                  title: value,
+                }))
+              }
+              dir="rtl"
+              required
+            />
+          </FluidCol>
+
+          <FluidCol colSpan={12}>
+            <FormTextarea
+              id="description"
+              name="description"
+              label="توضیحات"
+              value={createForm.description}
+              onChange={(value) =>
+                setCreateForm((previous) => ({
+                  ...previous,
+                  description: value,
+                }))
+              }
+              rows={3}
+              dir="rtl"
+            />
+          </FluidCol>
+
+          <FluidCol colSpan={12}>
+            <FormButton
+              title="ذخیره"
+              variant="success"
+              onClick={handleCreate}
+              isLoading={createMutation.isPending}
+              disabled={createMutation.isPending}
+            />
+          </FluidCol>
+        </FluidGrid>
+      </div>
+
+      {/* بخش ویرایش */}
+      {editingItem && (
+        <div className="mb-6 rounded-lg bg-blue-50 p-4 shadow-sm border border-blue-200">
+          <h3 className="mb-4 font-bold text-lg">ویرایش نوع سند</h3>
+
+          <FluidGrid className="gap-4">
+            <FluidCol colSpan={12}>
+              <FormInput
+                id="edit-code"
+                name="edit-code"
+                label="کد"
+                value={editForm.code}
+                onChange={(value) =>
+                  setEditForm((previous) => ({
+                    ...previous,
+                    code: value,
+                  }))
+                }
+                dir="ltr"
+                required
+              />
+            </FluidCol>
+
+            <FluidCol colSpan={12}>
+              <FormInput
+                id="edit-title"
+                name="edit-title"
+                label="عنوان"
+                value={editForm.title}
+                onChange={(value) =>
+                  setEditForm((previous) => ({
+                    ...previous,
+                    title: value,
+                  }))
+                }
+                dir="rtl"
+                required
+              />
+            </FluidCol>
+
+            <FluidCol colSpan={12}>
+              <FormTextarea
+                id="edit-description"
+                name="edit-description"
+                label="توضیحات"
+                value={editForm.description}
+                onChange={(value) =>
+                  setEditForm((previous) => ({
+                    ...previous,
+                    description: value,
+                  }))
+                }
+                rows={3}
+                dir="rtl"
+              />
+            </FluidCol>
+
+            <FluidCol colSpan={12}>
+              <div className="flex gap-2">
+                <FormButton
+                  title="ثبت تغییرات"
+                  variant="primary"
+                  onClick={handleUpdate}
+                  isLoading={updateMutation.isPending}
+                  disabled={updateMutation.isPending}
+                />
+
+                <FormButton
+                  title="انصراف"
+                  variant="secondary"
+                  onClick={handleCancelEdit}
+                  disabled={updateMutation.isPending}
+                />
+              </div>
+            </FluidCol>
+          </FluidGrid>
+        </div>
+      )}
+
+      {/* جدول داده‌ها */}
+      <div className="rounded-lg bg-white p-4 shadow-sm">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleExportExcel}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30 transition-colors cursor-pointer text-sm font-medium"
+              title="خروجی اکسل"
+            >
+              <FileDown className="w-4 h-4" />
+              <span>Excel</span>
+            </button>
+            <button
+              onClick={handleExportPdf}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30 transition-colors cursor-pointer text-sm font-medium"
+              title="خروجی PDF"
+            >
+              <FileDown className="w-4 h-4" />
+              <span>PDF</span>
+            </button>
+          </div>
+        </div>
+
+        <DataTable<DocumentTypeItem>
+          query={documentTypesQuery}
+          columns={columns}
+          pagination={pagination}
+          onPaginationChange={setPagination}
+          filters={filters}
+          onFiltersChange={(newFilters) => {
+            const latestFilter = newFilters.at(-1);
+
+            setFilters(latestFilter ? [latestFilter] : []);
+
+            setPagination((previous) => ({
+              ...previous,
+              pageIndex: 0,
+            }));
+          }}
+          filterFields={[
+            {
+              field: "title",
+              label: "عنوان",
+              placeholder: "جست‌وجو بر اساس عنوان",
+            },
+            {
+              field: "code",
+              label: "کد",
+              placeholder: "جست‌وجو بر اساس کد",
+            },
+          ]}
+          searchMode="onEnter"
+          skeletonColumns={3}
+          emptyStateMessage="هیچ نوع سندی یافت نشد"
+          emptyStateDescription="موردی برای نمایش وجود ندارد."
+        />
+      </div>
+
+      {/* مودال تأیید حذف */}
+      <Modal
+        isOpen={!!itemToDelete}
+        isRTL
+        header="تأیید حذف نوع سند"
+        onClose={() => setItemToDelete(null)}
+        overlayLock={deleteMutation.isPending}
+        footerButtons={
+          <div className="flex gap-2">
+            <FormButton
+              title="حذف"
+              variant="danger"
+              isLoading={deleteMutation.isPending}
+              onClick={() => {
+                if (itemToDelete) {
+                  deleteMutation.mutate(itemToDelete.id);
+                }
+              }}
+            />
+
+            <FormButton
+              title="انصراف"
+              variant="secondary"
+              disabled={deleteMutation.isPending}
+              onClick={() => setItemToDelete(null)}
+            />
+          </div>
+        }
+        renderContent={() => (
+          <p>
+            آیا از حذف{" "}
+            <strong>{itemToDelete ? (itemToDelete.title ?? "") : ""}</strong>{" "}
+            اطمینان دارید؟
+          </p>
+        )}
+      />
+    </MainLayout.Main>
+  );
 }
