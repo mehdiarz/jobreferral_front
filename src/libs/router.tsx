@@ -8,18 +8,45 @@ import {
   isNotFound,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
-import { lazy } from "react";
+import { lazy, type ReactNode, useEffect } from "react";
 
 import { ErrorPage } from "../baseComponents/ErrorPage";
 import { SuspenseLoading } from "../baseComponents/SuspenseLoading";
+import { useAuthStore } from "./store";
+import AuthLayout from "../layout/Login/LoginLayout";
+import { authStore, authActions } from "./store/authActions";
 
+// ----------------------------------------
+// Auth Guard
+// ----------------------------------------
+const AuthGuard = ({ children }: { children: ReactNode }) => {
+  const { isAuthenticated } = useAuthStore();
+
+  const token = localStorage.getItem("auth_token");
+  const hasToken = !!token;
+
+  useEffect(() => {
+    if (hasToken && !isAuthenticated) {
+      authActions.initializeFromStorage();
+    }
+  }, [hasToken, isAuthenticated]);
+
+  if (!hasToken && !isAuthenticated) {
+    throw redirect({ to: "/login" });
+  }
+
+  return <>{children}</>;
+};
+
+// ----------------------------------------
+// Lazy imports
+// ----------------------------------------
 const DashboardLayout = lazy(
   () => import("../layout/dashboard/DashboardLayout"),
 );
 const DashboardPage = lazy(() => import("../Features/Dashboard/DashboardPage"));
 const CreateUserPage = lazy(() => import("../Features/Users/CreateUserPage"));
 const RolesPage = lazy(() => import("../Features/Users/RolesPage"));
-
 const ExpertsPage = lazy(() => import("../Features/BaseInfo/ExpertsPage"));
 const ExpertiseZonesPage = lazy(
   () => import("../Features/BaseInfo/ExpertiseZonesPage"),
@@ -44,7 +71,13 @@ const DepartmentGradePage = lazy(
 const DepartmentPage = lazy(
   () => import("../Features/BaseInfo/DepartmentPage"),
 );
+const PersonTypePage = lazy(
+  () => import("../Features/BaseInfo/PersonTypePage"),
+);
 
+// ----------------------------------------
+// Helpers
+// ----------------------------------------
 const getSafeErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
@@ -56,12 +89,14 @@ const getSafeErrorMessage = (error: unknown): string => {
 };
 
 const getSafeErrorStack = (error: unknown): string | undefined => {
-  if (error instanceof Error && typeof error.stack === "string") {
+  if (error instanceof Error && typeof error.stack === "string")
     return error.stack;
-  }
   return undefined;
 };
 
+// ----------------------------------------
+// Root Route
+// ----------------------------------------
 const rootRoute = createRootRoute({
   component: () => (
     <>
@@ -70,45 +105,64 @@ const rootRoute = createRootRoute({
     </>
   ),
   errorComponent: ({ error }) => {
-    if (isRedirect(error)) {
-      return null;
-    }
-
-    if (isNotFound(error)) {
+    if (isRedirect(error)) return null;
+    if (isNotFound(error))
       return <ErrorPage error={new Error("صفحه مورد نظر یافت نشد")} />;
-    }
 
     const safeMessage = getSafeErrorMessage(error);
     const safeStack = getSafeErrorStack(error);
     const safeError = new Error(safeMessage);
-
-    if (safeStack) {
-      safeError.stack = safeStack;
-    }
-
+    if (safeStack) safeError.stack = safeStack;
     console.error("Router error:", safeMessage);
 
     return <ErrorPage error={safeError} />;
   },
 });
 
+// ----------------------------------------
+// Index Route (redirect to dashboard or login)
+// ----------------------------------------
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   beforeLoad: () => {
-    throw redirect({
-      to: "/dashboard",
-    });
+    const { isAuthenticated } = authStore.state;
+    const token = localStorage.getItem("auth_token");
+    throw redirect({ to: isAuthenticated || token ? "/dashboard" : "/login" });
   },
 });
 
-export const dashboardLayoutRoute = createRoute({
+// ----------------------------------------
+// Login Route
+// ----------------------------------------
+const LoginForm = lazy(() => import("../Features/Login/LoginPage"));
+const loginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/login",
+  component: () => (
+    <SuspenseLoading>
+      <AuthLayout>
+        <div className="mx-auto mb-6">
+          <img src="./images/Logo.svg" className="w-40" />
+        </div>
+        <LoginForm />
+      </AuthLayout>
+    </SuspenseLoading>
+  ),
+});
+
+// ----------------------------------------
+// Dashboard (Protected)
+// ----------------------------------------
+const dashboardLayoutRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/dashboard",
   component: () => (
-    <SuspenseLoading>
-      <DashboardLayout />
-    </SuspenseLoading>
+    <AuthGuard>
+      <SuspenseLoading>
+        <DashboardLayout />
+      </SuspenseLoading>
+    </AuthGuard>
   ),
 });
 
@@ -122,6 +176,7 @@ const dashboardIndexRoute = createRoute({
   ),
 });
 
+// Users
 const createUserRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/users/create-page",
@@ -142,6 +197,7 @@ const rolesRoute = createRoute({
   ),
 });
 
+// Base Info
 const expertsRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/base-info/experts",
@@ -242,8 +298,22 @@ const departmentRoute = createRoute({
   ),
 });
 
+const personTypeRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/base-info/person-types",
+  component: () => (
+    <SuspenseLoading>
+      <PersonTypePage />
+    </SuspenseLoading>
+  ),
+});
+
+// ----------------------------------------
+// Route Tree
+// ----------------------------------------
 const routeTree = rootRoute.addChildren([
   indexRoute,
+  loginRoute,
   dashboardLayoutRoute.addChildren([
     dashboardIndexRoute,
     createUserRoute,
@@ -258,9 +328,13 @@ const routeTree = rootRoute.addChildren([
     creditLimitAuthoritiesRoute,
     departmentGradeRoute,
     departmentRoute,
+    personTypeRoute,
   ]),
 ]);
 
+// ----------------------------------------
+// Create Router
+// ----------------------------------------
 export function createAppRouter(basepath = "/") {
   return createRouter({
     routeTree,

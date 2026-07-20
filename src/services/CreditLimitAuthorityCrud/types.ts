@@ -1,31 +1,28 @@
 export interface CreditLimitAuthorityItem {
-    id: number;
-    personType: string;
-    collateralTypeId: number;
-    departmentId: number;
-    minAmount: number;
-    maxAmount: number;
+  id: number;
+  personalTypeId?: number | null;
+  collatralTypeId?: number | null;
+  regionId?: number | null;
+  departmentGradeId?: number | null;
+  minAmount?: number | null;
+  maxAmount?: number | null;
 }
 
 export interface CreateCreditLimitAuthorityBody {
-    personType: string;
-    collateralTypeId: number;
-    departmentId: number;
-    minAmount: number;
-    maxAmount: number;
+  personalTypeId: number;
+  collatralTypeId: number;
+  regionId: number;
+  departmentGradeId: number;
+  minAmount: number;
+  maxAmount: number;
 }
 
 export interface EditCreditLimitAuthorityBody {
-    id: number;
-    personType: string;
-    collateralTypeId: number;
-    departmentId: number;
-    minAmount: number;
-    maxAmount: number;
-}
-
-export interface GetAllCreditLimitAuthoritiesParams {
-    sorting?: string;
-    skipCount?: number;
-    maxResultCount?: number;
+  id: number;
+  personalTypeId: number;
+  collatralTypeId: number;
+  regionId: number;
+  departmentGradeId: number;
+  minAmount: number;
+  maxAmount: number;
 }
