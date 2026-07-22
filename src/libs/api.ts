@@ -10,7 +10,9 @@ export class ApiClient {
   ): Promise<T> {
     const baseUrl = getApiBaseUrl();
     const url = `${baseUrl}${endpoint.startsWith("/") ? endpoint : "/" + endpoint}`;
-    const token = authStore.state.token || localStorage.getItem("auth_token");
+    // const token = authStore.state.token || localStorage.getItem("auth_token");
+    const token = authStore.state.token;
+
     const config: RequestInit = {
       headers: {
         "Content-Type": "application/json",

@@ -22,11 +22,17 @@ import type { RoleItem } from "../../services/Roles/getAllRoles";
 import Modal from "../../baseComponents/Modal";
 import { X } from "lucide-react";
 import { required } from "../../libs/validations";
+// CHANGE: اضافه کردن useTranslation برای ترجمه permission ها
+import { useTranslation } from "react-i18next";
 
 export default function RolesPage() {
   const { showToast } = useToast();
+  // CHANGE: گرفتن تابع t برای ترجمه
+  const { t } = useTranslation();
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
-  const [filters, setFilters] = useState<Array<{ key: string; value: string }>>([]);
+  const [filters, setFilters] = useState<Array<{ key: string; value: string }>>(
+    [],
+  );
   const [grantedPermissions, setGrantedPermissions] = useState<string[]>([]);
   const [roleToDelete, setRoleToDelete] = useState<RoleItem | null>(null);
   const [editingRole, setEditingRole] = useState<RoleItem | null>(null);
@@ -45,16 +51,27 @@ export default function RolesPage() {
 
   const permissionsList = permissionsQuery.data ?? [];
 
+  const getPermissionLabel = useCallback(
+    (permissionName: string): string => {
+      // مستقیم از i18n استفاده کن و displayName سرور رو نادیده بگیر
+      const translated = t(permissionName);
+      // اگه ترجمه پیدا نشد (همون کلید برگشت خورد)، خود کلید رو نشون بده
+      return translated !== permissionName ? translated : permissionName;
+    },
+    [t],
+  );
+
   const rolesQuery = useQuery({
     queryKey: [...queryKeys.roles.all, filters],
     queryFn: getAllRoles,
     select: (data) => {
-      const nameFilter = filters.find((f) => f.key === "name")?.value?.toLowerCase() ?? "";
+      const nameFilter =
+        filters.find((f) => f.key === "name")?.value?.toLowerCase() ?? "";
       const items = nameFilter
         ? data.items.filter(
             (r) =>
               (r.name || "").toLowerCase().includes(nameFilter) ||
-              (r.displayName || "").toLowerCase().includes(nameFilter)
+              (r.displayName || "").toLowerCase().includes(nameFilter),
           )
         : data.items;
       return {
@@ -152,10 +169,11 @@ export default function RolesPage() {
           const displayName = (p.displayName || p.name || "").toLowerCase();
           return name.includes(term) || displayName.includes(term);
         })
-        .map((p) => ({ value: p.name, label: p.displayName || p.name }));
+        // CHANGE: استفاده از getPermissionLabel برای label
+        .map((p) => ({ value: p.name, label: getPermissionLabel(p.name) }));
       return filtered;
     },
-    [permissionsList, selectedForCombo]
+    [permissionsList, selectedForCombo, getPermissionLabel],
   );
 
   const editSelectedPermissions = editFormState?.grantedPermissions ?? [];
@@ -170,21 +188,25 @@ export default function RolesPage() {
           const displayName = (p.displayName || p.name || "").toLowerCase();
           return name.includes(term) || displayName.includes(term);
         })
-        .map((p) => ({ value: p.name, label: p.displayName || p.name }));
+        // CHANGE: استفاده از getPermissionLabel برای label
+        .map((p) => ({ value: p.name, label: getPermissionLabel(p.name) }));
       return filtered;
     },
-    [permissionsList, editSelectedPermissions]
+    [permissionsList, editSelectedPermissions, getPermissionLabel],
   );
 
-  const addPermission = useCallback((name: string) => {
-    if (!name) return;
-    setGrantedPermissions((prev) => {
-      if (prev.includes(name)) return prev;
-      const next = [...prev, name];
-      form.setFieldValue("grantedPermissions", next);
-      return next;
-    });
-  }, [form]);
+  const addPermission = useCallback(
+    (name: string) => {
+      if (!name) return;
+      setGrantedPermissions((prev) => {
+        if (prev.includes(name)) return prev;
+        const next = [...prev, name];
+        form.setFieldValue("grantedPermissions", next);
+        return next;
+      });
+    },
+    [form],
+  );
 
   const removePermission = useCallback(
     (name: string) => {
@@ -194,7 +216,7 @@ export default function RolesPage() {
         return next;
       });
     },
-    [form]
+    [form],
   );
 
   const openEditModal = useCallback((role: RoleItem) => {
@@ -212,15 +234,23 @@ export default function RolesPage() {
     if (!name) return;
     setEditFormState((prev) => {
       if (!prev || prev.grantedPermissions.includes(name)) return prev;
-      return { ...prev, grantedPermissions: [...prev.grantedPermissions, name] };
+      return {
+        ...prev,
+        grantedPermissions: [...prev.grantedPermissions, name],
+      };
     });
   }, []);
 
   const removeEditPermission = useCallback((name: string) => {
     setEditFormState((prev) =>
       prev
-        ? { ...prev, grantedPermissions: prev.grantedPermissions.filter((p) => p !== name) }
-        : null
+        ? {
+            ...prev,
+            grantedPermissions: prev.grantedPermissions.filter(
+              (p) => p !== name,
+            ),
+          }
+        : null,
     );
   }, []);
 
@@ -255,12 +285,16 @@ export default function RolesPage() {
         header: () => "توضیحات",
         cell: (c) => c.getValue() ?? "—",
       }),
+      // CHANGE: ستون دسترسی‌ها - استفاده از getPermissionLabel برای ترجمه
       columnHelper.accessor("grantedPermissions", {
         header: () => "دسترسی‌ها",
         cell: (c) => {
           const arr = c.getValue() as string[] | undefined;
           if (!arr?.length) return "—";
-          return arr.length <= 3 ? arr.join(", ") : `${arr.length} دسترسی`;
+          // CHANGE: نمایش ۳ دسترسی اول با نام ترجمه شده
+          if (arr.length <= 3)
+            return arr.map((p) => getPermissionLabel(p)).join(", ");
+          return `${arr.length} دسترسی`;
         },
       }),
       columnHelper.display({
@@ -284,7 +318,8 @@ export default function RolesPage() {
         ),
       }),
     ],
-    [columnHelper, openEditModal]
+    // CHANGE: اضافه کردن getPermissionLabel به dependency array
+    [columnHelper, openEditModal, getPermissionLabel],
   );
 
   return (
@@ -293,7 +328,9 @@ export default function RolesPage() {
 
       <FluidGrid className="pb-6">
         <FluidCol colSpan="col-span-12">
-          <h3 className="text-sm font-semibold text-blue-900 dark:text-white mb-3">ایجاد نقش</h3>
+          <h3 className="text-sm font-semibold text-blue-900 dark:text-white mb-3">
+            ایجاد نقش
+          </h3>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -319,7 +356,10 @@ export default function RolesPage() {
                 </form.Field>
               </FluidCol>
               <FluidCol colSpan="col-span-12 md:col-span-4">
-                <form.Field name="displayName" validators={{ onChange: required() }}>
+                <form.Field
+                  name="displayName"
+                  validators={{ onChange: required() }}
+                >
                   {(field) => (
                     <FormInput
                       id="role-displayName"
@@ -365,11 +405,14 @@ export default function RolesPage() {
               </FluidCol>
               <FluidCol colSpan="col-span-12">
                 <div className="space-y-2">
-                  <label className="block text-sm text-gray-500 dark:text-slate-400 mb-4">دسترسی‌ها (یک نقش می‌تواند چند دسترسی داشته باشد)</label>
+                  <label className="block text-sm text-gray-500 dark:text-slate-400 mb-4">
+                    دسترسی‌ها (یک نقش می‌تواند چند دسترسی داشته باشد)
+                  </label>
                   {grantedPermissions.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-6">
                       {grantedPermissions.map((p) => {
-                        const label = permissionsList.find((x) => x.name === p)?.displayName ?? p;
+                        // CHANGE: استفاده از getPermissionLabel به جای جستجوی مستقیم
+                        const label = getPermissionLabel(p);
                         return (
                           <span
                             key={p}
@@ -419,7 +462,9 @@ export default function RolesPage() {
         </FluidCol>
 
         <FluidCol colSpan="col-span-12">
-          <h3 className="text-sm font-semibold text-blue-900 dark:text-white mb-3">لیست نقش‌ها</h3>
+          <h3 className="text-sm font-semibold text-blue-900 dark:text-white mb-3">
+            لیست نقش‌ها
+          </h3>
           <DataTable
             query={rolesQuery}
             onPaginationChange={setPagination}
@@ -442,11 +487,18 @@ export default function RolesPage() {
         overlayLock={deleteMutation.isPending}
         footerButtons={
           <div className="flex gap-2 justify-end">
-            <FormButton title="انصراف" variant="secondary" onClick={() => setRoleToDelete(null)} disabled={deleteMutation.isPending} />
+            <FormButton
+              title="انصراف"
+              variant="secondary"
+              onClick={() => setRoleToDelete(null)}
+              disabled={deleteMutation.isPending}
+            />
             <FormButton
               title="حذف"
               variant="danger"
-              onClick={() => roleToDelete && deleteMutation.mutate(roleToDelete.id)}
+              onClick={() =>
+                roleToDelete && deleteMutation.mutate(roleToDelete.id)
+              }
               isLoading={deleteMutation.isPending}
               disabled={deleteMutation.isPending}
             />
@@ -455,7 +507,8 @@ export default function RolesPage() {
         renderContent={() =>
           roleToDelete ? (
             <p className="text-sm text-gray-700 dark:text-slate-300">
-              آیا از حذف نقش «{roleToDelete.displayName}» ({roleToDelete.name}) مطمئن هستید؟
+              آیا از حذف نقش «{roleToDelete.displayName}» ({roleToDelete.name})
+              مطمئن هستید؟
             </p>
           ) : null
         }
@@ -486,7 +539,11 @@ export default function RolesPage() {
               variant="success"
               onClick={handleEditSubmit}
               isLoading={updateMutation.isPending}
-              disabled={updateMutation.isPending || !editFormState?.name?.trim() || !editFormState?.displayName?.trim()}
+              disabled={
+                updateMutation.isPending ||
+                !editFormState?.name?.trim() ||
+                !editFormState?.displayName?.trim()
+              }
             />
           </div>
         }
@@ -499,7 +556,9 @@ export default function RolesPage() {
                     id="edit-role-name"
                     name="name"
                     value={editFormState.name}
-                    onChange={(v) => setEditFormState((p) => (p ? { ...p, name: v } : null))}
+                    onChange={(v) =>
+                      setEditFormState((p) => (p ? { ...p, name: v } : null))
+                    }
                     label="نام"
                     dir="ltr"
                   />
@@ -509,7 +568,11 @@ export default function RolesPage() {
                     id="edit-role-displayName"
                     name="displayName"
                     value={editFormState.displayName}
-                    onChange={(v) => setEditFormState((p) => (p ? { ...p, displayName: v } : null))}
+                    onChange={(v) =>
+                      setEditFormState((p) =>
+                        p ? { ...p, displayName: v } : null,
+                      )
+                    }
                     label="نام نمایشی"
                     dir="rtl"
                   />
@@ -519,7 +582,11 @@ export default function RolesPage() {
                     id="edit-role-normalizedName"
                     name="normalizedName"
                     value={editFormState.normalizedName}
-                    onChange={(v) => setEditFormState((p) => (p ? { ...p, normalizedName: v } : null))}
+                    onChange={(v) =>
+                      setEditFormState((p) =>
+                        p ? { ...p, normalizedName: v } : null,
+                      )
+                    }
                     label="نام نرمال"
                     dir="ltr"
                   />
@@ -529,18 +596,25 @@ export default function RolesPage() {
                     id="edit-role-description"
                     name="description"
                     value={editFormState.description}
-                    onChange={(v) => setEditFormState((p) => (p ? { ...p, description: v } : null))}
+                    onChange={(v) =>
+                      setEditFormState((p) =>
+                        p ? { ...p, description: v } : null,
+                      )
+                    }
                     label="توضیحات"
                     dir="rtl"
                     rows={3}
                   />
                 </FluidCol>
                 <FluidCol colSpan="col-span-12">
-                  <label className="block text-sm text-gray-500 dark:text-slate-400 mb-4">دسترسی‌ها</label>
+                  <label className="block text-sm text-gray-500 dark:text-slate-400 mb-4">
+                    دسترسی‌ها
+                  </label>
                   {editFormState.grantedPermissions.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-6">
                       {editFormState.grantedPermissions.map((p) => {
-                        const label = permissionsList.find((x) => x.name === p)?.displayName ?? p;
+                        // CHANGE: استفاده از getPermissionLabel به جای جستجوی مستقیم
+                        const label = getPermissionLabel(p);
                         return (
                           <span
                             key={p}

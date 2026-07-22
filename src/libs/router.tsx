@@ -4,94 +4,33 @@ import {
   createRouter,
   Outlet,
   redirect,
-  isRedirect,
-  isNotFound,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
-import { lazy, type ReactNode, useEffect } from "react";
+import { lazy } from "react";
 
 import { ErrorPage } from "../baseComponents/ErrorPage";
 import { SuspenseLoading } from "../baseComponents/SuspenseLoading";
-import { useAuthStore } from "./store";
 import AuthLayout from "../layout/Login/LoginLayout";
 import { authStore, authActions } from "./store/authActions";
 
-// ----------------------------------------
-// Auth Guard
-// ----------------------------------------
-const AuthGuard = ({ children }: { children: ReactNode }) => {
-  const { isAuthenticated } = useAuthStore();
-
+/**
+ * تابع کمکی برای چک کردن وضعیت احراز هویت
+ * این تابع را در beforeLoad روت‌هایی که نیاز به لاگین دارند استفاده می‌کنیم.
+ */
+const checkAuth = () => {
+  const { isAuthenticated } = authStore.state;
   const token = localStorage.getItem("auth_token");
-  const hasToken = !!token;
 
-  useEffect(() => {
-    if (hasToken && !isAuthenticated) {
-      authActions.initializeFromStorage();
-    }
-  }, [hasToken, isAuthenticated]);
-
-  if (!hasToken && !isAuthenticated) {
-    throw redirect({ to: "/login" });
+  if (!token && !isAuthenticated) {
+    throw redirect({
+      to: "/login",
+    });
   }
 
-  return <>{children}</>;
-};
-
-// ----------------------------------------
-// Lazy imports
-// ----------------------------------------
-const DashboardLayout = lazy(
-  () => import("../layout/dashboard/DashboardLayout"),
-);
-const DashboardPage = lazy(() => import("../Features/Dashboard/DashboardPage"));
-const CreateUserPage = lazy(() => import("../Features/Users/CreateUserPage"));
-const RolesPage = lazy(() => import("../Features/Users/RolesPage"));
-const ExpertsPage = lazy(() => import("../Features/BaseInfo/ExpertsPage"));
-const ExpertiseZonesPage = lazy(
-  () => import("../Features/BaseInfo/ExpertiseZonesPage"),
-);
-const RegionsPage = lazy(() => import("../Features/BaseInfo/RegionsPage"));
-const RequestTypesPage = lazy(
-  () => import("../Features/BaseInfo/RequestTypesPage"),
-);
-const AttachmentTypesPage = lazy(
-  () => import("../Features/BaseInfo/AttachmentTypesPage"),
-);
-const CustomersPage = lazy(() => import("../Features/BaseInfo/CustomersPage"));
-const CollateralTypesPage = lazy(
-  () => import("../Features/BaseInfo/CollateralTypesPage"),
-);
-const CreditLimitAuthoritiesPage = lazy(
-  () => import("../Features/BaseInfo/CreditLimitAuthoritiesPage"),
-);
-const DepartmentGradePage = lazy(
-  () => import("../Features/BaseInfo/DepartmentGradePage"),
-);
-const DepartmentPage = lazy(
-  () => import("../Features/BaseInfo/DepartmentPage"),
-);
-const PersonTypePage = lazy(
-  () => import("../Features/BaseInfo/PersonTypePage"),
-);
-
-// ----------------------------------------
-// Helpers
-// ----------------------------------------
-const getSafeErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  if (error && typeof error === "object") {
-    const maybeMessage = (error as { message?: unknown }).message;
-    if (typeof maybeMessage === "string") return maybeMessage;
+  // اگر توکن هست ولی استور آپدیت نیست (مثلاً بعد از رفرش)، استور را سینک کن
+  if (token && !isAuthenticated) {
+    authActions.initializeFromStorage();
   }
-  return "خطای ناشناخته در مسیریابی";
-};
-
-const getSafeErrorStack = (error: unknown): string | undefined => {
-  if (error instanceof Error && typeof error.stack === "string")
-    return error.stack;
-  return undefined;
 };
 
 // ----------------------------------------
@@ -105,22 +44,13 @@ const rootRoute = createRootRoute({
     </>
   ),
   errorComponent: ({ error }) => {
-    if (isRedirect(error)) return null;
-    if (isNotFound(error))
-      return <ErrorPage error={new Error("صفحه مورد نظر یافت نشد")} />;
-
-    const safeMessage = getSafeErrorMessage(error);
-    const safeStack = getSafeErrorStack(error);
-    const safeError = new Error(safeMessage);
-    if (safeStack) safeError.stack = safeStack;
-    console.error("Router error:", safeMessage);
-
-    return <ErrorPage error={safeError} />;
+    console.error("Router error:", error);
+    return <ErrorPage error={error} />;
   },
 });
 
 // ----------------------------------------
-// Index Route (redirect to dashboard or login)
+// Index Route
 // ----------------------------------------
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -135,179 +65,256 @@ const indexRoute = createRoute({
 // ----------------------------------------
 // Login Route
 // ----------------------------------------
-const LoginForm = lazy(() => import("../Features/Login/LoginPage"));
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
-  component: () => (
-    <SuspenseLoading>
-      <AuthLayout>
-        <div className="mx-auto mb-6">
-          <img src="./images/Logo.svg" className="w-40" />
-        </div>
-        <LoginForm />
-      </AuthLayout>
-    </SuspenseLoading>
-  ),
+  beforeLoad: () => {
+    // اگر کاربر لاگین است، اجازه نده دوباره به صفحه لاگین برود
+    const token = localStorage.getItem("auth_token");
+    if (token) {
+      throw redirect({ to: "/dashboard" });
+    }
+  },
+  component: () => {
+    const LoginForm = lazy(() => import("../Features/Login/LoginPage"));
+    return (
+      <SuspenseLoading>
+        <AuthLayout>
+          <div className="mx-auto mb-6">
+            <img src="./images/Logo.svg" className="w-40" alt="Logo" />
+          </div>
+          <LoginForm />
+        </AuthLayout>
+      </SuspenseLoading>
+    );
+  },
 });
 
 // ----------------------------------------
-// Dashboard (Protected)
+// Dashboard Layout Route (حامل منطق Auth)
 // ----------------------------------------
 const dashboardLayoutRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/dashboard",
-  component: () => (
-    <AuthGuard>
+  beforeLoad: () => checkAuth(), // قبل از لود شدن هر زیرمجموعه‌ای، لاگین چک می‌شود
+  component: () => {
+    const DashboardLayout = lazy(
+      () => import("../layout/dashboard/DashboardLayout"),
+    );
+    return (
       <SuspenseLoading>
         <DashboardLayout />
       </SuspenseLoading>
-    </AuthGuard>
-  ),
+    );
+  },
 });
 
+// ----------------------------------------
+// Dashboard Sub-Routes
+// ----------------------------------------
 const dashboardIndexRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/",
-  component: () => (
-    <SuspenseLoading>
-      <DashboardPage />
-    </SuspenseLoading>
-  ),
+  component: () => {
+    const DashboardPage = lazy(
+      () => import("../Features/Dashboard/DashboardPage"),
+    );
+    return (
+      <SuspenseLoading>
+        <DashboardPage />
+      </SuspenseLoading>
+    );
+  },
 });
 
-// Users
 const createUserRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/users/create-page",
-  component: () => (
-    <SuspenseLoading>
-      <CreateUserPage />
-    </SuspenseLoading>
-  ),
+  component: () => {
+    const CreateUserPage = lazy(
+      () => import("../Features/Users/CreateUserPage"),
+    );
+    return (
+      <SuspenseLoading>
+        <CreateUserPage />
+      </SuspenseLoading>
+    );
+  },
 });
 
 const rolesRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/users/roles",
-  component: () => (
-    <SuspenseLoading>
-      <RolesPage />
-    </SuspenseLoading>
-  ),
+  component: () => {
+    const RolesPage = lazy(() => import("../Features/Users/RolesPage"));
+    return (
+      <SuspenseLoading>
+        <RolesPage />
+      </SuspenseLoading>
+    );
+  },
 });
 
-// Base Info
+// --- Base Info Routes ---
 const expertsRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/base-info/experts",
-  component: () => (
-    <SuspenseLoading>
-      <ExpertsPage />
-    </SuspenseLoading>
-  ),
+  component: () => {
+    const Page = lazy(() => import("../Features/BaseInfo/ExpertsPage"));
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
 });
 
 const expertiseZonesRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/base-info/expertise-zones",
-  component: () => (
-    <SuspenseLoading>
-      <ExpertiseZonesPage />
-    </SuspenseLoading>
-  ),
+  component: () => {
+    const Page = lazy(() => import("../Features/BaseInfo/ExpertiseZonesPage"));
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
 });
 
 const regionsRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/base-info/regions",
-  component: () => (
-    <SuspenseLoading>
-      <RegionsPage />
-    </SuspenseLoading>
-  ),
+  component: () => {
+    const Page = lazy(() => import("../Features/BaseInfo/RegionsPage"));
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
 });
 
 const requestTypesRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/base-info/request-types",
-  component: () => (
-    <SuspenseLoading>
-      <RequestTypesPage />
-    </SuspenseLoading>
-  ),
+  component: () => {
+    const Page = lazy(() => import("../Features/BaseInfo/RequestTypesPage"));
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
 });
 
 const attachmentTypesRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/base-info/attachment-types",
-  component: () => (
-    <SuspenseLoading>
-      <AttachmentTypesPage />
-    </SuspenseLoading>
-  ),
+  component: () => {
+    const Page = lazy(() => import("../Features/BaseInfo/AttachmentTypesPage"));
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
 });
 
 const customersRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/base-info/customers",
-  component: () => (
-    <SuspenseLoading>
-      <CustomersPage />
-    </SuspenseLoading>
-  ),
+  component: () => {
+    const Page = lazy(() => import("../Features/BaseInfo/CustomersPage"));
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
 });
 
 const collateralTypesRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/base-info/collateral-types",
-  component: () => (
-    <SuspenseLoading>
-      <CollateralTypesPage />
-    </SuspenseLoading>
-  ),
+  component: () => {
+    const Page = lazy(() => import("../Features/BaseInfo/CollateralTypesPage"));
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
 });
 
 const creditLimitAuthoritiesRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/base-info/credit-limit-authorities",
-  component: () => (
-    <SuspenseLoading>
-      <CreditLimitAuthoritiesPage />
-    </SuspenseLoading>
-  ),
+  component: () => {
+    const Page = lazy(
+      () => import("../Features/BaseInfo/CreditLimitAuthoritiesPage"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
 });
 
 const departmentGradeRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/base-info/department-grades",
-  component: () => (
-    <SuspenseLoading>
-      <DepartmentGradePage />
-    </SuspenseLoading>
-  ),
+  component: () => {
+    const Page = lazy(() => import("../Features/BaseInfo/DepartmentGradePage"));
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
 });
 
 const departmentRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/base-info/departments",
-  component: () => (
-    <SuspenseLoading>
-      <DepartmentPage />
-    </SuspenseLoading>
-  ),
+  component: () => {
+    const Page = lazy(() => import("../Features/BaseInfo/DepartmentPage"));
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
 });
 
 const personTypeRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/base-info/person-types",
-  component: () => (
-    <SuspenseLoading>
-      <PersonTypePage />
-    </SuspenseLoading>
-  ),
+  component: () => {
+    const Page = lazy(() => import("../Features/BaseInfo/PersonTypePage"));
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
 });
 
+const requestCreateRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/branch/create",
+  component: () => {
+    const Page = lazy(
+      () => import("../Features/Requests/Branch/RequestCreatePage"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
 // ----------------------------------------
 // Route Tree
 // ----------------------------------------
@@ -329,6 +336,7 @@ const routeTree = rootRoute.addChildren([
     departmentGradeRoute,
     departmentRoute,
     personTypeRoute,
+    requestCreateRoute,
   ]),
 ]);
 

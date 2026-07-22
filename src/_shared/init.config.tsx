@@ -125,10 +125,65 @@ export const defaultMenuItems = [
     title: "مدیریت درخواست‌ها",
     icon: "clipboard-list",
     children: [
-      { id: "independent-branch", title: "شعبه مستقل", path: "#" },
-      { id: "branch", title: "شعبه", path: "#" },
-      { id: "region", title: "منطقه", path: "#" },
-      { id: "main-office", title: "ستاد", path: "#" },
+      {
+        id: "branch",
+        title: "شعبه",
+        icon: "building",
+        // path رو اصلاً تعریف نکنید (یا path: null)
+        children: [
+          {
+            id: "requests-view",
+            title: "مشاهده و پیگیری درخواست‌ها",
+            path: "/dashboard/requests/branch/view",
+            permissions: [],
+          },
+          {
+            id: "requests-create",
+            title: "ایجاد درخواست جدید",
+            path: "/dashboard/requests/branch/create",
+            permissions: [],
+          },
+          {
+            id: "requests-branch-review",
+            title: "بررسی درخواست توسط شعبه",
+            path: "/dashboard/requests/branch/review",
+            permissions: [],
+          },
+          {
+            id: "requests-referral",
+            title: "ارجاع به کارشناس رسمی دادگستری",
+            path: "/dashboard/requests/branch/referral",
+            permissions: [],
+          },
+          {
+            id: "requests-asset-review",
+            title: "بررسی و بازنگری اطلاعات ملک توسط شعبه",
+            path: "/dashboard/requests/branch/asset-review",
+            permissions: [],
+          },
+          {
+            id: "requests-fee-calculation",
+            title: "نتیجه ارزیابی و محاسبه کارمزد کارشناس رسمی دادگستری",
+            path: "/dashboard/requests/branch/fee-calculation",
+            permissions: [],
+          },
+        ],
+      },
+      {
+        id: "independent-branch",
+        title: "شعبه مستقل",
+        path: "/dashboard/requests/independent",
+      },
+      {
+        id: "region",
+        title: "منطقه",
+        path: "/dashboard/requests/region",
+      },
+      {
+        id: "main-office",
+        title: "ستاد",
+        path: "/dashboard/requests/main-office",
+      },
     ],
   },
 ];
