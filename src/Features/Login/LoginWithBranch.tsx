@@ -63,6 +63,13 @@ export default function LoginWithBranch() {
           data.nationalId,
           data.fullName,
           data.branchName,
+          data.pid,
+          data.bid,
+          data.sid,
+          data.name,
+          data.surname,
+          data.isActive,
+          data.creationTime,
         );
 
         console.log("👤 Auth login done. roleIds:", data.roleIds);

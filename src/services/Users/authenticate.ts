@@ -26,6 +26,9 @@ export interface UserObject {
   /** Role ids with names (e.g. ["1:ADMIN", "3:Reporter"]) - id before colon. Optional. */
   roles?: string[];
   id: number;
+  sid?: string;
+  bid?: string;
+  pid?: string;
 }
 
 export interface AuthenticateResult {
@@ -72,6 +75,13 @@ export interface AuthLoginPayload {
   nationalId: string;
   fullName: string;
   branchName?: string;
+  bid?: string;
+  pid?: string;
+  sid?: string;
+  name?: string;
+  surname?: string;
+  isActive?: boolean;
+  creationTime?: string;
 }
 
 /** Authenticate with p and tok (POST /api/TokenAuth/AuthenticateWithPTok) */
@@ -160,6 +170,13 @@ function parseAuthResult(
     roleIds,
     nationalId: String(user?.id ?? result.userId),
     fullName: user?.fullName ?? fallbackName,
-    branchName: undefined,
+    branchName: user?.bid,
+    bid: user?.bid,
+    pid: user?.pid,
+    sid: user?.sid,
+    name: user?.name,
+    surname: user?.surname,
+    isActive: user?.isActive,
+    creationTime: user?.creationTime,
   };
 }

@@ -13,6 +13,7 @@ export const Permissions = {
   Pages_CreditLimitAuthorities: "Pages.CreditLimitAuthorities",
   Pages_DepartmentGrades: "Pages.DepartmentGrades",
   Pages_Departments: "Pages.Departments",
+  Pages_DepartmentTypes: "Pages.DepartmentTypes",
   Pages_PersonTypes: "Pages.PersonTypes",
 } as const;
 
@@ -101,6 +102,12 @@ export const defaultMenuItems = [
         permissions: [Permissions.Pages_DepartmentGrades],
       },
       {
+        id: "department-types",
+        title: "انواع دپارتمان",
+        path: "/dashboard/base-info/department-types",
+        permissions: [Permissions.Pages_DepartmentTypes],
+      },
+      {
         id: "departments",
         title: "دپارتمان‌ها",
         path: "/dashboard/base-info/departments",
@@ -129,7 +136,6 @@ export const defaultMenuItems = [
         id: "branch",
         title: "شعبه",
         icon: "building",
-        // path رو اصلاً تعریف نکنید (یا path: null)
         children: [
           {
             id: "requests-view",
@@ -174,11 +180,7 @@ export const defaultMenuItems = [
         title: "شعبه مستقل",
         path: "/dashboard/requests/independent",
       },
-      {
-        id: "region",
-        title: "منطقه",
-        path: "/dashboard/requests/region",
-      },
+      { id: "region", title: "منطقه", path: "/dashboard/requests/region" },
       {
         id: "main-office",
         title: "ستاد",

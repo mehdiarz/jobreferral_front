@@ -1,40 +1,40 @@
 export interface DepartmentItem {
-    id: number;
-    code: string | null;
-    title: string | null;
-    departmentGradeId?: number | null;
-    parentId?: number | null;
-    regionId?: number | null;
-    documentTypeId?: number | null;
-    description?: string | null;
-    isActive?: boolean;
+  id: number;
+  code: string | null;
+  title: string | null;
+  departmentGradeId?: number | null;
+  parentId?: number | null;
+  regionId?: number | null;
+  departmentTypeId?: number | null;
+  description?: string | null;
+  isActive?: boolean;
 }
 
 export interface CreateDepartmentBody {
-    code: string;
-    title: string;
-    departmentGradeId?: number;
-    parentId?: number;
-    regionId?: number;
-    documentTypeId?: number;
-    description?: string;
-    isActive?: boolean;
+  code: string;
+  title: string;
+  departmentGradeId?: number;
+  parentId?: number;
+  regionId?: number;
+  departmentTypeId?: number;
+  description?: string;
+  isActive?: boolean;
 }
 
 export interface EditDepartmentBody {
-    id: number;
-    code: string;
-    title: string;
-    departmentGradeId?: number;
-    parentId?: number;
-    regionId?: number;
-    documentTypeId?: number;
-    description?: string;
-    isActive?: boolean;
+  id: number;
+  code: string;
+  title: string;
+  departmentGradeId?: number;
+  parentId?: number;
+  regionId?: number;
+  departmentTypeId?: number;
+  description?: string;
+  isActive?: boolean;
 }
 
 export interface GetAllDepartmentsParams {
-    sorting?: string;
-    skipCount?: number;
-    maxResultCount?: number;
+  sorting?: string;
+  skipCount?: number;
+  maxResultCount?: number;
 }

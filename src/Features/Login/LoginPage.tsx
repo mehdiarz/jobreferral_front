@@ -28,12 +28,19 @@ export default function LoginForm() {
     onSuccess: async (data) => {
       if (data?.token) {
         authActions.login(
-          "token-user",
+          data.fullName || data.name || "token-user", // 👈 username واقعی
           data.token,
           data.roles,
           data.nationalId,
           data.fullName,
           data.branchName,
+          data.pid,
+          data.bid || data.branchName,
+          data.sid,
+          data.name,
+          data.surname,
+          data.isActive,
+          data.creationTime,
         );
         const permissions =
           data.roleIds?.length > 0

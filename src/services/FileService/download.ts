@@ -13,8 +13,14 @@ export async function downloadFile(
   path: string,
   documentId?: number,
 ): Promise<void> {
-  const url = getDownloadUrl(path, documentId);
+  const baseUrl = getApiBaseUrl();
   const token = authStore.state.token || localStorage.getItem("auth_token");
+
+  const params = new URLSearchParams();
+  params.set("path", path);
+  if (documentId) params.set("documentId", String(documentId));
+
+  const url = `${baseUrl}/services/app/FileServiceAppServie/Download?${params.toString()}`;
 
   const response = await fetch(url, {
     method: "POST",

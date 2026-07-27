@@ -262,6 +262,19 @@ const creditLimitAuthoritiesRoute = createRoute({
   },
 });
 
+const departmentTypeRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/base-info/department-types",
+  component: () => {
+    const Page = lazy(() => import("../Features/BaseInfo/DepartmentTypePage"));
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
 const departmentGradeRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/base-info/department-grades",
@@ -315,6 +328,18 @@ const requestCreateRoute = createRoute({
     );
   },
 });
+const profileRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/profile",
+  component: () => {
+    const Page = lazy(() => import("../Features/Users/ProfilePage"));
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
 // ----------------------------------------
 // Route Tree
 // ----------------------------------------
@@ -325,6 +350,7 @@ const routeTree = rootRoute.addChildren([
     dashboardIndexRoute,
     createUserRoute,
     rolesRoute,
+    profileRoute,
     expertsRoute,
     expertiseZonesRoute,
     regionsRoute,
@@ -333,6 +359,7 @@ const routeTree = rootRoute.addChildren([
     customersRoute,
     collateralTypesRoute,
     creditLimitAuthoritiesRoute,
+    departmentTypeRoute,
     departmentGradeRoute,
     departmentRoute,
     personTypeRoute,

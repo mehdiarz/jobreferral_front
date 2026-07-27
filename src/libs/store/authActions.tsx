@@ -29,6 +29,13 @@ export const authActions = {
     nationalId: string,
     fullName?: string,
     branchName?: string,
+    pid?: string,
+    bid?: string,
+    sid?: string,
+    name?: string,
+    surname?: string,
+    isActive?: boolean,
+    creationTime?: string,
   ) => {
     // Create user object matching User interface
     const user = {
@@ -38,6 +45,13 @@ export const authActions = {
       roles: roles.join(","),
       fullName,
       branchName,
+      pid,
+      bid,
+      sid,
+      name,
+      surname,
+      isActive,
+      creationTime,
     };
 
     authStore.setState((state) => ({
@@ -55,8 +69,16 @@ export const authActions = {
     localStorage.setItem("auth_user", JSON.stringify(userName));
     localStorage.setItem("roles", JSON.stringify(roles));
     localStorage.setItem("auth_national_Id", JSON.stringify(nationalId));
+    if (pid) localStorage.setItem("auth_pid", pid);
+    if (bid) localStorage.setItem("auth_bid", bid);
     if (fullName) localStorage.setItem("auth_fullName", fullName);
     if (branchName) localStorage.setItem("auth_branchName", branchName);
+    if (sid) localStorage.setItem("auth_sid", sid);
+    if (name) localStorage.setItem("auth_name", name);
+    if (surname) localStorage.setItem("auth_surname", surname);
+    if (isActive !== undefined)
+      localStorage.setItem("auth_isActive", String(isActive));
+    if (creationTime) localStorage.setItem("auth_creationTime", creationTime);
   },
 
   setPermissions: (permissions: string[]) => {
@@ -86,6 +108,13 @@ export const authActions = {
     localStorage.removeItem("auth_national_Id");
     localStorage.removeItem("auth_fullName");
     localStorage.removeItem("auth_branchName");
+    localStorage.removeItem("auth_pid");
+    localStorage.removeItem("auth_bid");
+    localStorage.removeItem("auth_sid");
+    localStorage.removeItem("auth_name");
+    localStorage.removeItem("auth_surname");
+    localStorage.removeItem("auth_isActive");
+    localStorage.removeItem("auth_creationTime");
   },
 
   setLoading: (isLoading: boolean) => {
@@ -103,6 +132,13 @@ export const authActions = {
     const nationalId = localStorage.getItem("auth_national_Id");
     const rolesStr = localStorage.getItem("roles");
     const permissionsStr = localStorage.getItem("permissions");
+    const pid = localStorage.getItem("auth_pid") || undefined;
+    const bid = localStorage.getItem("auth_bid") || undefined;
+    const sid = localStorage.getItem("auth_sid") || undefined;
+    const name = localStorage.getItem("auth_name") || undefined;
+    const surname = localStorage.getItem("auth_surname") || undefined;
+    const isActive = localStorage.getItem("auth_isActive") === "true";
+    const creationTime = localStorage.getItem("auth_creationTime") || undefined;
 
     if (token && userStr) {
       try {
@@ -119,6 +155,13 @@ export const authActions = {
           roles: Array.isArray(roles) ? roles.join(",") : roles,
           fullName,
           branchName,
+          pid,
+          bid,
+          sid,
+          name,
+          surname,
+          isActive,
+          creationTime,
         };
 
         authStore.setState((state) => ({

@@ -145,9 +145,13 @@ export default function Header() {
               {/* Menu items */}
               <div className="p-2">
                 <button
+                  onClick={() => {
+                    setIsProfileOpen(false);
+                    router.navigate({ to: "/dashboard/profile" });
+                  }}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm
-                  text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50
-                  transition-colors duration-150"
+                             text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50
+                             transition-colors duration-150"
                 >
                   <User className="w-4 h-4" />
                   <span>پروفایل کاربری</span>

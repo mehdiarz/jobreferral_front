@@ -12,6 +12,7 @@ import FormTextarea from "../../../baseComponents/FormTextarea";
 import FormButton from "../../../baseComponents/FormButton";
 import PageTitle from "../../../baseComponents/PageTitle";
 import DataTable from "../../../baseComponents/DataTable";
+import Modal from "../../../baseComponents/Modal";
 import { useToast } from "../../../libs/toastContext";
 import { useAuthStore } from "../../../libs/store";
 
@@ -23,7 +24,6 @@ import { getAllCollatralTypes } from "../../../services/CollatralTypeCrud/getAll
 import { getAllDocumentTypes } from "../../../services/DocumentTypeCrud/getAll";
 import { createCollatral } from "../../../services/CollatralCrud/create";
 import { startUpload } from "../../../services/FileService/start";
-import { completeUpload } from "../../../services/FileService/complete";
 import { uploadChunk } from "../../../services/FileService/uploadChunk";
 import { downloadFile } from "../../../services/FileService/download";
 import type { RequestTypeItem } from "../../../services/RequestTypeCrud/types";
@@ -32,6 +32,10 @@ import type { PersonalTypeItem } from "../../../services/PersonalTypeCrud/types"
 import type { CollatralTypeItem } from "../../../services/CollatralTypeCrud/types";
 import type { DocumentTypeItem } from "../../../services/DocumentTypeCrud/types";
 import { isoToPersian } from "../../../utils/persianToISO";
+import { createDocument } from "../../../services/DocumentCrud/create.ts";
+import { completeBatchUpload } from "../../../services/FileService/completeBatch.ts";
+import { findCustomer } from "../../../services/CustomerCrud/find";
+import type { CustomerItem } from "../../../services/CustomerCrud/types";
 
 // ─── Types ───
 type CollateralForm = {
@@ -64,14 +68,16 @@ type UploadedFile = {
   fileAddress: string;
   uploadProgress: number;
   isUploading: boolean;
+  isCompleting: boolean;
   isCompleted: boolean;
   userName: string;
   userRole: string;
   uploadDate: string;
   uploadTime: string;
+  uploadId?: string;
+  totalChunks?: number;
 };
 
-// ─── Constants ───
 const emptyCollateral: CollateralForm = {
   personTypeId: null,
   collatralTypeId: null,
@@ -92,12 +98,24 @@ const emptyRequest: RequestForm = {
 };
 const CHUNK_SIZE = 2 * 1024 * 1024;
 
-// ─── Component ───
 export default function RequestCreatePage() {
   const { showToast } = useToast();
   const { user, fullName } = useAuthStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cancelRef = useRef<Set<string>>(new Set());
+  const uploadStateRef = useRef<
+    Map<
+      string,
+      {
+        file: File;
+        uploadId: string;
+        totalChunks: number;
+        lastUploadedChunk: number;
+        isPaused: boolean;
+        isCompleting: boolean;
+      }
+    >
+  >(new Map());
   const today = isoToPersian(new Date().toISOString());
   const now = new Date().toLocaleTimeString("fa-IR");
 
@@ -112,6 +130,18 @@ export default function RequestCreatePage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [customerId, setCustomerId] = useState<number | null>(null);
+  const [customerInfo, setCustomerInfo] = useState<{
+    cif: string;
+    name: string;
+  } | null>(null);
+  const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
+  const [foundCustomers, setFoundCustomers] = useState<CustomerItem[]>([]);
+
+  const userName = fullName || user?.username || "";
+  const branchName = user?.branchName || "";
 
   // ─── Queries ───
   const { data: requestTypes = [] } = useQuery({
@@ -182,7 +212,7 @@ export default function RequestCreatePage() {
     [documentTypes],
   );
 
-  // ─── File handlers ───
+  // ─── File Upload with Resume ───
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) setSelectedFile(file);
@@ -205,6 +235,7 @@ export default function RequestCreatePage() {
     const docType = documentTypes.find(
       (d: DocumentTypeItem) => d.id === selectedDocTypeId,
     );
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
     const newFile: UploadedFile = {
       id: docId,
@@ -216,11 +247,13 @@ export default function RequestCreatePage() {
       fileAddress: "",
       uploadProgress: 0,
       isUploading: true,
+      isCompleting: false,
       isCompleted: false,
-      userName: user?.fullName || fullName || "",
+      userName,
       userRole: user?.roles || "",
       uploadDate: today,
       uploadTime: now,
+      totalChunks,
     };
 
     setUploadedFiles((prev) => [newFile, ...prev]);
@@ -228,58 +261,49 @@ export default function RequestCreatePage() {
     setIsUploading(true);
 
     try {
-      const chunkSize = CHUNK_SIZE;
-      const totalChunks = Math.ceil(file.size / chunkSize);
-
-      console.log("📤 Starting upload:", {
+      // Start
+      const startRes: any = await startUpload({
         fileName: file.name,
         fileSize: file.size,
-        chunkSize,
+        chunkSize: CHUNK_SIZE,
+      });
+      const uploadId = startRes?.result?.uploadId || startRes?.uploadId;
+
+      console.log("🆕 New uploadId:", uploadId);
+
+      // Save state for resume
+      uploadStateRef.current.set(docId, {
+        file,
+        uploadId,
         totalChunks,
+        lastUploadedChunk: -1,
+        isPaused: false,
+        isCompleting: false,
       });
+      setUploadedFiles((prev) =>
+        prev.map((f) => (f.id === docId ? { ...f, uploadId } : f)),
+      );
 
-      const startRes = await startUpload({
-        fileName: file.name,
-        fileSize: file.size,
-        chunkSize,
-      });
+      // Upload chunks
+      await uploadChunksInBatches(docId, file, uploadId, totalChunks, 0);
 
-      console.log("✅ Start response:", startRes);
-      const uploadId =
-        (startRes as any)?.result?.uploadId || (startRes as any)?.uploadId;
-      console.log("🆔 Upload ID:", uploadId);
-
-      for (let i = 0; i < totalChunks; i++) {
-        if (cancelRef.current.has(docId)) throw new Error("آپلود لغو شد");
-        const start = i * chunkSize;
-        const end = Math.min(start + chunkSize, file.size);
-        const chunk = file.slice(start, end);
-
-        console.log(
-          `📦 Uploading chunk ${i + 1}/${totalChunks}, size: ${chunk.size}`,
-        );
-
-        try {
-          await uploadChunk(uploadId, i, chunk, file.name, (chunkPercent) => {
-            const overall = Math.round(
-              ((i + chunkPercent / 100) / totalChunks) * 100,
-            );
-            setUploadedFiles((prev) =>
-              prev.map((f) =>
-                f.id === docId ? { ...f, uploadProgress: overall } : f,
-              ),
-            );
-          });
-          console.log(`✅ Chunk ${i + 1} done`);
-        } catch (chunkErr: any) {
-          console.error(`❌ Chunk ${i + 1} failed:`, chunkErr);
-          throw chunkErr;
-        }
-      }
-
-      console.log("🏁 Completing upload...");
-      await completeUpload(uploadId);
-      console.log("✅ Upload complete!");
+      // Completing
+      // setUploadedFiles((prev) =>
+      //   prev.map((f) =>
+      //     f.id === docId
+      //       ? {
+      //           ...f,
+      //           isUploading: false,
+      //           isCompleting: true,
+      //           uploadProgress: 100,
+      //         }
+      //       : f,
+      //   ),
+      // );
+      // const state = uploadStateRef.current.get(docId);
+      // if (state) state.isCompleting = true;
+      //
+      // await completeUpload(uploadId);
 
       setUploadedFiles((prev) =>
         prev.map((f) =>
@@ -288,21 +312,198 @@ export default function RequestCreatePage() {
                 ...f,
                 uploadProgress: 100,
                 isUploading: false,
+                isCompleting: false,
                 isCompleted: true,
                 fileAddress: uploadId,
               }
             : f,
         ),
       );
+      uploadStateRef.current.delete(docId);
       showToast("فایل با موفقیت آپلود شد", "success");
     } catch (err: any) {
-      console.error("❌ Upload failed:", err);
-      setUploadedFiles((prev) => prev.filter((f) => f.id !== docId));
-      if (err.message !== "آپلود لغو شد")
-        showToast(`خطا: ${err.message}`, "error");
+      if (err.message === "آپلود لغو شد") {
+        // کاربر دستی pause کرده - فایل بمونه
+      } else {
+        // خطای شبکه یا سرور - فایل بمونه توی حالت paused
+        setUploadedFiles((prev) =>
+          prev.map((f) => (f.id === docId ? { ...f, isUploading: false } : f)),
+        );
+        showToast(`خطا: ${err.message}. می‌توانید ادامه دهید.`, "warning");
+      }
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const handleFindCustomer = async () => {
+    const cif = requestForm.requesterName.trim();
+    if (!cif) {
+      showToast("لطفاً شماره مشتری را وارد کنید", "error");
+      return;
+    }
+
+    setIsSearchingCustomer(true);
+    try {
+      const customers = await findCustomer(cif);
+      if (customers.length === 0) {
+        setCustomerId(null);
+        setCustomerInfo(null);
+        showToast("مشتری با این شماره یافت نشد", "warning");
+      } else if (customers.length === 1) {
+        const c = customers[0];
+        setCustomerId(c.id);
+        setCustomerInfo({ cif: c.cifNumber || cif, name: c.name || "-" });
+        showToast("مشتری یافت شد", "success");
+      } else {
+        setFoundCustomers(customers);
+        setIsCustomerModalOpen(true);
+      }
+    } catch (err: any) {
+      showToast(err?.message || "خطا در استعلام", "error");
+    } finally {
+      setIsSearchingCustomer(false);
+    }
+  };
+
+  const handleSelectCustomer = (customer: CustomerItem) => {
+    setCustomerId(customer.id);
+    setCustomerInfo({
+      cif: customer.cifNumber || "",
+      name: customer.name || "-",
+    });
+    setIsCustomerModalOpen(false);
+    showToast("مشتری انتخاب شد", "success");
+  };
+
+  const uploadChunksInBatches = async (
+    docId: string,
+    file: File,
+    uploadId: string,
+    totalChunks: number,
+    startIndex: number,
+  ) => {
+    for (let i = startIndex; i < totalChunks; i++) {
+      if (cancelRef.current.has(docId)) {
+        cancelRef.current.delete(docId);
+        throw new Error("آپلود لغو شد");
+      }
+
+      const state = uploadStateRef.current.get(docId);
+      if (state?.isPaused) {
+        state.lastUploadedChunk = i - 1;
+        throw new Error("آپلود متوقف شد");
+      }
+
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, file.size);
+      const chunk = file.slice(start, end);
+
+      try {
+        await uploadChunk(uploadId, i, chunk, file.name, (chunkPercent) => {
+          const overall = Math.round(
+            ((i + chunkPercent / 100) / totalChunks) * 100,
+          );
+          setUploadedFiles((prev) =>
+            prev.map((f) =>
+              f.id === docId ? { ...f, uploadProgress: overall } : f,
+            ),
+          );
+        });
+
+        // Update state
+        if (state) state.lastUploadedChunk = i;
+        setUploadedFiles((prev) =>
+          prev.map((f) =>
+            f.id === docId
+              ? {
+                  ...f,
+                  uploadProgress: Math.round(((i + 1) / totalChunks) * 100),
+                }
+              : f,
+          ),
+        );
+      } catch (chunkErr: any) {
+        // خطا توی آپلود chunk - متوقف کن و state رو ذخیره کن
+        if (state) {
+          state.lastUploadedChunk = i - 1;
+          state.isPaused = true;
+        }
+        throw new Error(`خطا در آپلود: ${chunkErr.message}`);
+      }
+    }
+  };
+
+  const handleResumeUpload = async (file: UploadedFile) => {
+    const state = uploadStateRef.current.get(file.id);
+    if (!state || !state.file || !state.uploadId) {
+      showToast("امکان ادامه آپلود وجود ندارد", "error");
+      return;
+    }
+
+    state.isPaused = false;
+    const startIndex = (state.lastUploadedChunk ?? -1) + 1;
+    setUploadedFiles((prev) =>
+      prev.map((f) =>
+        f.id === file.id ? { ...f, isUploading: true, isCompleted: false } : f,
+      ),
+    );
+
+    try {
+      await uploadChunksInBatches(
+        file.id,
+        state.file,
+        state.uploadId,
+        state.totalChunks,
+        startIndex,
+      );
+
+      // Completing
+      // setUploadedFiles((prev) =>
+      //   prev.map((f) =>
+      //     f.id === file.id
+      //       ? {
+      //           ...f,
+      //           isUploading: false,
+      //           isCompleting: true,
+      //           uploadProgress: 100,
+      //         }
+      //       : f,
+      //   ),
+      // );
+      // state.isCompleting = true;
+      //
+      // await completeUpload(state.uploadId);
+
+      setUploadedFiles((prev) =>
+        prev.map((f) =>
+          f.id === file.id
+            ? {
+                ...f,
+                isUploading: false,
+                isCompleting: false,
+                isCompleted: true,
+                fileAddress: state.uploadId,
+              }
+            : f,
+        ),
+      );
+      uploadStateRef.current.delete(file.id);
+      showToast("فایل با موفقیت آپلود شد", "success");
+    } catch (err: any) {
+      setUploadedFiles((prev) =>
+        prev.map((f) => (f.id === file.id ? { ...f, isUploading: false } : f)),
+      );
+      showToast(`خطا: ${err.message}. می‌توانید ادامه دهید.`, "warning");
+    }
+  };
+
+  const handlePauseUpload = (docId: string) => {
+    const state = uploadStateRef.current.get(docId);
+    if (state) state.isPaused = true;
+    setUploadedFiles((prev) =>
+      prev.map((f) => (f.id === docId ? { ...f, isUploading: false } : f)),
+    );
   };
 
   const handleDownload = async (file: UploadedFile) => {
@@ -315,6 +516,7 @@ export default function RequestCreatePage() {
 
   const handleDeleteFile = (id: string) => {
     cancelRef.current.add(id);
+    uploadStateRef.current.delete(id);
     setUploadedFiles((prev) => prev.filter((f) => f.id !== id));
   };
 
@@ -354,7 +556,7 @@ export default function RequestCreatePage() {
       const body = {
         requestTypeId: requestForm.requestTypeId!,
         departmentId: requestForm.departmentId || 0,
-        customerId: 0,
+        customerId: customerId || 0,
         title: requestForm.title,
         requestCode: requestForm.requestCode || "",
         loanNumber: requestForm.loanNumber,
@@ -364,9 +566,11 @@ export default function RequestCreatePage() {
         currentApprovalStepId: 0,
         requestStatusId: 0,
       };
-      const res = await createRequest(body);
-      const requestId = res.id;
+      // 1. Create Request
+      const requestRes: any = await createRequest(body);
+      const requestId = requestRes?.result?.id || requestRes?.id;
 
+      // 2. Create Collaterals
       for (const col of collaterals) {
         if (col.personTypeId && col.collatralTypeId && col.firstName) {
           await createCollatral({
@@ -379,6 +583,44 @@ export default function RequestCreatePage() {
           });
         }
       }
+
+      // 3. Group completed files by documentTypeId
+      const filesByType = new Map<number, UploadedFile[]>();
+      for (const file of uploadedFiles) {
+        if (file.isCompleted && file.documentTypeId) {
+          const existing = filesByType.get(file.documentTypeId) || [];
+          existing.push(file);
+          filesByType.set(file.documentTypeId, existing);
+        }
+      }
+
+      // 4. Create ONE document per documentTypeId, then attach all files
+      const batchItems: { uploadId: string; documentId: number }[] = [];
+
+      for (const [docTypeId, files] of filesByType) {
+        // Create document
+        const docRes: any = await createDocument({
+          documentTypeId: docTypeId,
+          requestId,
+        });
+        const documentId = docRes?.result?.id || docRes?.id;
+        console.log(`📄 Document created (typeId=${docTypeId}):`, documentId);
+
+        // Attach all files to this document
+        for (const file of files) {
+          if (file.uploadId) {
+            batchItems.push({ uploadId: file.uploadId, documentId });
+          }
+        }
+      }
+
+      // 5. Complete all files in ONE request
+      if (batchItems.length > 0) {
+        console.log("📦 Sending CompleteBatch:", batchItems);
+        await completeBatchUpload({ items: batchItems });
+        console.log("✅ CompleteBatch done");
+      }
+
       showToast("درخواست با موفقیت ثبت شد", "success");
     } catch (err: any) {
       showToast(err?.message || "خطا", "error");
@@ -387,7 +629,7 @@ export default function RequestCreatePage() {
     }
   };
 
-  // ─── Columns for uploaded files table ───
+  // ─── Columns ───
   const fileColumns = useMemo<ColumnDef<UploadedFile, any>[]>(
     () => [
       {
@@ -415,27 +657,74 @@ export default function RequestCreatePage() {
       },
       {
         id: "progress",
-        header: "پیشرفت",
+        header: "وضعیت",
         cell: ({ row }) => {
-          if (row.original.isUploading) {
+          const f = row.original;
+          if (f.isCompleting) {
             return (
-              <div className="flex items-center gap-2 min-w-[120px]">
+              <span className="text-yellow-600 text-xs flex items-center gap-1">
+                ⏳ در حال آماده‌سازی...
+              </span>
+            );
+          }
+          if (f.isCompleted) {
+            return <span className="text-green-600 text-xs">✅ تکمیل</span>;
+          }
+          if (f.isUploading) {
+            return (
+              <div className="flex items-center gap-2 min-w-[140px]">
                 <div className="flex-1 bg-gray-200 rounded-full h-2 dark:bg-gray-700">
                   <div
                     className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${row.original.uploadProgress}%` }}
+                    style={{ width: `${f.uploadProgress}%` }}
                   />
                 </div>
                 <span className="text-xs text-gray-500 w-8">
-                  {row.original.uploadProgress}%
+                  {f.uploadProgress}%
                 </span>
+                <button
+                  onClick={() => handlePauseUpload(f.id)}
+                  className="p-1 rounded-md text-yellow-600 hover:bg-yellow-50"
+                  title="توقف"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  >
+                    <rect x="6" y="4" width="4" height="16" />
+                    <rect x="14" y="4" width="4" height="16" />
+                  </svg>
+                </button>
               </div>
             );
           }
-          return row.original.isCompleted ? (
-            <span className="text-green-600 text-xs">✅ تکمیل</span>
-          ) : (
-            "-"
+          // Paused - آیکون play برای ادامه
+          return (
+            <div className="flex items-center gap-2">
+              <div className="flex-1 bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                <div
+                  className="bg-yellow-500 h-2 rounded-full"
+                  style={{ width: `${f.uploadProgress}%` }}
+                />
+              </div>
+              <span className="text-xs text-gray-500 w-8">
+                {f.uploadProgress}%
+              </span>
+              <button
+                onClick={() => handleResumeUpload(f)}
+                className="p-1 rounded-md text-green-600 hover:bg-green-50"
+                title="ادامه"
+              >
+                <svg
+                  className="w-4 h-4"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
+                  <polygon points="5,3 19,12 5,21" />
+                </svg>
+              </button>
+            </div>
           );
         },
       },
@@ -477,6 +766,15 @@ export default function RequestCreatePage() {
                 <Download className="w-4 h-4" />
               </button>
             )}
+            {row.original.isUploading && (
+              <button
+                onClick={() => handlePauseUpload(row.original.id)}
+                className="p-1.5 rounded-md text-yellow-600 hover:bg-yellow-50"
+                title="توقف"
+              >
+                ⏸
+              </button>
+            )}
             <button
               onClick={() => handleDeleteFile(row.original.id)}
               className="p-1.5 rounded-md text-red-600 hover:bg-red-50"
@@ -489,6 +787,46 @@ export default function RequestCreatePage() {
       },
     ],
     [],
+  );
+
+  const customerColumns = useMemo<ColumnDef<CustomerItem, any>[]>(
+    () => [
+      {
+        id: "cifNumber",
+        header: "شماره مشتری",
+        accessorKey: "cifNumber",
+        cell: ({ row }) => row.original.cifNumber || "-",
+      },
+      {
+        id: "name",
+        header: "نام مشتری",
+        accessorKey: "name",
+        cell: ({ row }) => row.original.name || "-",
+      },
+      {
+        id: "personalTypeId",
+        header: "نوع شخص",
+        accessorKey: "personalTypeId",
+        cell: ({ row }) => {
+          const typeId = row.original.personalTypeId;
+          const type = personalTypes.find((t: any) => t.id === typeId);
+          return type?.title || "-";
+        },
+      },
+      {
+        id: "select",
+        header: "انتخاب",
+        cell: ({ row }) => (
+          <FormButton
+            title="انتخاب"
+            variant="primary"
+            size="sm"
+            onClick={() => handleSelectCustomer(row.original)}
+          />
+        ),
+      },
+    ],
+    [personalTypes],
   );
 
   const filesQueryResult = useMemo(
@@ -505,7 +843,7 @@ export default function RequestCreatePage() {
       isPending: false,
       isLoadingError: false,
       isRefetchError: false,
-      dataUpdatedAt: Date.now(),
+      dataUpdatedAt: 0,
       errorUpdatedAt: 0,
       failureCount: 0,
       failureReason: null,
@@ -520,6 +858,37 @@ export default function RequestCreatePage() {
       }),
     }),
     [uploadedFiles],
+  );
+
+  const customersQueryResult = useMemo(
+    () => ({
+      data: {
+        listResult: foundCustomers,
+        total: foundCustomers.length,
+        totalPages: 1,
+      },
+      isLoading: false,
+      isError: false,
+      isFetching: false,
+      isSuccess: true,
+      isPending: false,
+      isLoadingError: false,
+      isRefetchError: false,
+      dataUpdatedAt: 0,
+      errorUpdatedAt: 0,
+      failureCount: 0,
+      failureReason: null,
+      error: null,
+      status: "success" as const,
+      fetchStatus: "idle" as const,
+      refetch: () => {},
+      promise: Promise.resolve({
+        listResult: foundCustomers,
+        total: foundCustomers.length,
+        totalPages: 1,
+      }),
+    }),
+    [foundCustomers],
   );
 
   // ─── Render ───
@@ -588,7 +957,7 @@ export default function RequestCreatePage() {
               id="branchName"
               name="branchName"
               label="شعبه"
-              value={user?.branchName || fullName || ""}
+              value={branchName}
               dir="rtl"
               disabled
               onChange={() => {}}
@@ -599,7 +968,7 @@ export default function RequestCreatePage() {
               id="userName"
               name="userName"
               label="نام کاربر"
-              value={user?.fullName || fullName || user?.username || ""}
+              value={userName}
               dir="rtl"
               disabled
               onChange={() => {}}
@@ -631,18 +1000,105 @@ export default function RequestCreatePage() {
               options={personalTypeOptions}
             />
           </FluidCol>
+          {/* ردیف درخواست کننده + استعلام */}
           <FluidCol colSpan="col-span-12 md:col-span-4">
-            <FormInput
-              id="requesterName"
-              name="requesterName"
-              label="درخواست کننده"
-              value={requestForm.requesterName}
-              onChange={(v) =>
-                setRequestForm((p) => ({ ...p, requesterName: v }))
-              }
-              dir="rtl"
-            />
+            <div className="relative">
+              <FormInput
+                id="requesterName"
+                name="requesterName"
+                label="درخواست کننده (شماره مشتری)"
+                value={requestForm.requesterName}
+                onChange={(v) => {
+                  setRequestForm((p) => ({ ...p, requesterName: v }));
+                  setCustomerInfo(null);
+                  setCustomerId(null);
+                }}
+                dir="rtl"
+              />
+              <button
+                onClick={handleFindCustomer}
+                disabled={
+                  !requestForm.requesterName.trim() || isSearchingCustomer
+                }
+                className="absolute bottom-2 left-2 rounded-md p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                title="استعلام"
+              >
+                {isSearchingCustomer ? (
+                  <span className="inline-block w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></span>
+                ) : (
+                  <svg
+                    className="w-4 h-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="M21 21l-4.35-4.35" />
+                  </svg>
+                )}
+              </button>
+            </div>
           </FluidCol>
+
+          {/* نمایش نتیجه استعلام - فقط وقتی customerInfo داریم */}
+          {customerInfo && (
+            <FluidCol colSpan="col-span-12">
+              <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center gap-2 flex-1">
+                  <svg
+                    className="w-5 h-5 text-green-600"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                  <div className="flex items-center gap-4 text-sm">
+                    <span className="text-gray-500">نام مشتری:</span>
+                    <span className="font-medium text-gray-800">
+                      {customerInfo.name}
+                    </span>
+                    <span className="text-gray-300">|</span>
+                    <span className="text-gray-500">شماره مشتری:</span>
+                    <span className="font-medium text-gray-800" dir="ltr">
+                      {customerInfo.cif}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setCustomerInfo(null);
+                    setCustomerId(null);
+                  }}
+                  className="text-gray-400 hover:text-red-500 transition-colors"
+                  title="حذف"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </FluidCol>
+          )}
+
+          {/* اگه مشتری پیدا نشد */}
+          {!customerInfo &&
+            !isSearchingCustomer &&
+            requestForm.requesterName.trim() && (
+              <FluidCol colSpan="col-span-12">
+                <div className="text-xs text-gray-400 -mt-2">
+                  برای استعلام، روی ذره‌بین کلیک کنید
+                </div>
+              </FluidCol>
+            )}
           <FluidCol colSpan="col-span-12 md:col-span-4">
             <FormInput
               id="amount"
@@ -681,12 +1137,15 @@ export default function RequestCreatePage() {
           <h3 className="font-bold text-lg text-blue-900 dark:text-white">
             وثیقه گذار / وثیقه گذاران
           </h3>
-          <button
+          <FormButton
+            title={
+              <span className="flex items-center gap-1">
+                <Plus className="w-4 h-4" /> افزودن
+              </span>
+            }
+            variant="success"
             onClick={addCollateral}
-            className="flex items-center gap-1 px-3 py-2 rounded-md bg-green-50 text-green-700 hover:bg-green-100 cursor-pointer text-sm"
-          >
-            <Plus className="w-4 h-4" /> افزودن
-          </button>
+          />
         </div>
         {collaterals.map((col, i) => (
           <div
@@ -696,7 +1155,8 @@ export default function RequestCreatePage() {
             {collaterals.length > 1 && (
               <button
                 onClick={() => removeCollateral(i)}
-                className="absolute top-2 left-2 p-1 text-red-500 hover:bg-red-50 rounded"
+                className="absolute top-2 right-2 p-1 text-red-500 hover:bg-red-50 rounded z-10"
+                title="حذف"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -769,9 +1229,8 @@ export default function RequestCreatePage() {
           مدارک پیوست
         </h3>
 
-        {/* انتخاب نوع مدرک + انتخاب فایل + دکمه آپلود */}
-        <div className="flex items-end gap-4 mb-6 flex-wrap">
-          <div className="flex-1 min-w-[200px]">
+        <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-slate-800 rounded-lg">
+          <div className="w-48">
             <FormSelect<number>
               id="docTypeSelect"
               name="docTypeSelect"
@@ -781,43 +1240,53 @@ export default function RequestCreatePage() {
               options={documentTypeOptions}
             />
           </div>
-          <div className="flex items-end gap-2">
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-md bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-300 cursor-pointer text-sm font-medium"
-            >
-              <Upload className="w-4 h-4" />
+
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-gray-300 hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer text-sm text-gray-600 min-w-[140px]"
+          >
+            <Upload className="w-4 h-4 text-blue-500" />
+            <span className="truncate max-w-[120px]">
               {selectedFile ? selectedFile.name : "انتخاب فایل"}
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              onChange={handleFileSelect}
-            />
-            <FormButton
-              title="شروع آپلود"
-              variant="primary"
-              onClick={handleStartUpload}
-              isLoading={isUploading}
-              disabled={isUploading || !selectedFile || !selectedDocTypeId}
-            />
-          </div>
+            </span>
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+
+          <FormButton
+            title="آپلود"
+            variant="primary"
+            size="sm"
+            onClick={handleStartUpload}
+            isLoading={isUploading}
+            disabled={isUploading || !selectedFile || !selectedDocTypeId}
+          />
+
+          {selectedFile && (
+            <span className="text-xs text-gray-400 ml-auto">
+              {(selectedFile.size / (1024 * 1024)).toFixed(1)} MB
+            </span>
+          )}
         </div>
 
-        {/* جدول فایل‌های آپلود شده */}
         {uploadedFiles.length > 0 && (
-          <DataTable<UploadedFile>
-            query={filesQueryResult as any}
-            columns={fileColumns}
-            pagination={{ pageIndex: 0, pageSize: 10 }}
-            onPaginationChange={() => {}}
-            filters={[]}
-            onFiltersChange={() => {}}
-            filterFields={[]}
-            skeletonColumns={10}
-            emptyStateMessage="هیچ فایلی آپلود نشده است"
-          />
+          <div className="mt-4">
+            <DataTable<UploadedFile>
+              query={filesQueryResult as any}
+              columns={fileColumns}
+              pagination={{ pageIndex: 0, pageSize: 10 }}
+              onPaginationChange={() => {}}
+              filters={[]}
+              onFiltersChange={() => {}}
+              filterFields={[]}
+              skeletonColumns={10}
+              emptyStateMessage="هیچ فایلی آپلود نشده است"
+            />
+          </div>
         )}
       </div>
 
@@ -850,6 +1319,40 @@ export default function RequestCreatePage() {
           </FluidCol>
         </FluidGrid>
       </div>
+      {/* ─── Modal انتخاب مشتری ─── */}
+      <Modal
+        isOpen={isCustomerModalOpen}
+        isRTL
+        header="انتخاب مشتری"
+        onClose={() => setIsCustomerModalOpen(false)}
+        overlayLock={false}
+        renderContent={() => (
+          <div>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              {foundCustomers.length} مشتری با شماره "
+              {requestForm.requesterName}" یافت شد. لطفاً یکی را انتخاب کنید:
+            </p>
+            <DataTable<CustomerItem>
+              query={customersQueryResult as any}
+              columns={customerColumns}
+              pagination={{ pageIndex: 0, pageSize: 10 }}
+              onPaginationChange={() => {}}
+              filters={[]}
+              onFiltersChange={() => {}}
+              filterFields={[]}
+              skeletonColumns={4}
+              emptyStateMessage="هیچ مشتری یافت نشد"
+            />
+          </div>
+        )}
+        footerButtons={
+          <FormButton
+            title="انصراف"
+            variant="secondary"
+            onClick={() => setIsCustomerModalOpen(false)}
+          />
+        }
+      />
     </MainLayout.Main>
   );
 }

@@ -12,6 +12,13 @@ export interface User {
   roles: string;
   fullName?: string;
   branchName?: string;
+  pid?: string;
+  bid?: string;
+  sid?: string;
+  name?: string;
+  surname?: string;
+  isActive?: boolean;
+  creationTime?: string;
 }
 
 export interface MenuItem {

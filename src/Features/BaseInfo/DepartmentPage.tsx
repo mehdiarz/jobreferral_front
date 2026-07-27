@@ -31,8 +31,8 @@ import type { DepartmentGradeItem } from "../../services/DepartmentGradeCrud/typ
 import { getAllRegions } from "../../services/RegionCrud/getAll";
 import type { RegionItem } from "../../services/RegionCrud/getAll";
 
-import { getAllDocumentTypes } from "../../services/DocumentTypeCrud/getAll";
-import type { DocumentTypeItem } from "../../services/DocumentTypeCrud/types";
+import { getAllDepartmentTypes } from "../../services/DepartmentTypeCrud/getAll";
+import type { DepartmentTypeItem } from "../../services/DepartmentTypeCrud/types";
 
 type DepartmentForm = {
   code: string;
@@ -40,7 +40,7 @@ type DepartmentForm = {
   departmentGradeId: string;
   parentId: string;
   regionId: string;
-  documentTypeId: string;
+  departmentTypeId: string;
   description: string;
   isActive: string;
 };
@@ -69,7 +69,7 @@ const emptyForm: DepartmentForm = {
   departmentGradeId: "",
   parentId: "",
   regionId: "",
-  documentTypeId: "",
+  departmentTypeId: "",
   description: "",
   isActive: "true",
 };
@@ -133,8 +133,8 @@ export default function DepartmentPage() {
       const regionFilter =
         filters.find((f) => f.key === "regionId")?.value?.trim() ?? "";
 
-      const documentTypeFilter =
-        filters.find((f) => f.key === "documentTypeId")?.value?.trim() ?? "";
+      const departmentTypeFilter =
+        filters.find((f) => f.key === "departmentTypeId")?.value?.trim() ?? "";
 
       const statusFilter =
         filters.find((f) => f.key === "isActive")?.value?.trim() ?? "";
@@ -170,10 +170,10 @@ export default function DepartmentPage() {
         const regionMatches =
           !regionFilter || String(item.regionId ?? "") === regionFilter;
 
-        // تطابق نوع مدارک پیوست (مقایسه id)
-        const documentTypeMatches =
-          !documentTypeFilter ||
-          String(item.documentTypeId ?? "") === documentTypeFilter;
+        // تطابق نوع دپارتمان پیوست (مقایسه id)
+        const departmentTypeMatches =
+          !departmentTypeFilter ||
+          String(item.departmentTypeId ?? "") === departmentTypeFilter;
 
         // تطابق وضعیت
         let statusMatches = true;
@@ -189,7 +189,7 @@ export default function DepartmentPage() {
           departmentGradeMatches &&
           parentDepartmentMatches &&
           regionMatches &&
-          documentTypeMatches &&
+          departmentTypeMatches &&
           statusMatches
         );
       });
@@ -223,10 +223,10 @@ export default function DepartmentPage() {
     select: (data) => data?.items ?? [],
   });
 
-  // انواع مدارک پیوست
-  const documentTypesQuery = useQuery({
-    queryKey: ["document-types-all"],
-    queryFn: () => getAllDocumentTypes({ maxResultCount: 1000 }),
+  // انواع دپارتمان
+  const departmentTypesQuery = useQuery({
+    queryKey: ["department-types-all"],
+    queryFn: () => getAllDepartmentTypes({ maxResultCount: 1000 }),
     select: (data) => data?.items ?? [],
   });
 
@@ -250,14 +250,14 @@ export default function DepartmentPage() {
     [regionsQuery.data],
   );
 
-  // گزینه‌های نوع مدارک پیوست برای select
-  const documentTypeOptions = useMemo(
+  // گزینه‌های نوع دپارتمان برای select
+  const departmentTypeOptions = useMemo(
     () =>
-      (documentTypesQuery.data ?? []).map((item: DocumentTypeItem) => ({
+      (departmentTypesQuery.data ?? []).map((item: DepartmentTypeItem) => ({
         id: String(item.id),
-        title: item.title ?? "",
+        title: item.name ?? "",
       })),
-    [documentTypesQuery.data],
+    [departmentTypesQuery.data],
   );
 
   // گزینه‌های دپارتمان والد (از لیست فعلی دپارتمان‌ها)
@@ -338,7 +338,7 @@ export default function DepartmentPage() {
       departmentGradeId: item.departmentGradeId?.toString() ?? "",
       parentId: item.parentId?.toString() ?? "",
       regionId: item.regionId?.toString() ?? "",
-      documentTypeId: item.documentTypeId?.toString() ?? "",
+      departmentTypeId: item.departmentTypeId?.toString() ?? "",
       description: item.description ?? "",
       isActive: item.isActive?.toString() ?? "true",
     });
@@ -377,8 +377,8 @@ export default function DepartmentPage() {
         : undefined,
       parentId: formData.parentId ? Number(formData.parentId) : 0,
       regionId: formData.regionId ? Number(formData.regionId) : undefined,
-      documentTypeId: formData.documentTypeId
-        ? Number(formData.documentTypeId)
+      departmentTypeId: formData.departmentTypeId
+        ? Number(formData.departmentTypeId)
         : undefined,
       description: formData.description.trim() || undefined,
       isActive: formData.isActive === "true",
@@ -438,14 +438,14 @@ export default function DepartmentPage() {
         },
       },
       {
-        id: "documentType",
-        header: "نوع مدارک پیوست",
+        id: "departmentType",
+        header: "نوع دپارتمان",
         cell: ({ row }) => {
-          const docId = row.original.documentTypeId;
-          const doc = (documentTypesQuery.data ?? []).find(
-            (d: DocumentTypeItem) => d.id === docId,
+          const docId = row.original.departmentTypeId;
+          const doc = (departmentTypesQuery.data ?? []).find(
+            (d: DepartmentTypeItem) => d.id === docId,
           );
-          return doc?.title ?? "-";
+          return doc?.name ?? "-";
         },
       },
       {
@@ -497,7 +497,7 @@ export default function DepartmentPage() {
       departmentGradesQuery.data,
       departmentsQuery.data,
       regionsQuery.data,
-      documentTypesQuery.data,
+      departmentTypesQuery.data,
       deleteMutation.isPending,
       deleteMutation.variables,
       handleOpenEditModal,
@@ -518,7 +518,7 @@ export default function DepartmentPage() {
       "رتبه دپارتمان",
       "دپارتمان والد",
       "منطقه استانی",
-      "نوع مدارک پیوست",
+      "نوع دپارتمان",
       "توضیحات",
       "وضعیت",
     ];
@@ -533,8 +533,8 @@ export default function DepartmentPage() {
       const region = (regionsQuery.data ?? []).find(
         (r: RegionItem) => r.id === item.regionId,
       );
-      const doc = (documentTypesQuery.data ?? []).find(
-        (d: DocumentTypeItem) => d.id === item.documentTypeId,
+      const doc = (departmentTypesQuery.data ?? []).find(
+        (d: DepartmentTypeItem) => d.id === item.departmentTypeId,
       );
       return [
         item.title ?? "",
@@ -542,7 +542,7 @@ export default function DepartmentPage() {
         grade?.title ?? "",
         parent?.title ?? "",
         region?.title ?? "",
-        doc?.title ?? "",
+        doc?.name ?? "",
         item.description ?? "",
         item.isActive ? "فعال" : "غیرفعال",
       ];
@@ -584,12 +584,12 @@ export default function DepartmentPage() {
         const region = (regionsQuery.data ?? []).find(
           (r: RegionItem) => r.id === item.regionId,
         );
-        const doc = (documentTypesQuery.data ?? []).find(
-          (d: DocumentTypeItem) => d.id === item.documentTypeId,
+        const doc = (departmentTypesQuery.data ?? []).find(
+          (d: DepartmentTypeItem) => d.id === item.departmentTypeId,
         );
         return `<tr>
                 <td>${item.title ?? ""}</td><td>${item.code ?? ""}</td><td>${grade?.title ?? ""}</td>
-                <td>${parent?.title ?? ""}</td><td>${region?.title ?? ""}</td><td>${doc?.title ?? ""}</td>
+                <td>${parent?.title ?? ""}</td><td>${region?.title ?? ""}</td><td>${doc?.name ?? ""}</td>
                 <td>${item.description ?? ""}</td><td>${item.isActive ? "فعال" : "غیرفعال"}</td></tr>`;
       })
       .join("");
@@ -604,7 +604,7 @@ export default function DepartmentPage() {
         <style>body{font-family:Tahoma, Arial, sans-serif;direction:rtl;padding:24px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:right}th{background:#f3f4f6}</style></head>
         <body><h2>لیست دپارتمان‌ها</h2><table><thead><tr>
         <th>عنوان</th><th>کد</th><th>رتبه دپارتمان</th><th>دپارتمان والد</th>
-        <th>منطقه استانی</th><th>نوع مدارک پیوست</th><th>توضیحات</th><th>وضعیت</th></tr></thead>
+        <th>منطقه استانی</th><th>نوع دپارتمان</th><th>توضیحات</th><th>وضعیت</th></tr></thead>
         <tbody>${tableRows}</tbody></table><script>window.onload=function(){window.print()}</script></body></html>`);
     printWindow.document.close();
   };
@@ -699,11 +699,11 @@ export default function DepartmentPage() {
               ],
             },
             {
-              field: "documentTypeId",
-              label: "نوع مدارک پیوست",
+              field: "departmentTypeId",
+              label: "نوع دپارتمان",
               type: "select",
               options: [
-                ...documentTypeOptions.map((opt) => ({
+                ...departmentTypeOptions.map((opt) => ({
                   value: opt.id,
                   label: opt.title,
                 })),
@@ -808,14 +808,14 @@ export default function DepartmentPage() {
             </FluidCol>
             <FluidCol colSpan={12}>
               <FormSelect
-                id="modal-documentTypeId"
-                name="modal-documentTypeId"
-                label="نوع مدارک پیوست"
-                value={formData.documentTypeId}
+                id="modal-departmentTypeId"
+                name="modal-departmentTypeId"
+                label="نوع دپارتمان"
+                value={formData.departmentTypeId}
                 onChange={(v) =>
-                  setFormData((p) => ({ ...p, documentTypeId: v }))
+                  setFormData((p) => ({ ...p, departmentTypeId: v }))
                 }
-                options={documentTypeOptions}
+                options={departmentTypeOptions}
               />
             </FluidCol>
             <FluidCol colSpan={12}>
