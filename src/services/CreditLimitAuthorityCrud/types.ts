@@ -26,3 +26,9 @@ export interface EditCreditLimitAuthorityBody {
   minAmount: number;
   maxAmount: number;
 }
+
+export interface GetAllCreditLimitAuthoritiesParams {
+  sorting?: string;
+  skipCount?: number;
+  maxResultCount?: number;
+}

@@ -221,18 +221,18 @@ const attachmentTypesRoute = createRoute({
   },
 });
 
-const customersRoute = createRoute({
-  getParentRoute: () => dashboardLayoutRoute,
-  path: "/base-info/customers",
-  component: () => {
-    const Page = lazy(() => import("../Features/BaseInfo/CustomersPage"));
-    return (
-      <SuspenseLoading>
-        <Page />
-      </SuspenseLoading>
-    );
-  },
-});
+// const customersRoute = createRoute({
+//   getParentRoute: () => dashboardLayoutRoute,
+//   path: "/base-info/customers",
+//   component: () => {
+//     const Page = lazy(() => import("../Features/BaseInfo/CustomersPage"));
+//     return (
+//       <SuspenseLoading>
+//         <Page />
+//       </SuspenseLoading>
+//     );
+//   },
+// });
 
 const collateralTypesRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
@@ -356,7 +356,7 @@ const routeTree = rootRoute.addChildren([
     regionsRoute,
     requestTypesRoute,
     attachmentTypesRoute,
-    customersRoute,
+    // customersRoute,
     collateralTypesRoute,
     creditLimitAuthoritiesRoute,
     departmentTypeRoute,

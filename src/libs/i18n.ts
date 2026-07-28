@@ -359,7 +359,7 @@ i18n
     resources,
     fallbackLng: "fa",
     lng: "fa", // Default to Farsi
-    debug: process.env.NODE_ENV === "development",
+    debug: import.meta.env.DEV,
 
     interpolation: {
       escapeValue: false, // React already does escaping

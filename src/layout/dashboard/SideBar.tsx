@@ -477,7 +477,7 @@ export const Sidebar = () => {
       >
         {/* Logo Section */}
         <div className="flex justify-center border-b border-gray-100 dark:border-slate-700/50 p-5">
-          <img src="/images/Logo.svg" className="mx-auto w-32" alt="Logo" />
+          <img src="./images/Logo.svg" className="mx-auto w-32" alt="Logo" />
         </div>
 
         {/* Navigation */}

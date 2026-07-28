@@ -10,7 +10,7 @@ export interface RequestItem {
   description?: string | null;
   personalTypeId?: number | null;
   currentApprovalStepId?: number | null;
-  requestStatusId?: number | null;
+  requestStatusCode?: number | null;
 }
 
 export interface CreateRequestBody {
@@ -23,8 +23,8 @@ export interface CreateRequestBody {
   amount: number;
   description?: string;
   personalTypeId: number;
-  currentApprovalStepId: number;
-  requestStatusId: number;
+  currentApprovalStepId?: number;
+  requestStatusCode?: number;
 }
 
 export interface EditRequestBody {
@@ -38,8 +38,8 @@ export interface EditRequestBody {
   amount: number;
   description?: string;
   personalTypeId: number;
-  currentApprovalStepId: number;
-  requestStatusId: number;
+  currentApprovalStepId?: number;
+  requestStatusCode?: number;
 }
 
 export interface GetAllRequestsParams {

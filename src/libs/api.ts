@@ -1,5 +1,6 @@
 import { authActions, authStore } from "./store/authActions";
 import { getApiBaseUrl } from "./appConfig";
+import { getBasePath } from "./appConfig";
 
 const LOCAL_BASE_URL = "/job-referral-api";
 
@@ -30,7 +31,10 @@ export class ApiClient {
         // const { authActions } = await import('./store')
         authActions.logout();
         if (typeof window !== "undefined") {
-          setTimeout(() => (window.location.href = "/login"), 2000);
+          setTimeout(
+            () => (window.location.href = `${getBasePath()}/login`),
+            2000,
+          );
         }
         throw new Error("رمز شما منقضی شده است. لطفاً دوباره وارد شوید.");
       }

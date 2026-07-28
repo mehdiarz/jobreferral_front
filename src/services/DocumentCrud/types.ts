@@ -14,3 +14,10 @@ export interface EditDocumentBody {
   documentTypeId: number;
   requestId: number;
 }
+
+export interface GetAllDocumentsParams {
+  requestId?: number;
+  sorting?: string;
+  skipCount?: number;
+  maxResultCount?: number;
+}

@@ -36,6 +36,7 @@ import { createDocument } from "../../../services/DocumentCrud/create.ts";
 import { completeBatchUpload } from "../../../services/FileService/completeBatch.ts";
 import { findCustomer } from "../../../services/CustomerCrud/find";
 import type { CustomerItem } from "../../../services/CustomerCrud/types";
+import { createRequestComment } from "../../../services/RequestCommentCrud/create";
 
 // ─── Types ───
 type CollateralForm = {
@@ -139,6 +140,8 @@ export default function RequestCreatePage() {
   const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [foundCustomers, setFoundCustomers] = useState<CustomerItem[]>([]);
+
+  const [expertComment, setExpertComment] = useState("");
 
   const userName = fullName || user?.username || "";
   const branchName = user?.branchName || "";
@@ -563,12 +566,21 @@ export default function RequestCreatePage() {
         amount: parseFloat(requestForm.amount),
         description: requestForm.description || "",
         personalTypeId: requestForm.personalTypeId || 0,
-        currentApprovalStepId: 0,
-        requestStatusId: 0,
+        // currentApprovalStepId: 0,
+        // requestStatusCode: 0,
       };
       // 1. Create Request
       const requestRes: any = await createRequest(body);
       const requestId = requestRes?.result?.id || requestRes?.id;
+
+      // 1.5 Save expert comment (اگه نوشته باشه)
+      if (expertComment.trim()) {
+        await createRequestComment({
+          requestId,
+          userId: Number(user?.id || 0),
+          description: expertComment.trim(),
+        });
+      }
 
       // 2. Create Collaterals
       for (const col of collaterals) {
@@ -622,6 +634,15 @@ export default function RequestCreatePage() {
       }
 
       showToast("درخواست با موفقیت ثبت شد", "success");
+      setRequestForm(emptyRequest);
+      setCollaterals([{ ...emptyCollateral }]);
+      setUploadedFiles([]);
+      uploadStateRef.current.clear();
+      setSelectedDocTypeId(null);
+      setSelectedFile(null);
+      setCustomerId(null);
+      setCustomerInfo(null);
+      setExpertComment("");
     } catch (err: any) {
       showToast(err?.message || "خطا", "error");
     } finally {
@@ -1288,6 +1309,28 @@ export default function RequestCreatePage() {
             />
           </div>
         )}
+      </div>
+
+      <hr className="my-6 border-gray-300 dark:border-gray-600" />
+
+      {/* توضیحات و ثبت */}
+      <hr className="my-6 border-gray-300 dark:border-gray-600" />
+
+      {/* توضیحات کارشناس */}
+      <div className="mb-4 rounded-lg bg-white p-4 shadow-sm">
+        <FluidGrid className="gap-4">
+          <FluidCol colSpan="col-span-12">
+            <FormTextarea
+              id="expertComment"
+              name="expertComment"
+              label="توضیحات کارشناس"
+              value={expertComment}
+              onChange={(v) => setExpertComment(v)}
+              rows={3}
+              dir="rtl"
+            />
+          </FluidCol>
+        </FluidGrid>
       </div>
 
       <hr className="my-6 border-gray-300 dark:border-gray-600" />

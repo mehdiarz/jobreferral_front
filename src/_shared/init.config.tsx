@@ -83,12 +83,12 @@ export const defaultMenuItems = [
         path: "/dashboard/base-info/attachment-types",
         permissions: [Permissions.Pages_AttachmentTypes],
       },
-      {
-        id: "customers",
-        title: "لیست مشتریان",
-        path: "/dashboard/base-info/customers",
-        permissions: [Permissions.Pages_Customers],
-      },
+      // {
+      //   id: "customers",
+      //   title: "لیست مشتریان",
+      //   path: "/dashboard/base-info/customers",
+      //   permissions: [Permissions.Pages_Customers],
+      // },
       {
         id: "collateral-types",
         title: "ثبت نوع وثیقه",

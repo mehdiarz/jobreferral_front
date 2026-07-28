@@ -1,7 +1,7 @@
 // src/libs/store/globalFormStore.tsx
-import { Store } from '@tanstack/store';
-import { useStore } from '@tanstack/react-store';
-import React, { createContext, useContext } from 'react';
+import { Store } from "@tanstack/store";
+import { useStore } from "@tanstack/react-store";
+import React, { createContext, useContext } from "react";
 
 export type FormData = Record<string, any>;
 
@@ -22,19 +22,22 @@ export function createFormStore<T extends FormData>(initialData: T) {
       }));
     },
     reset: () => {
-      formStore.setState(initialData);
+      formStore.setState(() => initialData);
     },
   };
 
   const FormContext = createContext<typeof formStore | null>(null);
 
   const Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    return <FormContext.Provider value={formStore}>{children}</FormContext.Provider>;
+    return (
+      <FormContext.Provider value={formStore}>{children}</FormContext.Provider>
+    );
   };
 
   const useFormStore = () => {
     const store = useContext(FormContext);
-    if (!store) throw new Error("useFormStore must be used within its Provider");
+    if (!store)
+      throw new Error("useFormStore must be used within its Provider");
     return useStore(store);
   };
 
