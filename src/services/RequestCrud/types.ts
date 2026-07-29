@@ -11,6 +11,7 @@ export interface RequestItem {
   personalTypeId?: number | null;
   currentApprovalStepId?: number | null;
   requestStatusCode?: number | null;
+  creationTime?: string;
 }
 
 export interface CreateRequestBody {

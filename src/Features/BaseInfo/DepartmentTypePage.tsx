@@ -291,6 +291,7 @@ export default function DepartmentTypePage() {
           filterFields={[
             { field: "name", label: "نام", placeholder: "جست‌وجو بر اساس نام" },
           ]}
+          searchMode="onEnter"
           skeletonColumns={2}
           emptyStateMessage="هیچ نوع دپارتمانی یافت نشد"
           emptyStateDescription="موردی برای نمایش وجود ندارد."

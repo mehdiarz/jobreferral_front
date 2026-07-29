@@ -435,6 +435,7 @@ export default function PersonTypePage() {
             },
             { field: "code", label: "کد", placeholder: "جست‌وجو بر اساس کد" },
           ]}
+          searchMode="onEnter"
           skeletonColumns={6}
           emptyStateMessage="هیچ نوع شخصی یافت نشد"
           emptyStateDescription="موردی برای نمایش وجود ندارد."

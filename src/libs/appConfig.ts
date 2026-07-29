@@ -44,7 +44,7 @@ export function getDownloadHubUrl(): string {
 export async function loadConfig(): Promise<void> {
   try {
     const base = (import.meta.env.BASE_URL || "/").replace(/\/?$/, "/");
-    const res = await fetch(`${base}config.json`, {
+    const res = await fetch(`${base}configBackup.json`, {
       cache: "no-store",
       headers: { "Cache-Control": "no-cache" },
     });

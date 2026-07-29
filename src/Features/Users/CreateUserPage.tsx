@@ -27,7 +27,9 @@ import { required } from "../../libs/validations";
 export default function CreateUserPage() {
   const { showToast } = useToast();
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
-  const [filters, setFilters] = useState<Array<{ key: string; value: string }>>([]);
+  const [filters, setFilters] = useState<Array<{ key: string; value: string }>>(
+    [],
+  );
   const [roleNames, setRoleNames] = useState<string[]>([]);
   const [userToDelete, setUserToDelete] = useState<UserItem | null>(null);
   const [editingUser, setEditingUser] = useState<UserItem | null>(null);
@@ -50,13 +52,14 @@ export default function CreateUserPage() {
     queryKey: [...queryKeys.users.all, filters, pagination.pageSize],
     queryFn: getAllUsers,
     select: (data) => {
-      const nameFilter = filters.find((f) => f.key === "userName")?.value?.toLowerCase() ?? "";
+      const nameFilter =
+        filters.find((f) => f.key === "userName")?.value?.toLowerCase() ?? "";
       const items = nameFilter
         ? data.items.filter(
             (u) =>
               (u.userName || "").toLowerCase().includes(nameFilter) ||
               (u.fullName || "").toLowerCase().includes(nameFilter) ||
-              (u.emailAddress || "").toLowerCase().includes(nameFilter)
+              (u.emailAddress || "").toLowerCase().includes(nameFilter),
           )
         : data.items;
       return {
@@ -76,7 +79,9 @@ export default function CreateUserPage() {
       roleNames: [] as string[],
     },
     onSubmit: async ({ value }) => {
-      const emailAddress = value.userName ? `${value.userName}@${value.userName}.com` : "";
+      const emailAddress = value.userName
+        ? `${value.userName}@${value.userName}.com`
+        : "";
       createMutation.mutate({
         userName: value.userName,
         name: value.name,
@@ -103,8 +108,15 @@ export default function CreateUserPage() {
       }
     },
     onError: (error) => {
-      const apiMsg = error instanceof Error ? error.message : undefined;
-      showToast("عملیات با خطا مواجه شد", "error", 5000, apiMsg);
+      let msg = "عملیات با خطا مواجه شد";
+      if (error instanceof Error) {
+        if (error.message.includes("invalid"))
+          msg = "نام کاربری فقط حروف و اعداد لاتین مجاز است";
+        else if (error.message.includes("already"))
+          msg = "این نام کاربری قبلاً ثبت شده است";
+        else msg = error.message;
+      }
+      showToast(msg, "error", 5000);
     },
   });
 
@@ -160,7 +172,7 @@ export default function CreateUserPage() {
         .map((r) => ({ value: r.name, label: r.displayName || r.name }));
       return filtered;
     },
-    [rolesList, selectedForCombo]
+    [rolesList, selectedForCombo],
   );
 
   const editSelectedRoles = editFormState?.roleNames ?? [];
@@ -178,18 +190,21 @@ export default function CreateUserPage() {
         .map((r) => ({ value: r.name, label: r.displayName || r.name }));
       return filtered;
     },
-    [rolesList, editSelectedRoles]
+    [rolesList, editSelectedRoles],
   );
 
-  const addRole = useCallback((name: string) => {
-    if (!name) return;
-    setRoleNames((prev) => {
-      if (prev.includes(name)) return prev;
-      const next = [...prev, name];
-      form.setFieldValue("roleNames", next);
-      return next;
-    });
-  }, [form]);
+  const addRole = useCallback(
+    (name: string) => {
+      if (!name) return;
+      setRoleNames((prev) => {
+        if (prev.includes(name)) return prev;
+        const next = [...prev, name];
+        form.setFieldValue("roleNames", next);
+        return next;
+      });
+    },
+    [form],
+  );
 
   const removeRole = useCallback(
     (name: string) => {
@@ -199,7 +214,7 @@ export default function CreateUserPage() {
         return next;
       });
     },
-    [form]
+    [form],
   );
 
   const openEditModal = useCallback((user: UserItem) => {
@@ -223,13 +238,17 @@ export default function CreateUserPage() {
 
   const removeEditRole = useCallback((name: string) => {
     setEditFormState((prev) =>
-      prev ? { ...prev, roleNames: prev.roleNames.filter((r) => r !== name) } : null
+      prev
+        ? { ...prev, roleNames: prev.roleNames.filter((r) => r !== name) }
+        : null,
     );
   }, []);
 
   const handleEditSubmit = useCallback(() => {
     if (!editingUser || !editFormState) return;
-    const emailAddress = editFormState.userName ? `${editFormState.userName}@${editFormState.userName}.com` : "";
+    const emailAddress = editFormState.userName
+      ? `${editFormState.userName}@${editFormState.userName}.com`
+      : "";
     updateMutation.mutate({
       id: editingUser.id,
       userName: editFormState.userName,
@@ -237,7 +256,11 @@ export default function CreateUserPage() {
       surname: editFormState.surname,
       emailAddress,
       isActive: editFormState.isActive,
-      fullName: [editFormState.name, editFormState.surname].filter(Boolean).join(" ").trim() || editFormState.userName,
+      fullName:
+        [editFormState.name, editFormState.surname]
+          .filter(Boolean)
+          .join(" ")
+          .trim() || editFormState.userName,
       lastLoginTime: editingUser.lastLoginTime,
       creationTime: editingUser.creationTime,
       roleNames: editFormState.roleNames,
@@ -293,7 +316,7 @@ export default function CreateUserPage() {
         ),
       }),
     ],
-    [columnHelper, openEditModal]
+    [columnHelper, openEditModal],
   );
 
   return (
@@ -302,7 +325,9 @@ export default function CreateUserPage() {
 
       <FluidGrid className="pb-6">
         <FluidCol colSpan="col-span-12">
-          <h3 className="text-sm font-semibold text-blue-900 dark:text-white mb-3">ایجاد کاربر جدید</h3>
+          <h3 className="text-sm font-semibold text-blue-900 dark:text-white mb-3">
+            ایجاد کاربر جدید
+          </h3>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -342,7 +367,10 @@ export default function CreateUserPage() {
                 </form.Field>
               </FluidCol>
               <FluidCol colSpan="col-span-12 md:col-span-4">
-                <form.Field name="userName" validators={{ onChange: required() }}>
+                <form.Field
+                  name="userName"
+                  validators={{ onChange: required() }}
+                >
                   {(field) => (
                     <FormInput
                       id="user-userName"
@@ -377,7 +405,8 @@ export default function CreateUserPage() {
                   {roleNames.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-6">
                       {roleNames.map((r) => {
-                        const label = rolesList.find((x) => x.name === r)?.displayName ?? r;
+                        const label =
+                          rolesList.find((x) => x.name === r)?.displayName ?? r;
                         return (
                           <span
                             key={r}
@@ -427,7 +456,9 @@ export default function CreateUserPage() {
         </FluidCol>
 
         <FluidCol colSpan="col-span-12">
-          <h3 className="text-sm font-semibold text-blue-900 dark:text-white mb-3">لیست کاربران</h3>
+          <h3 className="text-sm font-semibold text-blue-900 dark:text-white mb-3">
+            لیست کاربران
+          </h3>
           <DataTable
             query={usersQuery}
             onPaginationChange={setPagination}
@@ -435,7 +466,13 @@ export default function CreateUserPage() {
             pagination={pagination}
             filters={filters}
             columns={columns}
-            filterFields={[{ field: "userName", label: "نام کاربری / نام / ایمیل", placeholder: "" }]}
+            filterFields={[
+              {
+                field: "userName",
+                label: "نام کاربری / نام / ایمیل",
+                placeholder: "",
+              },
+            ]}
             skeletonColumns={6}
             emptyStateDescription="هنوز کاربری ثبت نشده است."
           />
@@ -450,11 +487,18 @@ export default function CreateUserPage() {
         overlayLock={deleteMutation.isPending}
         footerButtons={
           <div className="flex gap-2 justify-end">
-            <FormButton title="انصراف" variant="secondary" onClick={() => setUserToDelete(null)} disabled={deleteMutation.isPending} />
+            <FormButton
+              title="انصراف"
+              variant="secondary"
+              onClick={() => setUserToDelete(null)}
+              disabled={deleteMutation.isPending}
+            />
             <FormButton
               title="حذف"
               variant="danger"
-              onClick={() => userToDelete && deleteMutation.mutate(userToDelete.id)}
+              onClick={() =>
+                userToDelete && deleteMutation.mutate(userToDelete.id)
+              }
               isLoading={deleteMutation.isPending}
               disabled={deleteMutation.isPending}
             />
@@ -463,7 +507,8 @@ export default function CreateUserPage() {
         renderContent={() =>
           userToDelete ? (
             <p className="text-sm text-gray-700 dark:text-slate-300">
-              آیا از حذف کاربر «{userToDelete.fullName}» ({userToDelete.userName}) مطمئن هستید؟
+              آیا از حذف کاربر «{userToDelete.fullName}» (
+              {userToDelete.userName}) مطمئن هستید؟
             </p>
           ) : null
         }
@@ -494,7 +539,9 @@ export default function CreateUserPage() {
               variant="success"
               onClick={handleEditSubmit}
               isLoading={updateMutation.isPending}
-              disabled={updateMutation.isPending || !editFormState?.userName?.trim()}
+              disabled={
+                updateMutation.isPending || !editFormState?.userName?.trim()
+              }
             />
           </div>
         }
@@ -507,7 +554,11 @@ export default function CreateUserPage() {
                     id="edit-user-userName"
                     name="userName"
                     value={editFormState.userName}
-                    onChange={(v) => setEditFormState((p) => (p ? { ...p, userName: v } : null))}
+                    onChange={(v) =>
+                      setEditFormState((p) =>
+                        p ? { ...p, userName: v } : null,
+                      )
+                    }
                     label="نام کاربری"
                     dir="ltr"
                   />
@@ -517,7 +568,9 @@ export default function CreateUserPage() {
                     id="edit-user-name"
                     name="name"
                     value={editFormState.name}
-                    onChange={(v) => setEditFormState((p) => (p ? { ...p, name: v } : null))}
+                    onChange={(v) =>
+                      setEditFormState((p) => (p ? { ...p, name: v } : null))
+                    }
                     label="نام"
                     dir="rtl"
                   />
@@ -527,7 +580,9 @@ export default function CreateUserPage() {
                     id="edit-user-surname"
                     name="surname"
                     value={editFormState.surname}
-                    onChange={(v) => setEditFormState((p) => (p ? { ...p, surname: v } : null))}
+                    onChange={(v) =>
+                      setEditFormState((p) => (p ? { ...p, surname: v } : null))
+                    }
                     label="نام خانوادگی"
                     dir="rtl"
                   />
@@ -537,15 +592,22 @@ export default function CreateUserPage() {
                     id="edit-user-isActive"
                     label="فعال"
                     checked={editFormState.isActive}
-                    onChange={(v) => setEditFormState((p) => (p ? { ...p, isActive: v } : null))}
+                    onChange={(v) =>
+                      setEditFormState((p) =>
+                        p ? { ...p, isActive: v } : null,
+                      )
+                    }
                   />
                 </FluidCol>
                 <FluidCol colSpan="col-span-12">
-                  <label className="block text-sm text-gray-500 dark:text-slate-400 mb-4">نقش‌ها</label>
+                  <label className="block text-sm text-gray-500 dark:text-slate-400 mb-4">
+                    نقش‌ها
+                  </label>
                   {editFormState.roleNames.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-6">
                       {editFormState.roleNames.map((r) => {
-                        const label = rolesList.find((x) => x.name === r)?.displayName ?? r;
+                        const label =
+                          rolesList.find((x) => x.name === r)?.displayName ?? r;
                         return (
                           <span
                             key={r}

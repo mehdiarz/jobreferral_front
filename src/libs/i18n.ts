@@ -205,6 +205,7 @@ const resources = {
       "Pages.Users": "کاربران",
       "Pages.Users.Activation": "فعال‌سازی کاربران",
       "Pages.BaseInfo": "اطلاعات پایه",
+      "Pages.StatusManagement": "مدیریت وضعیت",
     },
   },
   en: {

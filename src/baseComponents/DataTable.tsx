@@ -249,6 +249,9 @@ export default function DataTable<T>({
                         if (searchMode === "instant") {
                           handleFilterChange(selectedField, e.target.value);
                         }
+                        if (searchMode === "onEnter" && e.target.value === "") {
+                          applyFilter(selectedField, "");
+                        }
                       }}
                       onKeyDown={handleKeyDown}
                       name="filterValue"

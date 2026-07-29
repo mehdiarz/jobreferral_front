@@ -3,6 +3,7 @@ export interface RequestCommentItem {
   requestId?: number;
   userId?: number;
   description?: string;
+  creationTime?: string;
 }
 
 export interface CreateRequestCommentBody {
