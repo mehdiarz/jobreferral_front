@@ -25,6 +25,15 @@ import { required } from "../../libs/validations";
 // CHANGE: اضافه کردن useTranslation برای ترجمه permission ها
 import { useTranslation } from "react-i18next";
 
+const translateError = (msg: string): string => {
+  if (!msg) return "عملیات با خطا مواجه شد";
+  if (msg.includes("already taken") || msg.includes("already exist"))
+    return "این نام نقش قبلاً ثبت شده است";
+  if (msg.includes("not found")) return "نقش مورد نظر یافت نشد";
+  if (msg.includes("invalid")) return "اطلاعات وارد شده نامعتبر است";
+  return msg;
+};
+
 export default function RolesPage() {
   const { showToast } = useToast();
   // CHANGE: گرفتن تابع t برای ترجمه
@@ -111,12 +120,12 @@ export default function RolesPage() {
         rolesQuery.refetch();
       } else {
         const apiMsg = res?.error?.message ?? res?.error?.details;
-        showToast("خطا در ایجاد نقش", "error", 5000, apiMsg ?? undefined);
+        showToast(translateError(apiMsg ?? ""), "error", 5000);
       }
     },
     onError: (error) => {
       const apiMsg = error instanceof Error ? error.message : undefined;
-      showToast("عملیات با خطا مواجه شد", "error", 5000, apiMsg);
+      showToast(translateError(apiMsg || ""), "error", 5000);
     },
   });
 
@@ -129,12 +138,12 @@ export default function RolesPage() {
         rolesQuery.refetch();
       } else {
         const apiMsg = res?.error?.message ?? res?.error?.details;
-        showToast("خطا در حذف نقش", "error", 5000, apiMsg ?? undefined);
+        showToast(translateError(apiMsg ?? ""), "error", 5000);
       }
     },
     onError: (error) => {
       const apiMsg = error instanceof Error ? error.message : undefined;
-      showToast("عملیات با خطا مواجه شد", "error", 5000, apiMsg);
+      showToast(translateError(apiMsg || ""), "error", 5000);
     },
   });
 
@@ -148,12 +157,12 @@ export default function RolesPage() {
         rolesQuery.refetch();
       } else {
         const apiMsg = res?.error?.message ?? res?.error?.details;
-        showToast("خطا در ویرایش نقش", "error", 5000, apiMsg ?? undefined);
+        showToast(translateError(apiMsg ?? ""), "error", 5000);
       }
     },
     onError: (error) => {
       const apiMsg = error instanceof Error ? error.message : undefined;
-      showToast("عملیات با خطا مواجه شد", "error", 5000, apiMsg);
+      showToast(translateError(apiMsg || ""), "error", 5000);
     },
   });
 

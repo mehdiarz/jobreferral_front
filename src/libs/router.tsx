@@ -343,6 +343,22 @@ const requestCreateRoute = createRoute({
     );
   },
 });
+
+const requestReviewRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/branch/review",
+  component: () => {
+    const Page = lazy(
+      () => import("../Features/Requests/Branch/RequestReviewPage"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
 const profileRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/profile",
@@ -380,6 +396,7 @@ const routeTree = rootRoute.addChildren([
     personTypeRoute,
     requestViewRoute,
     requestCreateRoute,
+    requestReviewRoute,
   ]),
 ]);
 

@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Trash2, Upload, Download } from "lucide-react";
+import { Plus, Trash2, Upload } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { MainLayout } from "../../../baseComponents/MainLayout";
@@ -25,7 +25,6 @@ import { getAllDocumentTypes } from "../../../services/DocumentTypeCrud/getAll";
 import { createCollatral } from "../../../services/CollatralCrud/create";
 import { startUpload } from "../../../services/FileService/start";
 import { uploadChunk } from "../../../services/FileService/uploadChunk";
-import { downloadFile } from "../../../services/FileService/download";
 import type { RequestTypeItem } from "../../../services/RequestTypeCrud/types";
 import type { DepartmentItem } from "../../../services/DepartmentCrud/types";
 import type { PersonalTypeItem } from "../../../services/PersonalTypeCrud/types";
@@ -142,6 +141,8 @@ export default function RequestCreatePage() {
   const [foundCustomers, setFoundCustomers] = useState<CustomerItem[]>([]);
 
   const [expertComment, setExpertComment] = useState("");
+
+  const [fileToDelete, setFileToDelete] = useState<string | null>(null);
 
   const userName = fullName || user?.username || "";
   const branchName = user?.branchName || "";
@@ -509,18 +510,17 @@ export default function RequestCreatePage() {
     );
   };
 
-  const handleDownload = async (file: UploadedFile) => {
-    try {
-      await downloadFile(file.fileAddress, 0);
-    } catch {
-      showToast("خطا در دانلود", "error");
-    }
+  const handleDeleteFile = (id: string) => {
+    setFileToDelete(id);
   };
 
-  const handleDeleteFile = (id: string) => {
-    cancelRef.current.add(id);
-    uploadStateRef.current.delete(id);
-    setUploadedFiles((prev) => prev.filter((f) => f.id !== id));
+  const confirmDeleteFile = () => {
+    if (fileToDelete) {
+      cancelRef.current.add(fileToDelete);
+      uploadStateRef.current.delete(fileToDelete);
+      setUploadedFiles((prev) => prev.filter((f) => f.id !== fileToDelete));
+      setFileToDelete(null);
+    }
   };
 
   // ─── Collateral ───
@@ -778,15 +778,6 @@ export default function RequestCreatePage() {
         header: "عملیات",
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
-            {row.original.isCompleted && (
-              <button
-                onClick={() => handleDownload(row.original)}
-                className="p-1.5 rounded-md text-blue-600 hover:bg-blue-50"
-                title="دانلود"
-              >
-                <Download className="w-4 h-4" />
-              </button>
-            )}
             {row.original.isUploading && (
               <button
                 onClick={() => handlePauseUpload(row.original.id)}
@@ -1395,6 +1386,30 @@ export default function RequestCreatePage() {
             onClick={() => setIsCustomerModalOpen(false)}
           />
         }
+      />
+
+      {/* مودال تأیید حذف فایل */}
+      <Modal
+        isOpen={!!fileToDelete}
+        isRTL
+        header="تأیید حذف فایل"
+        onClose={() => setFileToDelete(null)}
+        overlayLock={false}
+        footerButtons={
+          <div className="flex gap-2">
+            <FormButton
+              title="حذف"
+              variant="danger"
+              onClick={confirmDeleteFile}
+            />
+            <FormButton
+              title="انصراف"
+              variant="secondary"
+              onClick={() => setFileToDelete(null)}
+            />
+          </div>
+        }
+        renderContent={() => <p>آیا از حذف این فایل اطمینان دارید؟</p>}
       />
     </MainLayout.Main>
   );
