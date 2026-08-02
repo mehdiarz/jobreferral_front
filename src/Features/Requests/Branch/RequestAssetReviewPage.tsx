@@ -558,8 +558,6 @@ export default function RequestAssetReviewPage() {
           filters={filters}
           onFiltersChange={handleFiltersChange}
           filterFields={[
-            { field: "title", label: "عنوان" },
-            { field: "loanNumber", label: "شماره پرونده" },
             {
               field: "actorUserFullName",
               label: "نام کاربر اقدام‌کننده",

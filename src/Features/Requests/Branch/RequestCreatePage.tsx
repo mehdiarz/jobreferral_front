@@ -1,5 +1,19 @@
 import { useMemo, useRef, useState } from "react";
-import { Plus, Trash2, Upload } from "lucide-react";
+import {
+  Building2,
+  CalendarDays,
+  CheckCircle2,
+  FilePlus2,
+  FileText,
+  MessageSquareText,
+  Paperclip,
+  Plus,
+  Search,
+  Trash2,
+  Upload,
+  UserRound,
+  UsersRound,
+} from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { MainLayout } from "../../../baseComponents/MainLayout";
@@ -12,6 +26,7 @@ import FormButton from "../../../baseComponents/FormButton";
 import PageTitle from "../../../baseComponents/PageTitle";
 import DataTable from "../../../baseComponents/DataTable";
 import Modal from "../../../baseComponents/Modal";
+import FormSection from "../../../baseComponents/FormSection";
 import { useToast } from "../../../libs/toastContext";
 import { useAuthStore } from "../../../libs/store";
 
@@ -200,9 +215,9 @@ export default function RequestCreatePage() {
         fileSize: file.size,
         chunkSize: REQUEST_CHUNK_SIZE,
       });
-      const uploadId = (
-        startRes as typeof startRes & { result?: { uploadId?: string } }
-      ).result?.uploadId ?? startRes.uploadId;
+      const uploadId =
+        (startRes as typeof startRes & { result?: { uploadId?: string } })
+          .result?.uploadId ?? startRes.uploadId;
       if (!uploadId) {
         throw new Error("شناسه آپلود از سرور دریافت نشد");
       }
@@ -556,79 +571,50 @@ export default function RequestCreatePage() {
 
   // ─── Columns ───
   const fileColumns: ColumnDef<UploadedFile, unknown>[] = [
-      {
-        id: "documentTypeTitle",
-        header: "نوع مدرک",
-        accessorKey: "documentTypeTitle",
-        cell: ({ row }) => row.original.documentTypeTitle || "-",
-      },
-      {
-        id: "fileName",
-        header: "نام فایل",
-        accessorKey: "fileName",
-        cell: ({ row }) => row.original.fileName,
-      },
-      {
-        id: "fileFormat",
-        header: "نوع فایل",
-        accessorKey: "fileFormat",
-        cell: ({ row }) => row.original.fileFormat || "-",
-      },
-      {
-        id: "fileSize",
-        header: "حجم",
-        cell: ({ row }) => `${(row.original.fileSize / 1024).toFixed(1)} KB`,
-      },
-      {
-        id: "progress",
-        header: "وضعیت",
-        cell: ({ row }) => {
-          const f = row.original;
-          if (f.isCompleting) {
-            return (
-              <span className="text-yellow-600 text-xs flex items-center gap-1">
-                ⏳ در حال آماده‌سازی...
-              </span>
-            );
-          }
-          if (f.isCompleted) {
-            return <span className="text-green-600 text-xs">✅ تکمیل</span>;
-          }
-          if (f.isUploading) {
-            return (
-              <div className="flex items-center gap-2 min-w-[140px]">
-                <div className="flex-1 bg-gray-200 rounded-full h-2 dark:bg-gray-700">
-                  <div
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${f.uploadProgress}%` }}
-                  />
-                </div>
-                <span className="text-xs text-gray-500 w-8">
-                  {f.uploadProgress}%
-                </span>
-                <button
-                  onClick={() => handlePauseUpload(f.id)}
-                  className="p-1 rounded-md text-yellow-600 hover:bg-yellow-50"
-                  title="توقف"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                  >
-                    <rect x="6" y="4" width="4" height="16" />
-                    <rect x="14" y="4" width="4" height="16" />
-                  </svg>
-                </button>
-              </div>
-            );
-          }
-          // Paused - آیکون play برای ادامه
+    {
+      id: "documentTypeTitle",
+      header: "نوع مدرک",
+      accessorKey: "documentTypeTitle",
+      cell: ({ row }) => row.original.documentTypeTitle || "-",
+    },
+    {
+      id: "fileName",
+      header: "نام فایل",
+      accessorKey: "fileName",
+      cell: ({ row }) => row.original.fileName,
+    },
+    {
+      id: "fileFormat",
+      header: "نوع فایل",
+      accessorKey: "fileFormat",
+      cell: ({ row }) => row.original.fileFormat || "-",
+    },
+    {
+      id: "fileSize",
+      header: "حجم",
+      cell: ({ row }) => `${(row.original.fileSize / 1024).toFixed(1)} KB`,
+    },
+    {
+      id: "progress",
+      header: "وضعیت",
+      cell: ({ row }) => {
+        const f = row.original;
+        if (f.isCompleting) {
           return (
-            <div className="flex items-center gap-2">
+            <span className="text-yellow-600 text-xs flex items-center gap-1">
+              ⏳ در حال آماده‌سازی...
+            </span>
+          );
+        }
+        if (f.isCompleted) {
+          return <span className="text-green-600 text-xs">✅ تکمیل</span>;
+        }
+        if (f.isUploading) {
+          return (
+            <div className="flex items-center gap-2 min-w-[140px]">
               <div className="flex-1 bg-gray-200 rounded-full h-2 dark:bg-gray-700">
                 <div
-                  className="bg-yellow-500 h-2 rounded-full"
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                   style={{ width: `${f.uploadProgress}%` }}
                 />
               </div>
@@ -636,107 +622,132 @@ export default function RequestCreatePage() {
                 {f.uploadProgress}%
               </span>
               <button
-                onClick={() => handleResumeUpload(f)}
-                className="p-1 rounded-md text-green-600 hover:bg-green-50"
-                title="ادامه"
+                onClick={() => handlePauseUpload(f.id)}
+                className="p-1 rounded-md text-yellow-600 hover:bg-yellow-50"
+                title="توقف"
               >
                 <svg
                   className="w-4 h-4"
                   viewBox="0 0 24 24"
                   fill="currentColor"
                 >
-                  <polygon points="5,3 19,12 5,21" />
+                  <rect x="6" y="4" width="4" height="16" />
+                  <rect x="14" y="4" width="4" height="16" />
                 </svg>
               </button>
             </div>
           );
-        },
-      },
-      {
-        id: "userName",
-        header: "کاربر",
-        accessorKey: "userName",
-        cell: ({ row }) => row.original.userName || "-",
-      },
-      {
-        id: "userRole",
-        header: "نقش",
-        accessorKey: "userRole",
-        cell: ({ row }) => row.original.userRole || "-",
-      },
-      {
-        id: "uploadDate",
-        header: "تاریخ",
-        accessorKey: "uploadDate",
-        cell: ({ row }) => row.original.uploadDate || "-",
-      },
-      {
-        id: "uploadTime",
-        header: "ساعت",
-        accessorKey: "uploadTime",
-        cell: ({ row }) => row.original.uploadTime || "-",
-      },
-      {
-        id: "actions",
-        header: "عملیات",
-        cell: ({ row }) => (
-          <div className="flex items-center gap-1">
-            {row.original.isUploading && (
-              <button
-                onClick={() => handlePauseUpload(row.original.id)}
-                className="p-1.5 rounded-md text-yellow-600 hover:bg-yellow-50"
-                title="توقف"
-              >
-                ⏸
-              </button>
-            )}
+        }
+        // Paused - آیکون play برای ادامه
+        return (
+          <div className="flex items-center gap-2">
+            <div className="flex-1 bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+              <div
+                className="bg-yellow-500 h-2 rounded-full"
+                style={{ width: `${f.uploadProgress}%` }}
+              />
+            </div>
+            <span className="text-xs text-gray-500 w-8">
+              {f.uploadProgress}%
+            </span>
             <button
-              onClick={() => handleDeleteFile(row.original.id)}
-              className="p-1.5 rounded-md text-red-600 hover:bg-red-50"
-              title="حذف"
+              onClick={() => handleResumeUpload(f)}
+              className="p-1 rounded-md text-green-600 hover:bg-green-50"
+              title="ادامه"
             >
-              <Trash2 className="w-4 h-4" />
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="5,3 19,12 5,21" />
+              </svg>
             </button>
           </div>
-        ),
+        );
       },
+    },
+    {
+      id: "userName",
+      header: "کاربر",
+      accessorKey: "userName",
+      cell: ({ row }) => row.original.userName || "-",
+    },
+    {
+      id: "userRole",
+      header: "نقش",
+      accessorKey: "userRole",
+      cell: ({ row }) => row.original.userRole || "-",
+    },
+    {
+      id: "uploadDate",
+      header: "تاریخ",
+      accessorKey: "uploadDate",
+      cell: ({ row }) => row.original.uploadDate || "-",
+    },
+    {
+      id: "uploadTime",
+      header: "ساعت",
+      accessorKey: "uploadTime",
+      cell: ({ row }) => row.original.uploadTime || "-",
+    },
+    {
+      id: "actions",
+      header: "عملیات",
+      cell: ({ row }) => (
+        <div className="flex items-center gap-1">
+          {row.original.isUploading && (
+            <button
+              onClick={() => handlePauseUpload(row.original.id)}
+              className="p-1.5 rounded-md text-yellow-600 hover:bg-yellow-50"
+              title="توقف"
+            >
+              ⏸
+            </button>
+          )}
+          <button
+            onClick={() => handleDeleteFile(row.original.id)}
+            className="p-1.5 rounded-md text-red-600 hover:bg-red-50"
+            title="حذف"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      ),
+    },
   ];
 
   const customerColumns: ColumnDef<CustomerItem, unknown>[] = [
-      {
-        id: "cifNumber",
-        header: "شماره مشتری",
-        accessorKey: "cifNumber",
-        cell: ({ row }) => row.original.cifNumber || "-",
+    {
+      id: "cifNumber",
+      header: "شماره مشتری",
+      accessorKey: "cifNumber",
+      cell: ({ row }) => row.original.cifNumber || "-",
+    },
+    {
+      id: "name",
+      header: "نام مشتری",
+      accessorKey: "name",
+      cell: ({ row }) => row.original.name || "-",
+    },
+    {
+      id: "personalTypeId",
+      header: "نوع شخص",
+      accessorKey: "personalTypeId",
+      cell: ({ row }) => {
+        const typeId = row.original.personalTypeId;
+        const type = personalTypes.find((item) => item.id === typeId);
+        return type?.title || "-";
       },
-      {
-        id: "name",
-        header: "نام مشتری",
-        accessorKey: "name",
-        cell: ({ row }) => row.original.name || "-",
-      },
-      {
-        id: "personalTypeId",
-        header: "نوع شخص",
-        accessorKey: "personalTypeId",
-        cell: ({ row }) => {
-          const typeId = row.original.personalTypeId;
-          const type = personalTypes.find((item) => item.id === typeId);
-          return type?.title || "-";
-        },
-      },
-      {
-        id: "select",
-        header: "انتخاب",
-        cell: ({ row }) => (
-          <FormButton
-            title="انتخاب"
-            variant="primary"
-            size="sm"
-            onClick={() => handleSelectCustomer(row.original)}
-          />
-        ),
-      },
+    },
+    {
+      id: "select",
+      header: "انتخاب",
+      cell: ({ row }) => (
+        <FormButton
+          title="انتخاب"
+          variant="primary"
+          size="sm"
+          onClick={() => handleSelectCustomer(row.original)}
+        />
+      ),
+    },
   ];
 
   const filesQueryResult = useMemo(
@@ -770,452 +781,483 @@ export default function RequestCreatePage() {
   // ─── Render ───
   return (
     <MainLayout.Main maxWidth="screen-xl">
-      <PageTitle title="ایجاد درخواست جدید" />
+      <PageTitle
+        title="ایجاد درخواست جدید"
+        subtitle="اطلاعات پرونده، وثیقه‌گذاران و مدارک موردنیاز را ثبت کنید."
+        className="mb-5"
+      />
 
-      {/* اطلاعات درخواست */}
-      <div className="mb-4 rounded-lg bg-white p-4 shadow-sm">
-        <h3 className="mb-4 font-bold text-lg text-blue-900 dark:text-white">
-          اطلاعات درخواست
-        </h3>
-        <FluidGrid className="gap-4">
-          <FluidCol colSpan="col-span-12 md:col-span-4">
-            <FormInput
-              id="loanNumber"
-              name="loanNumber"
-              label="شماره پرونده"
-              value={requestForm.loanNumber}
-              onChange={(v) => setRequestForm((p) => ({ ...p, loanNumber: v }))}
-              dir="ltr"
-              required
-            />
-          </FluidCol>
-          <FluidCol colSpan="col-span-12 md:col-span-4">
-            <FormSelect<number>
-              id="requestTypeId"
-              name="requestTypeId"
-              label="نوع درخواست"
-              value={requestForm.requestTypeId ?? ""}
-              onChange={(v) =>
-                setRequestForm((p) => ({
-                  ...p,
-                  requestTypeId: v ? Number(v) : null,
-                }))
-              }
-              options={requestTypeOptions}
-              required
-            />
-          </FluidCol>
-          <FluidCol colSpan="col-span-12 md:col-span-4">
-            <FormInput
-              id="title"
-              name="title"
-              label="عنوان"
-              value={requestForm.title}
-              onChange={(v) => setRequestForm((p) => ({ ...p, title: v }))}
-              dir="rtl"
-              required
-            />
-          </FluidCol>
-          <FluidCol colSpan="col-span-12 md:col-span-4">
-            <FormInput
-              id="requestCode"
-              name="requestCode"
-              label="شماره مصوبه/ابلاغیه"
-              value={requestForm.requestCode}
-              onChange={(v) =>
-                setRequestForm((p) => ({ ...p, requestCode: v }))
-              }
-              dir="ltr"
-            />
-          </FluidCol>
-          <FluidCol colSpan="col-span-12 md:col-span-4">
-            <FormInput
-              id="branchName"
-              name="branchName"
-              label="شعبه"
-              value={branchName}
-              dir="rtl"
-              disabled
-              onChange={() => {}}
-            />
-          </FluidCol>
-          <FluidCol colSpan="col-span-12 md:col-span-4">
-            <FormInput
-              id="userName"
-              name="userName"
-              label="نام کاربر"
-              value={userName}
-              dir="rtl"
-              disabled
-              onChange={() => {}}
-            />
-          </FluidCol>
-          <FluidCol colSpan="col-span-12 md:col-span-4">
-            <FormInput
-              id="todayDate"
-              name="todayDate"
-              label="تاریخ ثبت"
-              value={today}
-              dir="ltr"
-              disabled
-              onChange={() => {}}
-            />
-          </FluidCol>
-          <FluidCol colSpan="col-span-12 md:col-span-4">
-            <FormSelect<number>
-              id="personalTypeId"
-              name="personalTypeId"
-              label="نوع شخص"
-              value={requestForm.personalTypeId ?? ""}
-              onChange={(v) =>
-                setRequestForm((p) => ({
-                  ...p,
-                  personalTypeId: v ? Number(v) : null,
-                }))
-              }
-              options={personalTypeOptions}
-            />
-          </FluidCol>
-          {/* ردیف درخواست کننده + استعلام */}
-          <FluidCol colSpan="col-span-12 md:col-span-4">
-            <div className="relative">
-              <FormInput
-                id="requesterName"
-                name="requesterName"
-                label="درخواست کننده (شماره مشتری)"
-                value={requestForm.requesterName}
-                onChange={(v) => {
-                  setRequestForm((p) => ({ ...p, requesterName: v }));
-                  setCustomerInfo(null);
-                  setCustomerId(null);
-                }}
-                dir="rtl"
-              />
-              <button
-                onClick={handleFindCustomer}
-                disabled={
-                  !requestForm.requesterName.trim() || isSearchingCustomer
-                }
-                className="absolute bottom-2 left-2 rounded-md p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                title="استعلام"
-              >
-                {isSearchingCustomer ? (
-                  <span className="inline-block w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></span>
-                ) : (
-                  <svg
-                    className="w-4 h-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <circle cx="11" cy="11" r="8" />
-                    <path d="M21 21l-4.35-4.35" />
-                  </svg>
-                )}
-              </button>
+      <div className="relative mb-5 overflow-hidden rounded-3xl bg-gradient-to-l from-blue-950 via-blue-800 to-cyan-700 p-5 text-white shadow-lg">
+        <div className="absolute -left-12 -top-16 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
+        <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/20">
+              <FilePlus2 className="h-6 w-6" />
             </div>
-          </FluidCol>
+            <div>
+              <p className="text-xs text-blue-100">فرم ثبت پرونده</p>
+              <h2 className="mt-1 text-lg font-bold">
+                درخواست جدید شعبه {branchName || "-"}
+              </h2>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 ring-1 ring-white/20">
+              <UserRound className="h-3.5 w-3.5" />
+              {userName || "-"}
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 ring-1 ring-white/20">
+              <CalendarDays className="h-3.5 w-3.5" />
+              {today}
+            </span>
+          </div>
+        </div>
+      </div>
 
-          {/* نمایش نتیجه استعلام - فقط وقتی customerInfo داریم */}
-          {customerInfo && (
-            <FluidCol colSpan="col-span-12">
-              <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-                <div className="flex items-center gap-2 flex-1">
-                  <svg
-                    className="w-5 h-5 text-green-600"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M20 6L9 17l-5-5" />
-                  </svg>
-                  <div className="flex items-center gap-4 text-sm">
-                    <span className="text-gray-500">نام مشتری:</span>
-                    <span className="font-medium text-gray-800">
-                      {customerInfo.name}
-                    </span>
-                    <span className="text-gray-300">|</span>
-                    <span className="text-gray-500">شماره مشتری:</span>
-                    <span className="font-medium text-gray-800" dir="ltr">
-                      {customerInfo.cif}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
+      <div className="space-y-5">
+        {/* اطلاعات درخواست */}
+        <FormSection
+          title="اطلاعات درخواست"
+          description="مشخصات اصلی پرونده و اطلاعات مشتری را وارد کنید."
+          icon={<FileText className="h-5 w-5" />}
+        >
+          <FluidGrid className="gap-4">
+            <FluidCol colSpan="col-span-12 md:col-span-4">
+              <FormInput
+                id="loanNumber"
+                name="loanNumber"
+                label="شماره پرونده"
+                value={requestForm.loanNumber}
+                onChange={(v) =>
+                  setRequestForm((p) => ({ ...p, loanNumber: v }))
+                }
+                dir="ltr"
+                required
+              />
+            </FluidCol>
+            <FluidCol colSpan="col-span-12 md:col-span-4">
+              <FormSelect<number>
+                id="requestTypeId"
+                name="requestTypeId"
+                label="نوع درخواست"
+                value={requestForm.requestTypeId ?? ""}
+                onChange={(v) =>
+                  setRequestForm((p) => ({
+                    ...p,
+                    requestTypeId: v ? Number(v) : null,
+                  }))
+                }
+                options={requestTypeOptions}
+                required
+              />
+            </FluidCol>
+            <FluidCol colSpan="col-span-12 md:col-span-4">
+              <FormInput
+                id="title"
+                name="title"
+                label="عنوان"
+                value={requestForm.title}
+                onChange={(v) => setRequestForm((p) => ({ ...p, title: v }))}
+                dir="rtl"
+                required
+              />
+            </FluidCol>
+            <FluidCol colSpan="col-span-12 md:col-span-4">
+              <FormInput
+                id="requestCode"
+                name="requestCode"
+                label="شماره مصوبه/ابلاغیه"
+                value={requestForm.requestCode}
+                onChange={(v) =>
+                  setRequestForm((p) => ({ ...p, requestCode: v }))
+                }
+                dir="ltr"
+              />
+            </FluidCol>
+            <FluidCol colSpan="col-span-12 md:col-span-4">
+              <FormInput
+                id="branchName"
+                name="branchName"
+                label="شعبه"
+                value={branchName}
+                dir="rtl"
+                disabled
+                onChange={() => {}}
+              />
+            </FluidCol>
+            <FluidCol colSpan="col-span-12 md:col-span-4">
+              <FormInput
+                id="userName"
+                name="userName"
+                label="نام کاربر"
+                value={userName}
+                dir="rtl"
+                disabled
+                onChange={() => {}}
+              />
+            </FluidCol>
+            <FluidCol colSpan="col-span-12 md:col-span-4">
+              <FormInput
+                id="todayDate"
+                name="todayDate"
+                label="تاریخ ثبت"
+                value={today}
+                dir="ltr"
+                disabled
+                onChange={() => {}}
+              />
+            </FluidCol>
+            <FluidCol colSpan="col-span-12 md:col-span-4">
+              <FormSelect<number>
+                id="personalTypeId"
+                name="personalTypeId"
+                label="نوع شخص"
+                value={requestForm.personalTypeId ?? ""}
+                onChange={(v) =>
+                  setRequestForm((p) => ({
+                    ...p,
+                    personalTypeId: v ? Number(v) : null,
+                  }))
+                }
+                options={personalTypeOptions}
+              />
+            </FluidCol>
+            {/* ردیف درخواست کننده + استعلام */}
+            <FluidCol colSpan="col-span-12 md:col-span-4">
+              <div className="relative">
+                <FormInput
+                  id="requesterName"
+                  name="requesterName"
+                  label="درخواست کننده (شماره مشتری)"
+                  value={requestForm.requesterName}
+                  onChange={(v) => {
+                    setRequestForm((p) => ({ ...p, requesterName: v }));
                     setCustomerInfo(null);
                     setCustomerId(null);
                   }}
-                  className="text-gray-400 hover:text-red-500 transition-colors"
-                  title="حذف"
+                  dir="rtl"
+                />
+                <button
+                  type="button"
+                  onClick={handleFindCustomer}
+                  disabled={
+                    !requestForm.requesterName.trim() || isSearchingCustomer
+                  }
+                  className="absolute bottom-2 left-2 flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl bg-blue-50 text-blue-600 transition-colors hover:bg-blue-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                  title="استعلام"
                 >
-                  <svg
-                    className="w-4 h-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M18 6L6 18M6 6l12 12" />
-                  </svg>
+                  {isSearchingCustomer ? (
+                    <span className="inline-block w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></span>
+                  ) : (
+                    <Search className="h-4 w-4" />
+                  )}
                 </button>
               </div>
             </FluidCol>
-          )}
 
-          {/* اگه مشتری پیدا نشد */}
-          {!customerInfo &&
-            !isSearchingCustomer &&
-            requestForm.requesterName.trim() && (
+            {/* نمایش نتیجه استعلام - فقط وقتی customerInfo داریم */}
+            {customerInfo && (
               <FluidCol colSpan="col-span-12">
-                <div className="text-xs text-gray-400 -mt-2">
-                  برای استعلام، روی ذره‌بین کلیک کنید
+                <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="flex items-center gap-2 flex-1">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                      <CheckCircle2 className="h-5 w-5" />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3 text-sm">
+                      <span className="text-gray-500">نام مشتری:</span>
+                      <span className="font-medium text-gray-800">
+                        {customerInfo.name}
+                      </span>
+                      <span className="text-gray-300">|</span>
+                      <span className="text-gray-500">شماره مشتری:</span>
+                      <span className="font-medium text-gray-800" dir="ltr">
+                        {customerInfo.cif}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomerInfo(null);
+                      setCustomerId(null);
+                    }}
+                    className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                    title="حذف"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
               </FluidCol>
             )}
-          <FluidCol colSpan="col-span-12 md:col-span-4">
-            <FormInput
-              id="amount"
-              name="amount"
-              label="مبلغ تسهیلات (ریال)"
-              value={requestForm.amount}
-              onChange={(v) => setRequestForm((p) => ({ ...p, amount: v }))}
-              dir="ltr"
-              type="number"
-              required
-            />
-          </FluidCol>
-          <FluidCol colSpan="col-span-12 md:col-span-4">
-            <FormSelect<number>
-              id="departmentId"
-              name="departmentId"
-              label="دپارتمان"
-              value={requestForm.departmentId ?? ""}
-              onChange={(v) =>
-                setRequestForm((p) => ({
-                  ...p,
-                  departmentId: v ? Number(v) : null,
-                }))
-              }
-              options={departmentOptions}
-            />
-          </FluidCol>
-        </FluidGrid>
-      </div>
 
-      <hr className="my-6 border-gray-300 dark:border-gray-600" />
+            {/* اگه مشتری پیدا نشد */}
+            {!customerInfo &&
+              !isSearchingCustomer &&
+              requestForm.requesterName.trim() && (
+                <FluidCol colSpan="col-span-12">
+                  <div className="text-xs text-gray-400 -mt-2">
+                    برای استعلام، روی ذره‌بین کلیک کنید
+                  </div>
+                </FluidCol>
+              )}
+            <FluidCol colSpan="col-span-12 md:col-span-4">
+              <FormInput
+                id="amount"
+                name="amount"
+                label="مبلغ تسهیلات (ریال)"
+                value={requestForm.amount}
+                onChange={(v) => setRequestForm((p) => ({ ...p, amount: v }))}
+                dir="ltr"
+                type="number"
+                required
+              />
+            </FluidCol>
+            <FluidCol colSpan="col-span-12 md:col-span-4">
+              <FormSelect<number>
+                id="departmentId"
+                name="departmentId"
+                label="دپارتمان"
+                value={requestForm.departmentId ?? ""}
+                onChange={(v) =>
+                  setRequestForm((p) => ({
+                    ...p,
+                    departmentId: v ? Number(v) : null,
+                  }))
+                }
+                options={departmentOptions}
+              />
+            </FluidCol>
+          </FluidGrid>
+        </FormSection>
 
-      {/* وثیقه گذاران */}
-      <div className="mb-4 rounded-lg bg-white p-4 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-lg text-blue-900 dark:text-white">
-            وثیقه گذار / وثیقه گذاران
-          </h3>
-          <FormButton
-            title={
-              <span className="flex items-center gap-1">
-                <Plus className="w-4 h-4" /> افزودن
-              </span>
-            }
-            variant="success"
-            onClick={addCollateral}
-          />
-        </div>
-        {collaterals.map((col, i) => (
-          <div
-            key={i}
-            className="mb-4 p-4 border border-gray-200 rounded-lg relative"
-          >
-            {collaterals.length > 1 && (
-              <button
-                onClick={() => removeCollateral(i)}
-                className="absolute top-2 right-2 p-1 text-red-500 hover:bg-red-50 rounded z-10"
-                title="حذف"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            )}
-            <FluidGrid className="gap-4">
-              <FluidCol colSpan="col-span-12 md:col-span-6">
-                <FormSelect<number>
-                  id={`cp-${i}`}
-                  name={`cp-${i}`}
-                  label="نوع شخص"
-                  value={col.personTypeId ?? ""}
-                  onChange={(v) =>
-                    updateCollateral(i, "personTypeId", v ? Number(v) : null)
-                  }
-                  options={personalTypeOptions}
-                />
-              </FluidCol>
-              <FluidCol colSpan="col-span-12 md:col-span-6">
-                <FormSelect<number>
-                  id={`cc-${i}`}
-                  name={`cc-${i}`}
-                  label="نوع وثیقه"
-                  value={col.collatralTypeId ?? ""}
-                  onChange={(v) =>
-                    updateCollateral(i, "collatralTypeId", v ? Number(v) : null)
-                  }
-                  options={collateralTypeOptions}
-                />
-              </FluidCol>
-              <FluidCol colSpan="col-span-12 md:col-span-4">
-                <FormInput
-                  id={`cfn-${i}`}
-                  name={`cfn-${i}`}
-                  label="نام"
-                  value={col.firstName}
-                  onChange={(v) => updateCollateral(i, "firstName", v)}
-                  dir="rtl"
-                />
-              </FluidCol>
-              <FluidCol colSpan="col-span-12 md:col-span-4">
-                <FormInput
-                  id={`cln-${i}`}
-                  name={`cln-${i}`}
-                  label="نام خانوادگی"
-                  value={col.lastName}
-                  onChange={(v) => updateCollateral(i, "lastName", v)}
-                  dir="rtl"
-                />
-              </FluidCol>
-              <FluidCol colSpan="col-span-12 md:col-span-4">
-                <FormInput
-                  id={`cnc-${i}`}
-                  name={`cnc-${i}`}
-                  label="کد ملی"
-                  value={col.nationalCode}
-                  onChange={(v) => updateCollateral(i, "nationalCode", v)}
-                  dir="ltr"
-                />
-              </FluidCol>
-            </FluidGrid>
-          </div>
-        ))}
-      </div>
-
-      <hr className="my-6 border-gray-300 dark:border-gray-600" />
-
-      {/* مدارک پیوست */}
-      <div className="mb-4 rounded-lg bg-white p-4 shadow-sm">
-        <h3 className="font-bold text-lg text-blue-900 dark:text-white mb-4">
-          مدارک پیوست
-        </h3>
-
-        <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-slate-800 rounded-lg">
-          <div className="w-48">
-            <FormSelect<number>
-              id="docTypeSelect"
-              name="docTypeSelect"
-              label="نوع مدارک"
-              value={selectedDocTypeId ?? ""}
-              onChange={(v) => setSelectedDocTypeId(v ? Number(v) : null)}
-              options={documentTypeOptions}
-            />
-          </div>
-
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-gray-300 hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer text-sm text-gray-600 min-w-[140px]"
-          >
-            <Upload className="w-4 h-4 text-blue-500" />
-            <span className="truncate max-w-[120px]">
-              {selectedFile ? selectedFile.name : "انتخاب فایل"}
-            </span>
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="hidden"
-            onChange={handleFileSelect}
-          />
-
-          <FormButton
-            title="آپلود"
-            variant="primary"
-            size="sm"
-            onClick={handleStartUpload}
-            isLoading={isUploading}
-            disabled={isUploading || !selectedFile || !selectedDocTypeId}
-          />
-
-          {selectedFile && (
-            <span className="text-xs text-gray-400 ml-auto">
-              {(selectedFile.size / (1024 * 1024)).toFixed(1)} MB
-            </span>
-          )}
-        </div>
-
-        {uploadedFiles.length > 0 && (
-          <div className="mt-4">
-            <DataTable<UploadedFile>
-              query={filesQueryResult}
-              columns={fileColumns}
-              pagination={{ pageIndex: 0, pageSize: 10 }}
-              onPaginationChange={() => {}}
-              filters={[]}
-              onFiltersChange={() => {}}
-              filterFields={[]}
-              skeletonColumns={10}
-              emptyStateMessage="هیچ فایلی آپلود نشده است"
-            />
-          </div>
-        )}
-      </div>
-
-      <hr className="my-6 border-gray-300 dark:border-gray-600" />
-
-      {/* توضیحات و ثبت */}
-      <hr className="my-6 border-gray-300 dark:border-gray-600" />
-
-      {/* توضیحات کارشناس */}
-      <div className="mb-4 rounded-lg bg-white p-4 shadow-sm">
-        <FluidGrid className="gap-4">
-          <FluidCol colSpan="col-span-12">
-            <FormTextarea
-              id="expertComment"
-              name="expertComment"
-              label="توضیحات کارشناس"
-              value={expertComment}
-              onChange={(v) => setExpertComment(v)}
-              rows={3}
-              dir="rtl"
-            />
-          </FluidCol>
-        </FluidGrid>
-      </div>
-
-      <hr className="my-6 border-gray-300 dark:border-gray-600" />
-
-      {/* توضیحات و ثبت */}
-      <div className="mb-4 rounded-lg bg-white p-4 shadow-sm">
-        <FluidGrid className="gap-4">
-          <FluidCol colSpan="col-span-12">
-            <FormTextarea
-              id="description"
-              name="description"
-              label="توضیحات"
-              value={requestForm.description}
-              onChange={(v) =>
-                setRequestForm((p) => ({ ...p, description: v }))
-              }
-              rows={4}
-              dir="rtl"
-            />
-          </FluidCol>
-          <FluidCol colSpan="col-span-12" className="flex justify-end">
+        {/* وثیقه گذاران */}
+        <FormSection
+          title="وثیقه‌گذاران"
+          description="در صورت نیاز یک یا چند وثیقه‌گذار به پرونده اضافه کنید."
+          icon={<UsersRound className="h-5 w-5" />}
+          action={
             <FormButton
-              title="ثبت درخواست"
+              title={
+                <span className="flex items-center gap-1">
+                  <Plus className="w-4 h-4" /> افزودن
+                </span>
+              }
               variant="success"
-              onClick={handleSubmit}
-              isLoading={isSubmitting}
-              disabled={isSubmitting}
+              onClick={addCollateral}
             />
-          </FluidCol>
-        </FluidGrid>
+          }
+        >
+          {collaterals.map((col, i) => (
+            <div
+              key={i}
+              className="relative mb-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 pt-5 last:mb-0"
+            >
+              <span className="absolute right-4 top-0 -translate-y-1/2 rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500 shadow-sm ring-1 ring-slate-200">
+                وثیقه‌گذار {i + 1}
+              </span>
+              {collaterals.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeCollateral(i)}
+                  className="absolute left-3 top-3 z-10 flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl text-red-500 hover:bg-red-50"
+                  title="حذف"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+              <FluidGrid className="gap-4">
+                <FluidCol colSpan="col-span-12 md:col-span-6">
+                  <FormSelect<number>
+                    id={`cp-${i}`}
+                    name={`cp-${i}`}
+                    label="نوع شخص"
+                    value={col.personTypeId ?? ""}
+                    onChange={(v) =>
+                      updateCollateral(i, "personTypeId", v ? Number(v) : null)
+                    }
+                    options={personalTypeOptions}
+                  />
+                </FluidCol>
+                <FluidCol colSpan="col-span-12 md:col-span-6">
+                  <FormSelect<number>
+                    id={`cc-${i}`}
+                    name={`cc-${i}`}
+                    label="نوع وثیقه"
+                    value={col.collatralTypeId ?? ""}
+                    onChange={(v) =>
+                      updateCollateral(
+                        i,
+                        "collatralTypeId",
+                        v ? Number(v) : null,
+                      )
+                    }
+                    options={collateralTypeOptions}
+                  />
+                </FluidCol>
+                <FluidCol colSpan="col-span-12 md:col-span-4">
+                  <FormInput
+                    id={`cfn-${i}`}
+                    name={`cfn-${i}`}
+                    label="نام"
+                    value={col.firstName}
+                    onChange={(v) => updateCollateral(i, "firstName", v)}
+                    dir="rtl"
+                  />
+                </FluidCol>
+                <FluidCol colSpan="col-span-12 md:col-span-4">
+                  <FormInput
+                    id={`cln-${i}`}
+                    name={`cln-${i}`}
+                    label="نام خانوادگی"
+                    value={col.lastName}
+                    onChange={(v) => updateCollateral(i, "lastName", v)}
+                    dir="rtl"
+                  />
+                </FluidCol>
+                <FluidCol colSpan="col-span-12 md:col-span-4">
+                  <FormInput
+                    id={`cnc-${i}`}
+                    name={`cnc-${i}`}
+                    label="کد ملی"
+                    value={col.nationalCode}
+                    onChange={(v) => updateCollateral(i, "nationalCode", v)}
+                    dir="ltr"
+                  />
+                </FluidCol>
+              </FluidGrid>
+            </div>
+          ))}
+        </FormSection>
+
+        {/* مدارک پیوست */}
+        <FormSection
+          title="مدارک پیوست"
+          description="مدارک را بر اساس نوع انتخاب‌شده بارگذاری کنید."
+          icon={<Paperclip className="h-5 w-5" />}
+        >
+          <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-blue-200 bg-blue-50/40 p-4 md:flex-row md:items-center">
+            <div className="w-full md:w-56">
+              <FormSelect<number>
+                id="docTypeSelect"
+                name="docTypeSelect"
+                label="نوع مدارک"
+                value={selectedDocTypeId ?? ""}
+                onChange={(v) => setSelectedDocTypeId(v ? Number(v) : null)}
+                options={documentTypeOptions}
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex min-h-11 min-w-[160px] cursor-pointer items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-2 text-sm text-gray-600 transition-colors hover:border-blue-400 hover:bg-blue-50"
+            >
+              <Upload className="w-4 h-4 text-blue-500" />
+              <span className="truncate max-w-[120px]">
+                {selectedFile ? selectedFile.name : "انتخاب فایل"}
+              </span>
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={handleFileSelect}
+            />
+
+            <FormButton
+              title="آپلود"
+              variant="primary"
+              size="sm"
+              onClick={handleStartUpload}
+              isLoading={isUploading}
+              disabled={isUploading || !selectedFile || !selectedDocTypeId}
+            />
+
+            {selectedFile && (
+              <span className="text-xs text-gray-400 ml-auto">
+                {(selectedFile.size / (1024 * 1024)).toFixed(1)} MB
+              </span>
+            )}
+          </div>
+
+          {uploadedFiles.length > 0 && (
+            <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200">
+              <DataTable<UploadedFile>
+                query={filesQueryResult}
+                columns={fileColumns}
+                pagination={{ pageIndex: 0, pageSize: 10 }}
+                onPaginationChange={() => {}}
+                filters={[]}
+                onFiltersChange={() => {}}
+                filterFields={[]}
+                skeletonColumns={10}
+                emptyStateMessage="هیچ فایلی آپلود نشده است"
+              />
+            </div>
+          )}
+        </FormSection>
+
+        {/* توضیحات کارشناس */}
+        <FormSection
+          title="توضیحات کارشناس"
+          description="یادداشت کارشناسی مرتبط با این درخواست را ثبت کنید."
+          icon={<MessageSquareText className="h-5 w-5" />}
+        >
+          <FluidGrid className="gap-4">
+            <FluidCol colSpan="col-span-12">
+              <FormTextarea
+                id="expertComment"
+                name="expertComment"
+                label="توضیحات کارشناس"
+                value={expertComment}
+                onChange={(v) => setExpertComment(v)}
+                rows={3}
+                dir="rtl"
+              />
+            </FluidCol>
+          </FluidGrid>
+        </FormSection>
+
+        {/* توضیحات و ثبت */}
+        <FormSection
+          title="توضیحات نهایی و ثبت"
+          description="پس از بررسی اطلاعات، درخواست را ثبت نهایی کنید."
+          icon={<Building2 className="h-5 w-5" />}
+        >
+          <FluidGrid className="gap-4">
+            <FluidCol colSpan="col-span-12">
+              <FormTextarea
+                id="description"
+                name="description"
+                label="توضیحات"
+                value={requestForm.description}
+                onChange={(v) =>
+                  setRequestForm((p) => ({ ...p, description: v }))
+                }
+                rows={4}
+                dir="rtl"
+              />
+            </FluidCol>
+            <FluidCol colSpan="col-span-12">
+              <div className="flex flex-col gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-bold text-slate-700">آماده ثبت درخواست</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    قبل از ثبت، اطلاعات و فایل‌های پیوست را بررسی کنید.
+                  </p>
+                </div>
+                <FormButton
+                  title="ثبت درخواست"
+                  variant="success"
+                  size="md"
+                  onClick={handleSubmit}
+                  isLoading={isSubmitting}
+                  disabled={isSubmitting}
+                />
+              </div>
+            </FluidCol>
+          </FluidGrid>
+        </FormSection>
       </div>
       {/* ─── Modal انتخاب مشتری ─── */}
       <Modal

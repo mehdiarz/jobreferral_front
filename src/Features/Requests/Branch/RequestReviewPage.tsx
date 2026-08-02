@@ -391,8 +391,6 @@ export default function RequestReviewPage() {
           filters={filters}
           onFiltersChange={handleFiltersChange}
           filterFields={[
-            { field: "title", label: "عنوان" },
-            { field: "loanNumber", label: "شماره پرونده" },
             { field: "requestStatusTitle", label: "مرحله فرآیند" },
             {
               field: "actorUserFullName",

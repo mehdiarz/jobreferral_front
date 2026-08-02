@@ -1,7 +1,19 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Pencil, Download, Trash2, Upload } from "lucide-react";
+import {
+  Download,
+  FilePenLine,
+  MessageSquareText,
+  Paperclip,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  Upload,
+  UserRound,
+  UsersRound,
+} from "lucide-react";
 
 import { MainLayout } from "../../../baseComponents/MainLayout";
 import FormInput from "../../../baseComponents/FormInput";
@@ -14,6 +26,7 @@ import Modal from "../../../baseComponents/Modal";
 import RequestDetailsPanel, {
   ViewDetailsButton,
 } from "../../../baseComponents/RequestDetailsPanel";
+import FormSection from "../../../baseComponents/FormSection";
 import { useToast } from "../../../libs/toastContext";
 import { useAuthStore } from "../../../libs/store";
 
@@ -1074,8 +1087,6 @@ export default function RequestViewPage() {
           filters={filters}
           onFiltersChange={handleFiltersChange}
           filterFields={[
-            { field: "title", label: "عنوان" },
-            { field: "loanNumber", label: "شماره پرونده" },
             { field: "requestStatusTitle", label: "مرحله فرآیند" },
             {
               field: "actorUserFullName",
@@ -1154,252 +1165,273 @@ export default function RequestViewPage() {
           </div>
         }
         renderContent={() => (
-          <div className="space-y-4 max-h-[65vh] overflow-y-auto">
+          <div className="max-h-[68vh] space-y-5 overflow-y-auto rounded-2xl bg-slate-50/70 p-1">
             {/* فرم اصلی */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormInput
-                id="e-loan"
-                name="loanNumber"
-                label="شماره پرونده"
-                value={editForm.loanNumber}
-                onChange={(v) => handleEditFormChange("loanNumber", v)}
-                dir="ltr"
-                required
-              />
-              <FormInput
-                id="e-title"
-                name="title"
-                label="عنوان"
-                value={editForm.title}
-                onChange={(v) => handleEditFormChange("title", v)}
-                dir="rtl"
-                required
-              />
-              <FormInput
-                id="e-code"
-                name="requestCode"
-                label="شماره مصوبه"
-                value={editForm.requestCode}
-                onChange={(v) => handleEditFormChange("requestCode", v)}
-                dir="ltr"
-              />
-              <FormInput
-                id="e-amount"
-                name="amount"
-                label="مبلغ (ریال)"
-                value={editForm.amount}
-                onChange={(v) => handleEditFormChange("amount", v)}
-                dir="ltr"
-                type="number"
-                required
-              />
-              <FormSelect<number>
-                id="e-rtype"
-                name="requestTypeId"
-                label="نوع درخواست"
-                value={editForm.requestTypeId ?? ""}
-                onChange={(v) =>
-                  handleEditFormChange("requestTypeId", v ? Number(v) : null)
-                }
-                options={typeOpts}
-              />
-              <FormSelect<number>
-                id="e-dept"
-                name="departmentId"
-                label="دپارتمان"
-                value={editForm.departmentId ?? ""}
-                onChange={(v) =>
-                  handleEditFormChange("departmentId", v ? Number(v) : null)
-                }
-                options={deptOpts}
-              />
-              <FormSelect<number>
-                id="e-ptype"
-                name="personalTypeId"
-                label="نوع شخص"
-                value={editForm.personalTypeId ?? ""}
-                onChange={(v) =>
-                  handleEditFormChange("personalTypeId", v ? Number(v) : null)
-                }
-                options={persTypeOpts}
-              />
-
-              {/* جستجوی مشتری */}
-              <div className="relative">
+            <FormSection
+              title="اطلاعات اصلی درخواست"
+              description="مشخصات پرونده، نوع درخواست و اطلاعات مشتری را ویرایش کنید."
+              icon={<FilePenLine className="h-5 w-5" />}
+            >
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <FormInput
-                  id="e-requester"
-                  name="requesterName"
-                  label="درخواست کننده (شماره مشتری)"
-                  value={editCustomerCif}
-                  onChange={(v) => {
-                    setEditCustomerCif(v);
-                    setEditCustomerId(null);
-                    setEditCustomerInfo(null);
-                  }}
+                  id="e-loan"
+                  name="loanNumber"
+                  label="شماره پرونده"
+                  value={editForm.loanNumber}
+                  onChange={(v) => handleEditFormChange("loanNumber", v)}
+                  dir="ltr"
+                  required
+                />
+                <FormInput
+                  id="e-title"
+                  name="title"
+                  label="عنوان"
+                  value={editForm.title}
+                  onChange={(v) => handleEditFormChange("title", v)}
+                  dir="rtl"
+                  required
+                />
+                <FormInput
+                  id="e-code"
+                  name="requestCode"
+                  label="شماره مصوبه"
+                  value={editForm.requestCode}
+                  onChange={(v) => handleEditFormChange("requestCode", v)}
                   dir="ltr"
                 />
-                <button
-                  onClick={handleEditFindCustomer}
-                  disabled={!editCustomerCif.trim() || isEditSearchingCustomer}
-                  className="absolute bottom-2 left-2 rounded-md p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <circle cx="11" cy="11" r="8" />
-                    <path d="M21 21l-4.35-4.35" />
-                  </svg>
-                </button>
-              </div>
-
-              {editCustomerInfo && (
-                <div className="md:col-span-2 flex items-center gap-2 p-2 bg-green-50 rounded text-xs">
-                  <svg
-                    className="w-4 h-4 text-green-500"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M20 6L9 17l-5-5" />
-                  </svg>
-                  <span>{editCustomerInfo.name}</span>
-                  <span className="text-gray-300">|</span>
-                  <span dir="ltr">{editCustomerInfo.cif}</span>
-                  <button
-                    onClick={handleClearCustomer}
-                    className="text-gray-400 hover:text-red-500"
-                  >
-                    ✕
-                  </button>
-                </div>
-              )}
-
-              {/* توضیحات */}
-              <div className="md:col-span-2">
-                <FormTextarea
-                  id="e-desc"
-                  name="description"
-                  label="توضیحات"
-                  value={editForm.description}
-                  onChange={(v) => handleEditFormChange("description", v)}
-                  rows={3}
-                  dir="rtl"
+                <FormInput
+                  id="e-amount"
+                  name="amount"
+                  label="مبلغ (ریال)"
+                  value={editForm.amount}
+                  onChange={(v) => handleEditFormChange("amount", v)}
+                  dir="ltr"
+                  type="number"
+                  required
                 />
-              </div>
-            </div>
+                <FormSelect<number>
+                  id="e-rtype"
+                  name="requestTypeId"
+                  label="نوع درخواست"
+                  value={editForm.requestTypeId ?? ""}
+                  onChange={(v) =>
+                    handleEditFormChange("requestTypeId", v ? Number(v) : null)
+                  }
+                  options={typeOpts}
+                />
+                <FormSelect<number>
+                  id="e-dept"
+                  name="departmentId"
+                  label="دپارتمان"
+                  value={editForm.departmentId ?? ""}
+                  onChange={(v) =>
+                    handleEditFormChange("departmentId", v ? Number(v) : null)
+                  }
+                  options={deptOpts}
+                />
+                <FormSelect<number>
+                  id="e-ptype"
+                  name="personalTypeId"
+                  label="نوع شخص"
+                  value={editForm.personalTypeId ?? ""}
+                  onChange={(v) =>
+                    handleEditFormChange("personalTypeId", v ? Number(v) : null)
+                  }
+                  options={persTypeOpts}
+                />
 
-            {/* وثیقه گذاران */}
-            <div className="border-t pt-3">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="font-bold text-sm">وثیقه گذاران</h4>
-                <button
-                  onClick={handleAddCollateral}
-                  className="text-xs text-green-600 hover:text-green-800 cursor-pointer"
-                >
-                  + افزودن
-                </button>
-              </div>
-              {editCollaterals.map((col, i) => (
-                <div
-                  key={i}
-                  className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2 p-2 bg-gray-50 rounded relative"
-                >
-                  {editCollaterals.length > 1 && (
-                    <button
-                      onClick={() => handleRemoveCollateral(i)}
-                      className="absolute top-1 right-1 text-red-400 hover:text-red-600 text-xs"
-                    >
-                      ✕
-                    </button>
-                  )}
-                  <FormSelect<number>
-                    id={`ec-pt-${i}`}
-                    name={`ec-pt-${i}`}
-                    label="نوع شخص"
-                    value={col.personTypeId ?? ""}
-                    onChange={(v) =>
-                      handleCollateralFieldChange(i, "personTypeId", v)
-                    }
-                    options={persTypeOpts}
-                  />
-                  <FormSelect<number>
-                    id={`ec-ct-${i}`}
-                    name={`ec-ct-${i}`}
-                    label="نوع وثیقه"
-                    value={col.collatralTypeId ?? ""}
-                    onChange={(v) =>
-                      handleCollateralFieldChange(i, "collatralTypeId", v)
-                    }
-                    options={collTypeOpts}
-                  />
+                <div className="relative">
                   <FormInput
-                    id={`ec-fn-${i}`}
-                    name={`ec-fn-${i}`}
-                    label="نام"
-                    value={col.firstName}
-                    onChange={(v) =>
-                      handleCollateralFieldChange(i, "firstName", v)
-                    }
-                    dir="rtl"
-                  />
-                  <FormInput
-                    id={`ec-ln-${i}`}
-                    name={`ec-ln-${i}`}
-                    label="نام خانوادگی"
-                    value={col.lastName}
-                    onChange={(v) =>
-                      handleCollateralFieldChange(i, "lastName", v)
-                    }
-                    dir="rtl"
-                  />
-                  <FormInput
-                    id={`ec-nc-${i}`}
-                    name={`ec-nc-${i}`}
-                    label="کد ملی"
-                    value={col.nationalCode}
-                    onChange={(v) =>
-                      handleCollateralFieldChange(i, "nationalCode", v)
-                    }
+                    id="e-requester"
+                    name="requesterName"
+                    label="درخواست کننده (شماره مشتری)"
+                    value={editCustomerCif}
+                    onChange={(v) => {
+                      setEditCustomerCif(v);
+                      setEditCustomerId(null);
+                      setEditCustomerInfo(null);
+                    }}
                     dir="ltr"
                   />
+                  <button
+                    type="button"
+                    onClick={handleEditFindCustomer}
+                    disabled={
+                      !editCustomerCif.trim() || isEditSearchingCustomer
+                    }
+                    title="استعلام مشتری"
+                    className="absolute bottom-2 left-2 flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl bg-blue-50 text-blue-600 transition-colors hover:bg-blue-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Search className="h-4 w-4" />
+                  </button>
                 </div>
-              ))}
-            </div>
+
+                {editCustomerInfo && (
+                  <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-xs md:col-span-2">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                      <UserRound className="h-4 w-4" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-bold text-slate-700">
+                        {editCustomerInfo.name}
+                      </p>
+                      <p className="mt-1 text-slate-500" dir="ltr">
+                        {editCustomerInfo.cif}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleClearCustomer}
+                      className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-500"
+                      title="حذف مشتری"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+
+                <div className="md:col-span-2">
+                  <FormTextarea
+                    id="e-desc"
+                    name="description"
+                    label="توضیحات"
+                    value={editForm.description}
+                    onChange={(v) => handleEditFormChange("description", v)}
+                    rows={3}
+                    dir="rtl"
+                  />
+                </div>
+              </div>
+            </FormSection>
+
+            <FormSection
+              title="وثیقه‌گذاران"
+              description="اطلاعات وثیقه‌گذاران پرونده را مدیریت کنید."
+              icon={<UsersRound className="h-5 w-5" />}
+              action={
+                <button
+                  type="button"
+                  onClick={handleAddCollateral}
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-600 hover:text-white"
+                >
+                  <Plus className="h-4 w-4" />
+                  افزودن وثیقه‌گذار
+                </button>
+              }
+            >
+              <div className="space-y-3">
+                {editCollaterals.map((col, i) => (
+                  <div
+                    key={i}
+                    className="relative rounded-2xl border border-slate-200 bg-slate-50/70 p-4 pt-5"
+                  >
+                    <span className="absolute right-4 top-0 -translate-y-1/2 rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500 shadow-sm ring-1 ring-slate-200">
+                      وثیقه‌گذار {i + 1}
+                    </span>
+                    {editCollaterals.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveCollateral(i)}
+                        className="absolute left-3 top-3 flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl text-red-500 transition-colors hover:bg-red-50"
+                        title="حذف وثیقه‌گذار"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <FormSelect<number>
+                        id={`ec-pt-${i}`}
+                        name={`ec-pt-${i}`}
+                        label="نوع شخص"
+                        value={col.personTypeId ?? ""}
+                        onChange={(v) =>
+                          handleCollateralFieldChange(i, "personTypeId", v)
+                        }
+                        options={persTypeOpts}
+                      />
+                      <FormSelect<number>
+                        id={`ec-ct-${i}`}
+                        name={`ec-ct-${i}`}
+                        label="نوع وثیقه"
+                        value={col.collatralTypeId ?? ""}
+                        onChange={(v) =>
+                          handleCollateralFieldChange(i, "collatralTypeId", v)
+                        }
+                        options={collTypeOpts}
+                      />
+                      <FormInput
+                        id={`ec-fn-${i}`}
+                        name={`ec-fn-${i}`}
+                        label="نام"
+                        value={col.firstName}
+                        onChange={(v) =>
+                          handleCollateralFieldChange(i, "firstName", v)
+                        }
+                        dir="rtl"
+                      />
+                      <FormInput
+                        id={`ec-ln-${i}`}
+                        name={`ec-ln-${i}`}
+                        label="نام خانوادگی"
+                        value={col.lastName}
+                        onChange={(v) =>
+                          handleCollateralFieldChange(i, "lastName", v)
+                        }
+                        dir="rtl"
+                      />
+                      <div className="md:col-span-2">
+                        <FormInput
+                          id={`ec-nc-${i}`}
+                          name={`ec-nc-${i}`}
+                          label="کد ملی"
+                          value={col.nationalCode}
+                          onChange={(v) =>
+                            handleCollateralFieldChange(i, "nationalCode", v)
+                          }
+                          dir="ltr"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </FormSection>
 
             {/* مدارک پیوست شده */}
             {editUploadedFiles.length > 0 && (
-              <div className="border-t pt-3">
-                <h4 className="font-bold text-sm mb-2">مدارک پیوست</h4>
-                <table className="w-full text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-gray-100">
-                      <th className="p-2 border text-right">نوع مدرک</th>
-                      <th className="p-2 border text-right">نام فایل</th>
-                      <th className="p-2 border text-right">حجم</th>
-                      <th className="p-2 border text-right">وضعیت</th>
-                      <th className="p-2 border text-center">عملیات</th>
+              <FormSection
+                title="مدارک پیوست"
+                description={`${editUploadedFiles.length} فایل در پرونده موجود است.`}
+                icon={<Paperclip className="h-5 w-5" />}
+                contentClassName="overflow-x-auto"
+              >
+                <table className="w-full min-w-[680px] overflow-hidden rounded-2xl text-xs">
+                  <thead className="bg-slate-100 text-slate-600">
+                    <tr>
+                      <th className="p-3 text-right">نوع مدرک</th>
+                      <th className="p-3 text-right">نام فایل</th>
+                      <th className="p-3 text-right">حجم</th>
+                      <th className="p-3 text-right">وضعیت</th>
+                      <th className="p-3 text-center">عملیات</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-slate-100 bg-white">
                     {editUploadedFiles.map((f) => (
-                      <tr key={f.id} className="border-b">
-                        <td className="p-2 border">
+                      <tr key={f.id} className="hover:bg-slate-50">
+                        <td className="p-3">
                           {docTypeOpts.find(
                             (option) => option.id === f.documentTypeId,
                           )?.title ||
                             f.documentTypeTitle ||
                             "-"}
                         </td>
-                        <td className="p-2 border">{f.fileName}</td>
-                        <td className="p-2 border">
+                        <td className="p-3 font-medium text-slate-700">
+                          {f.fileName}
+                        </td>
+                        <td className="p-3 text-slate-500">
                           {(f.fileSize / 1024).toFixed(1)} KB
                         </td>
-                        <td className="p-2 border">
+                        <td className="p-3">
                           {f.isUploading ? (
                             <div className="flex items-center gap-1">
                               <div className="flex-1 bg-gray-200 rounded-full h-1.5 w-20">
@@ -1429,7 +1461,7 @@ export default function RequestViewPage() {
                             </button>
                           )}
                         </td>
-                        <td className="p-2 border text-center">
+                        <td className="p-3 text-center">
                           {f.isCompleted && (
                             <button
                               onClick={() => downloadFile(f.fileAddress, 0)}
@@ -1449,14 +1481,17 @@ export default function RequestViewPage() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </FormSection>
             )}
 
             {/* آپلود فایل جدید */}
-            <div className="border-t pt-3">
-              <h4 className="font-bold text-sm mb-2">آپلود مدرک جدید</h4>
-              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                <div className="w-48">
+            <FormSection
+              title="آپلود مدرک جدید"
+              description="نوع مدرک و فایل موردنظر را انتخاب و بارگذاری کنید."
+              icon={<Upload className="h-5 w-5" />}
+            >
+              <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-blue-200 bg-blue-50/40 p-4 sm:flex-row sm:items-center">
+                <div className="w-full sm:w-56">
                   <FormSelect<number>
                     id="edit-doc-type"
                     name="edit-doc-type"
@@ -1467,8 +1502,9 @@ export default function RequestViewPage() {
                   />
                 </div>
                 <button
+                  type="button"
                   onClick={() => editFileInputRef.current?.click()}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-gray-300 hover:border-blue-400 hover:bg-blue-50 cursor-pointer text-sm"
+                  className="flex min-h-11 min-w-40 cursor-pointer items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-2 text-sm text-slate-600 transition-colors hover:border-blue-400 hover:bg-blue-50"
                 >
                   <Upload className="w-4 h-4 text-blue-500" />
                   <span className="truncate max-w-[120px]">
@@ -1492,30 +1528,49 @@ export default function RequestViewPage() {
                   }
                 />
               </div>
-            </div>
+            </FormSection>
 
             {/* توضیحات کارشناس قبلی */}
             {editComments.length > 0 && (
-              <div className="border-t pt-3">
-                <h4 className="font-bold text-sm mb-2">توضیحات کارشناس قبلی</h4>
-                {editComments.map((c) => {
-                  const userData = getUserCacheData(c.userId || 0);
-                  return (
-                    <div
-                      key={c.id}
-                      className="bg-yellow-50 p-2 rounded mb-1 text-xs"
-                    >
-                      <p className="text-gray-500">{userData.name}</p>
-                      <p>{c.description}</p>
-                    </div>
-                  );
-                })}
-              </div>
+              <FormSection
+                title="توضیحات کارشناسان"
+                description={`${editComments.length} توضیح قبلی برای این پرونده ثبت شده است.`}
+                icon={<MessageSquareText className="h-5 w-5" />}
+              >
+                <div className="space-y-3">
+                  {editComments.map((c) => {
+                    const userData = getUserCacheData(c.userId || 0);
+                    return (
+                      <div
+                        key={c.id}
+                        className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 text-xs"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="font-medium text-slate-600">
+                            {userData.name}
+                          </p>
+                          <span className="text-slate-400">
+                            {c.creationTime
+                              ? isoToPersian(c.creationTime)
+                              : "-"}
+                          </span>
+                        </div>
+                        <p className="mt-2 leading-6 text-slate-700">
+                          {c.description}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </FormSection>
             )}
 
             {/* افزودن توضیح جدید */}
-            <div className="border-t pt-3">
-              <h4 className="font-bold text-sm mb-2">افزودن توضیح جدید</h4>
+            <FormSection
+              title="افزودن توضیح جدید"
+              description="در صورت نیاز توضیح جدیدی برای ادامه فرآیند ثبت کنید."
+              icon={<MessageSquareText className="h-5 w-5" />}
+            >
               <FormTextarea
                 id="new-comment"
                 name="new-comment"
@@ -1525,7 +1580,7 @@ export default function RequestViewPage() {
                 rows={3}
                 dir="rtl"
               />
-            </div>
+            </FormSection>
           </div>
         )}
       />
