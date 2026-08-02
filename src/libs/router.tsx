@@ -359,6 +359,21 @@ const requestReviewRoute = createRoute({
   },
 });
 
+const requestAssetReviewRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/branch/asset-review",
+  component: () => {
+    const Page = lazy(
+      () => import("../Features/Requests/Branch/RequestAssetReviewPage"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
 const profileRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/profile",
@@ -397,6 +412,7 @@ const routeTree = rootRoute.addChildren([
     requestViewRoute,
     requestCreateRoute,
     requestReviewRoute,
+    requestAssetReviewRoute,
   ]),
 ]);
 

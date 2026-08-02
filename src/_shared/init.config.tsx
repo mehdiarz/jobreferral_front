@@ -156,15 +156,15 @@ export const defaultMenuItems = [
             permissions: [],
           },
           {
-            id: "requests-referral",
-            title: "ارجاع به کارشناس رسمی دادگستری",
-            path: "/dashboard/requests/branch/referral",
-            permissions: [],
-          },
-          {
             id: "requests-asset-review",
             title: "بررسی و بازنگری اطلاعات ملک توسط شعبه",
             path: "/dashboard/requests/branch/asset-review",
+            permissions: [],
+          },
+          {
+            id: "requests-referral",
+            title: "ارجاع به کارشناس رسمی دادگستری",
+            path: "/dashboard/requests/branch/referral",
             permissions: [],
           },
           {
