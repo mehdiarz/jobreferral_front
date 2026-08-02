@@ -1,7 +1,13 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Eye, Download, Trash2, Upload } from "lucide-react";
+import {
+  Download,
+  MessageSquareText,
+  Paperclip,
+  Trash2,
+  Upload,
+} from "lucide-react";
 
 import { MainLayout } from "../../../baseComponents/MainLayout";
 import FormSelect from "../../../baseComponents/FormSelect";
@@ -10,6 +16,10 @@ import FormButton from "../../../baseComponents/FormButton";
 import PageTitle from "../../../baseComponents/PageTitle";
 import DataTable from "../../../baseComponents/DataTable";
 import Modal from "../../../baseComponents/Modal";
+import RequestDetailsPanel, {
+  RequestDetailSection,
+  ViewDetailsButton,
+} from "../../../baseComponents/RequestDetailsPanel";
 import { useToast } from "../../../libs/toastContext";
 import { useAuthStore } from "../../../libs/store";
 
@@ -32,6 +42,7 @@ import type { RequestItem } from "../../../services/RequestCrud/types";
 import type { DocumentItem } from "../../../services/DocumentCrud/types";
 import type { DocumentFile } from "../../../services/FileService/GetDocumentAllFiles";
 import { isoToPersian } from "../../../utils/persianToISO";
+import { filterRequestItems } from "./requestShared";
 
 // ─── Types ───────────────────────────────────────────────────────
 type TableFilter = { key: string; value: string };
@@ -66,20 +77,6 @@ interface UserCacheData {
 }
 
 const CHUNK_SIZE = 2 * 1024 * 1024;
-
-// ─── Sub-Components ──────────────────────────────────────────────
-const InfoRow: React.FC<{
-  label: string;
-  value: string | null | undefined;
-  isBold?: boolean;
-}> = ({ label, value, isBold }) => (
-  <div>
-    <span className="text-gray-500 text-xs">{label}:</span>{" "}
-    <span className={`mr-2 text-gray-800 ${isBold ? "font-bold" : ""}`}>
-      {value || "-"}
-    </span>
-  </div>
-);
 
 // ─── Main Component ──────────────────────────────────────────────
 export default function RequestAssetReviewPage() {
@@ -116,11 +113,12 @@ export default function RequestAssetReviewPage() {
       "requests-asset-review",
       pagination.pageIndex,
       pagination.pageSize,
+      filters,
     ],
     queryFn: async () => {
       const response = await getAllRequests({
-        skipCount: pagination.pageIndex * pagination.pageSize,
-        maxResultCount: pagination.pageSize,
+        skipCount: 0,
+        maxResultCount: 5000,
         sorting: "creationTime desc",
       });
       return response;
@@ -129,25 +127,16 @@ export default function RequestAssetReviewPage() {
       const items = ((data?.items ?? []) as RequestItem[]).filter(
         (r) => r.requestStatusCode === 3, // فقط ارزیابی ملک
       );
-      const totalCount = (data as any)?.totalCount ?? items.length;
-
-      const titleFilter =
-        filters
-          .find((f) => f.key === "title")
-          ?.value?.trim()
-          .toLocaleLowerCase("fa") ?? "";
-      const loanFilter =
-        filters.find((f) => f.key === "loanNumber")?.value?.trim() ?? "";
-
-      const filteredItems = items.filter(
-        (r: RequestItem) =>
-          (!titleFilter ||
-            (r.title ?? "").toLocaleLowerCase("fa").includes(titleFilter)) &&
-          (!loanFilter || String(r.loanNumber ?? "").includes(loanFilter)),
+      const filteredItems = filterRequestItems(items, filters);
+      const pageStart = pagination.pageIndex * pagination.pageSize;
+      const listResult = filteredItems.slice(
+        pageStart,
+        pageStart + pagination.pageSize,
       );
+      const totalCount = filteredItems.length;
 
       return {
-        listResult: filteredItems,
+        listResult,
         total: totalCount,
         totalPages: Math.max(1, Math.ceil(totalCount / pagination.pageSize)),
       };
@@ -543,12 +532,7 @@ export default function RequestAssetReviewPage() {
         id: "detail",
         header: "عملیات",
         cell: ({ row }) => (
-          <button
-            onClick={() => handleView(row.original)}
-            className="text-blue-600 hover:text-blue-800 cursor-pointer"
-          >
-            <Eye className="w-4 h-4" />
-          </button>
+          <ViewDetailsButton onClick={() => handleView(row.original)} />
         ),
       },
     ],
@@ -576,6 +560,15 @@ export default function RequestAssetReviewPage() {
           filterFields={[
             { field: "title", label: "عنوان" },
             { field: "loanNumber", label: "شماره پرونده" },
+            {
+              field: "actorUserFullName",
+              label: "نام کاربر اقدام‌کننده",
+            },
+            {
+              field: "creationTime",
+              label: "تاریخ",
+              placeholder: "مثال: 1405-05-11",
+            },
           ]}
           searchMode="onEnter"
           skeletonColumns={6}
@@ -616,180 +609,19 @@ export default function RequestAssetReviewPage() {
         renderContent={() => {
           if (!selectedRequest) return <p>در حال بارگذاری...</p>;
 
-          const histories = selectedRequest.requestHistoryOutputDtos || [];
-          const matchedDept = selectedRequest.departmentOutputDto?.title || "-";
-          const customerDisplay = selectedRequest.customerOutputDto
-            ? `${selectedRequest.customerOutputDto.name} (${selectedRequest.customerOutputDto.cifNumber || selectedRequest.customerId})`
-            : `مشتری شماره ${selectedRequest.customerId || "-"}`;
-
           return (
-            <div className="space-y-4 text-sm max-h-[65vh] overflow-y-auto">
-              {/* اطلاعات درخواست */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h4 className="font-bold text-blue-900 mb-3 text-base border-b border-gray-200 pb-2">
-                  اطلاعات درخواست
-                </h4>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-                  <InfoRow
-                    label="شماره پرونده"
-                    value={selectedRequest.loanNumber}
-                  />
-                  <InfoRow label="عنوان" value={selectedRequest.title} />
-                  <InfoRow
-                    label="شماره مصوبه"
-                    value={selectedRequest.requestCode || "-"}
-                  />
-                  <InfoRow
-                    label="مبلغ (ریال)"
-                    value={Number(selectedRequest.amount).toLocaleString(
-                      "fa-IR",
-                    )}
-                    isBold
-                  />
-                  <InfoRow
-                    label="مرحله"
-                    value={selectedRequest.requestStatusTitle || "-"}
-                  />
-                  <InfoRow
-                    label="تاریخ ثبت"
-                    value={
-                      selectedRequest.creationTime
-                        ? isoToPersian(selectedRequest.creationTime)
-                        : "-"
-                    }
-                  />
-                  <InfoRow label="دپارتمان" value={matchedDept} />
-                  <InfoRow label="درخواست کننده" value={customerDisplay} />
-                </div>
-                {selectedRequest.description && (
-                  <div className="mt-3 pt-3 border-t border-gray-200">
-                    <span className="text-gray-500 text-xs">توضیحات:</span>
-                    <p className="text-gray-700 mt-1">
-                      {selectedRequest.description}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* تاریخچه */}
-              {histories.length > 0 && (
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <h4 className="font-bold text-blue-900 mb-3 text-base border-b border-gray-200 pb-2">
-                    تاریخچه اقدامات{" "}
-                    <span className="text-gray-400 text-xs font-normal mr-2">
-                      ({histories.length} اقدام)
-                    </span>
-                  </h4>
-                  <div className="relative">
-                    <div className="absolute right-4 top-0 bottom-0 w-0.5 bg-blue-200"></div>
-                    <div className="space-y-3">
-                      {histories.map((h: any, i: number) => (
-                        <div
-                          key={h.id}
-                          className="flex items-start gap-3 relative"
-                        >
-                          <div
-                            className={`w-3 h-3 rounded-full mt-1 z-10 flex-shrink-0 ${i === 0 ? "bg-blue-500 ring-2 ring-blue-200" : "bg-gray-300"}`}
-                          ></div>
-                          <div className="flex-1 bg-white rounded-lg p-3 border border-gray-100">
-                            <p className="text-xs text-gray-700">
-                              {h.description}
-                            </p>
-                            <p className="text-xs text-gray-400 mt-1">
-                              {h.creationTime
-                                ? isoToPersian(h.creationTime)
-                                : "-"}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* وثیقه گذاران */}
-              {(selectedRequest.collatralOutputDtos || []).length > 0 && (
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <h4 className="font-bold text-blue-900 mb-3 text-base border-b border-gray-200 pb-2">
-                    وثیقه گذاران{" "}
-                    <span className="text-gray-400 text-xs font-normal mr-2">
-                      ({selectedRequest.collatralOutputDtos.length} نفر)
-                    </span>
-                  </h4>
-                  <div className="space-y-2">
-                    {selectedRequest.collatralOutputDtos.map(
-                      (c: any, i: number) => (
-                        <div
-                          key={c.id}
-                          className="flex items-center justify-between bg-white rounded-lg p-3 border border-gray-100"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center text-green-600 text-xs font-bold">
-                              {i + 1}
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-800">
-                                {c.firstName} {c.lastName}
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                کد ملی: {c.nationalCode}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      ),
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* مدارک پیوست قبلی */}
-              {detailDocs.some(({ files }) => files.length > 0) && (
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <h4 className="font-bold text-blue-900 mb-3 text-base border-b border-gray-200 pb-2">
-                    مدارک پیوست
-                  </h4>
-                  <div className="space-y-1">
-                    {detailDocs.map(({ files }) =>
-                      files.map((f) => (
-                        <div
-                          key={f.id}
-                          className="flex items-center justify-between bg-white rounded-lg p-2.5 border border-gray-100"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded font-mono">
-                              {f.extension}
-                            </span>
-                            <span className="text-sm text-gray-700">
-                              {f.fileName}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-xs text-gray-400">
-                              {(Number(f.fileSize) / 1024).toFixed(1)} KB
-                            </span>
-                            <button
-                              onClick={() =>
-                                downloadFile(f.filePath, f.documentId)
-                              }
-                              className="text-blue-600 hover:text-blue-800 cursor-pointer p-1"
-                            >
-                              <Download className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      )),
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* آپلود فایل ارزیابی ملک */}
-              <div className="border-t pt-3">
-                <h4 className="font-bold text-sm mb-2">
-                  بارگذاری فایل ارزیابی ملک توسط کارشناس
-                </h4>
+            <RequestDetailsPanel
+              request={selectedRequest}
+              documents={detailDocs}
+              getUserData={getUserCacheData}
+              onDownloadFile={(file) =>
+                downloadFile(file.filePath, file.documentId)
+              }
+            >
+              <RequestDetailSection
+                icon={<Upload className="h-4.5 w-4.5" />}
+                title="بارگذاری فایل ارزیابی ملک"
+              >
                 <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                   <div className="w-48">
                     <FormSelect<number>
@@ -825,95 +657,68 @@ export default function RequestAssetReviewPage() {
                     disabled={isUploading || !selectedFile || !docTypeId}
                   />
                 </div>
-              </div>
+              </RequestDetailSection>
 
               {/* جدول فایل‌های آپلود شده */}
               {uploadedFiles.length > 0 && (
-                <div className="border-t pt-3">
-                  <h4 className="font-bold text-sm mb-2">فایل‌های آپلود شده</h4>
-                  <table className="w-full text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-gray-100">
-                        <th className="p-2 border text-right">عنوان فایل</th>
-                        <th className="p-2 border text-right">نوع فایل</th>
-                        <th className="p-2 border text-right">حجم</th>
-                        <th className="p-2 border text-right">بارگذار</th>
-                        <th className="p-2 border text-right">نقش سازمانی</th>
-                        <th className="p-2 border text-right">تاریخ</th>
-                        <th className="p-2 border text-center">عملیات</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {uploadedFiles.map((f) => (
-                        <tr key={f.id} className="border-b">
-                          <td className="p-2 border">{f.fileName}</td>
-                          <td className="p-2 border">{f.fileFormat}</td>
-                          <td className="p-2 border">
-                            {(f.fileSize / 1024).toFixed(1)} KB
-                          </td>
-                          <td className="p-2 border">{f.userName}</td>
-                          <td className="p-2 border">{f.userRole}</td>
-                          <td className="p-2 border">{f.uploadDate}</td>
-                          <td className="p-2 border text-center">
-                            {f.isCompleted && (
-                              <button
-                                onClick={() => downloadFile(f.fileAddress, 0)}
-                                className="text-blue-600 mx-1"
-                              >
-                                <Download className="w-3 h-3" />
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleDeleteFile(f.id)}
-                              className="text-red-600 mx-1"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </td>
+                <RequestDetailSection
+                  icon={<Paperclip className="h-4.5 w-4.5" />}
+                  title="فایل‌های آپلود شده"
+                  count={`${uploadedFiles.length} فایل`}
+                >
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-50">
+                        <tr>
+                          <th className="p-3 text-right">عنوان فایل</th>
+                          <th className="p-3 text-right">نوع فایل</th>
+                          <th className="p-3 text-right">حجم</th>
+                          <th className="p-3 text-right">بارگذار</th>
+                          <th className="p-3 text-right">نقش سازمانی</th>
+                          <th className="p-3 text-right">تاریخ</th>
+                          <th className="p-3 text-center">عملیات</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* توضیحات قبلی */}
-              {(selectedRequest.requestCommentOutputDtos || []).length > 0 && (
-                <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-100">
-                  <h4 className="font-bold text-yellow-800 mb-3 text-base border-b border-yellow-200 pb-2">
-                    توضیحات کارشناس
-                  </h4>
-                  <div className="space-y-2">
-                    {selectedRequest.requestCommentOutputDtos.map((c: any) => {
-                      const userData = getUserCacheData(c.userId || 0);
-                      return (
-                        <div
-                          key={c.id}
-                          className="bg-white rounded-lg p-3 border border-yellow-100"
-                        >
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs text-gray-500">
-                              {userData.name} — {userData.role}
-                            </span>
-                            <span className="text-xs text-gray-400">
-                              {c.creationTime
-                                ? isoToPersian(c.creationTime)
-                                : "-"}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-700">
-                            {c.description}
-                          </p>
-                        </div>
-                      );
-                    })}
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {uploadedFiles.map((f) => (
+                          <tr key={f.id} className="bg-white">
+                            <td className="p-3">{f.fileName}</td>
+                            <td className="p-3">{f.fileFormat}</td>
+                            <td className="p-3">
+                              {(f.fileSize / 1024).toFixed(1)} KB
+                            </td>
+                            <td className="p-3">{f.userName}</td>
+                            <td className="p-3">{f.userRole}</td>
+                            <td className="p-3">{f.uploadDate}</td>
+                            <td className="p-3 text-center">
+                              {f.isCompleted && (
+                                <button
+                                  onClick={() => downloadFile(f.fileAddress, 0)}
+                                  className="mx-1 text-blue-600"
+                                >
+                                  <Download className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleDeleteFile(f.id)}
+                                className="mx-1 text-red-600"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                </div>
+                </RequestDetailSection>
               )}
 
-              {/* افزودن توضیح */}
-              <div className="border-t pt-3">
-                <h4 className="font-bold text-sm mb-2">افزودن توضیح</h4>
+              <RequestDetailSection
+                icon={<MessageSquareText className="h-4.5 w-4.5" />}
+                title="افزودن توضیح"
+                tone="amber"
+              >
                 <FormTextarea
                   id="asset-comment"
                   name="asset-comment"
@@ -923,8 +728,8 @@ export default function RequestAssetReviewPage() {
                   rows={3}
                   dir="rtl"
                 />
-              </div>
-            </div>
+              </RequestDetailSection>
+            </RequestDetailsPanel>
           );
         }}
       />

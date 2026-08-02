@@ -1,5 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import { uploadChunk } from "../../../services/FileService/uploadChunk";
+import type { RequestItem } from "../../../services/RequestCrud/types";
+import { isoToPersian } from "../../../utils/persianToISO";
 
 export const REQUEST_CHUNK_SIZE = 2 * 1024 * 1024;
 
@@ -15,6 +17,56 @@ export interface UploadState {
   lastUploadedChunk: number;
   isPaused: boolean;
   isCompleting: boolean;
+}
+
+export interface RequestTableFilter {
+  key: string;
+  value: string;
+}
+
+function normalizeFilterValue(value: unknown): string {
+  const persianDigits = "۰۱۲۳۴۵۶۷۸۹";
+  const arabicDigits = "٠١٢٣٤٥٦٧٨٩";
+
+  return String(value ?? "")
+    .replace(/[۰-۹]/g, (digit) => String(persianDigits.indexOf(digit)))
+    .replace(/[٠-٩]/g, (digit) => String(arabicDigits.indexOf(digit)))
+    .replace(/\//g, "-")
+    .trim()
+    .toLocaleLowerCase("fa");
+}
+
+export function filterRequestItems(
+  items: RequestItem[],
+  filters: RequestTableFilter[],
+): RequestItem[] {
+  return items.filter((request) =>
+    filters.every(({ key, value }) => {
+      const query = normalizeFilterValue(value);
+      if (!query) return true;
+
+      const fieldValue = (() => {
+        switch (key) {
+          case "title":
+            return request.title;
+          case "loanNumber":
+            return request.loanNumber;
+          case "requestStatusTitle":
+            return request.requestStatusTitle;
+          case "actorUserFullName":
+            return request.actorUserFullName;
+          case "creationTime":
+            return request.creationTime
+              ? `${isoToPersian(request.creationTime)} ${request.creationTime}`
+              : "";
+          default:
+            return "";
+        }
+      })();
+
+      return normalizeFilterValue(fieldValue).includes(query);
+    }),
+  );
 }
 
 interface UploadChunksParams<T extends { id: string; uploadProgress: number }> {
@@ -63,9 +115,7 @@ export async function uploadChunksSequentially<
         );
         setFiles((previous) =>
           previous.map((item) =>
-            item.id === itemId
-              ? { ...item, uploadProgress: overall }
-              : item,
+            item.id === itemId ? { ...item, uploadProgress: overall } : item,
           ),
         );
       });
@@ -76,9 +126,7 @@ export async function uploadChunksSequentially<
           item.id === itemId
             ? {
                 ...item,
-                uploadProgress: Math.round(
-                  ((index + 1) / totalChunks) * 100,
-                ),
+                uploadProgress: Math.round(((index + 1) / totalChunks) * 100),
               }
             : item,
         ),

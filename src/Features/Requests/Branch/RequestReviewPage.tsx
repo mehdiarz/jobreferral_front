@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Eye } from "lucide-react";
+import { MessageSquareText } from "lucide-react";
 
 import { MainLayout } from "../../../baseComponents/MainLayout";
 import FormTextarea from "../../../baseComponents/FormTextarea";
@@ -9,6 +9,10 @@ import FormButton from "../../../baseComponents/FormButton";
 import PageTitle from "../../../baseComponents/PageTitle";
 import DataTable from "../../../baseComponents/DataTable";
 import Modal from "../../../baseComponents/Modal";
+import RequestDetailsPanel, {
+  RequestDetailSection,
+  ViewDetailsButton,
+} from "../../../baseComponents/RequestDetailsPanel";
 import { useToast } from "../../../libs/toastContext";
 import { useAuthStore } from "../../../libs/store";
 
@@ -26,6 +30,7 @@ import type { RequestItem } from "../../../services/RequestCrud/types";
 import type { DocumentItem } from "../../../services/DocumentCrud/types";
 import type { DocumentFile } from "../../../services/FileService/GetDocumentAllFiles";
 import { isoToPersian } from "../../../utils/persianToISO";
+import { filterRequestItems } from "./requestShared";
 
 // ─── Types ───────────────────────────────────────────────────────
 type TableFilter = { key: string; value: string };
@@ -39,20 +44,6 @@ interface UserCacheData {
   name: string;
   role: string;
 }
-
-// ─── Sub-Components ──────────────────────────────────────────────
-const InfoRow: React.FC<{
-  label: string;
-  value: string | null | undefined;
-  isBold?: boolean;
-}> = ({ label, value, isBold }) => (
-  <div>
-    <span className="text-gray-500 text-xs">{label}:</span>{" "}
-    <span className={`mr-2 text-gray-800 ${isBold ? "font-bold" : ""}`}>
-      {value || "-"}
-    </span>
-  </div>
-);
 
 // ─── Main Component ──────────────────────────────────────────────
 export default function RequestReviewPage() {
@@ -77,11 +68,12 @@ export default function RequestReviewPage() {
       "requests-pending-review",
       pagination.pageIndex,
       pagination.pageSize,
+      filters,
     ],
     queryFn: async () => {
       const response = await getAllRequests({
-        skipCount: pagination.pageIndex * pagination.pageSize,
-        maxResultCount: pagination.pageSize,
+        skipCount: 0,
+        maxResultCount: 5000,
         sorting: "creationTime desc",
       });
       return response;
@@ -91,25 +83,16 @@ export default function RequestReviewPage() {
       const items = ((data?.items ?? []) as RequestItem[]).filter(
         (r) => r.requestStatusCode === 1 || r.requestStatusCode === 2,
       );
-      const totalCount = (data as any)?.totalCount ?? items.length;
-
-      const titleFilter =
-        filters
-          .find((f) => f.key === "title")
-          ?.value?.trim()
-          .toLocaleLowerCase("fa") ?? "";
-      const loanFilter =
-        filters.find((f) => f.key === "loanNumber")?.value?.trim() ?? "";
-
-      const filteredItems = items.filter(
-        (r: RequestItem) =>
-          (!titleFilter ||
-            (r.title ?? "").toLocaleLowerCase("fa").includes(titleFilter)) &&
-          (!loanFilter || String(r.loanNumber ?? "").includes(loanFilter)),
+      const filteredItems = filterRequestItems(items, filters);
+      const pageStart = pagination.pageIndex * pagination.pageSize;
+      const listResult = filteredItems.slice(
+        pageStart,
+        pageStart + pagination.pageSize,
       );
+      const totalCount = filteredItems.length;
 
       return {
-        listResult: filteredItems,
+        listResult,
         total: totalCount,
         totalPages: Math.max(1, Math.ceil(totalCount / pagination.pageSize)),
       };
@@ -323,12 +306,7 @@ export default function RequestReviewPage() {
         id: "detail",
         header: "عملیات",
         cell: ({ row }) => (
-          <button
-            onClick={() => handleView(row.original)}
-            className="text-blue-600 hover:text-blue-800 cursor-pointer"
-          >
-            <Eye className="w-4 h-4" />
-          </button>
+          <ViewDetailsButton onClick={() => handleView(row.original)} />
         ),
       },
     ],
@@ -415,6 +393,16 @@ export default function RequestReviewPage() {
           filterFields={[
             { field: "title", label: "عنوان" },
             { field: "loanNumber", label: "شماره پرونده" },
+            { field: "requestStatusTitle", label: "مرحله فرآیند" },
+            {
+              field: "actorUserFullName",
+              label: "نام کاربر اقدام‌کننده",
+            },
+            {
+              field: "creationTime",
+              label: "تاریخ",
+              placeholder: "مثال: 1405-05-11",
+            },
           ]}
           searchMode="onEnter"
           skeletonColumns={6}
@@ -433,220 +421,20 @@ export default function RequestReviewPage() {
         renderContent={() => {
           if (!selectedRequest) return <p>در حال بارگذاری...</p>;
 
-          const histories = selectedRequest.requestHistoryOutputDtos || [];
-          const matchedDept = selectedRequest.departmentOutputDto?.title || "-";
-          const customerDisplay = selectedRequest.customerOutputDto
-            ? `${selectedRequest.customerOutputDto.name} (${selectedRequest.customerOutputDto.cifNumber || selectedRequest.customerId})`
-            : `مشتری شماره ${selectedRequest.customerId || "-"}`;
-
           return (
-            <div className="space-y-4 text-sm max-h-[65vh] overflow-y-auto">
-              {/* اطلاعات درخواست */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h4 className="font-bold text-blue-900 mb-3 text-base border-b border-gray-200 pb-2">
-                  اطلاعات درخواست
-                </h4>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-                  <InfoRow
-                    label="شماره پرونده"
-                    value={selectedRequest.loanNumber}
-                  />
-                  <InfoRow label="عنوان" value={selectedRequest.title} />
-                  <InfoRow
-                    label="شماره مصوبه"
-                    value={selectedRequest.requestCode || "-"}
-                  />
-                  <InfoRow
-                    label="مبلغ (ریال)"
-                    value={Number(selectedRequest.amount).toLocaleString(
-                      "fa-IR",
-                    )}
-                    isBold
-                  />
-                  <InfoRow
-                    label="مرحله"
-                    value={selectedRequest.requestStatusTitle || "-"}
-                  />
-                  <InfoRow
-                    label="تاریخ ثبت"
-                    value={
-                      selectedRequest.creationTime
-                        ? isoToPersian(selectedRequest.creationTime)
-                        : "-"
-                    }
-                  />
-                  <InfoRow label="دپارتمان" value={matchedDept} />
-                  <InfoRow label="درخواست کننده" value={customerDisplay} />
-                </div>
-                {selectedRequest.description && (
-                  <div className="mt-3 pt-3 border-t border-gray-200">
-                    <span className="text-gray-500 text-xs">توضیحات:</span>
-                    <p className="text-gray-700 mt-1">
-                      {selectedRequest.description}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* تاریخچه اقدامات */}
-              {histories.length > 0 && (
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <h4 className="font-bold text-blue-900 mb-3 text-base border-b border-gray-200 pb-2">
-                    تاریخچه اقدامات{" "}
-                    <span className="text-gray-400 text-xs font-normal mr-2">
-                      ({histories.length} اقدام)
-                    </span>
-                  </h4>
-                  <div className="relative">
-                    <div className="absolute right-4 top-0 bottom-0 w-0.5 bg-blue-200"></div>
-                    <div className="space-y-3">
-                      {histories.map((h: any, i: number) => (
-                        <div
-                          key={h.id}
-                          className="flex items-start gap-3 relative"
-                        >
-                          <div
-                            className={`w-3 h-3 rounded-full mt-1 z-10 flex-shrink-0 ${i === 0 ? "bg-blue-500 ring-2 ring-blue-200" : "bg-gray-300"}`}
-                          ></div>
-                          <div className="flex-1 bg-white rounded-lg p-3 border border-gray-100">
-                            <p className="text-xs text-gray-700">
-                              {h.description}
-                            </p>
-                            <p className="text-xs text-gray-400 mt-1">
-                              {h.creationTime
-                                ? isoToPersian(h.creationTime)
-                                : "-"}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* وثیقه گذاران */}
-              {(selectedRequest.collatralOutputDtos || []).length > 0 && (
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <h4 className="font-bold text-blue-900 mb-3 text-base border-b border-gray-200 pb-2">
-                    وثیقه گذاران{" "}
-                    <span className="text-gray-400 text-xs font-normal mr-2">
-                      ({selectedRequest.collatralOutputDtos.length} نفر)
-                    </span>
-                  </h4>
-                  <div className="space-y-2">
-                    {selectedRequest.collatralOutputDtos.map(
-                      (c: any, i: number) => (
-                        <div
-                          key={c.id}
-                          className="flex items-center justify-between bg-white rounded-lg p-3 border border-gray-100"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center text-green-600 text-xs font-bold">
-                              {i + 1}
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-800">
-                                {c.firstName} {c.lastName}
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                کد ملی: {c.nationalCode}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      ),
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* مدارک پیوست */}
-              {detailDocs.some(({ files }) => files.length > 0) && (
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <h4 className="font-bold text-blue-900 mb-3 text-base border-b border-gray-200 pb-2">
-                    مدارک پیوست
-                  </h4>
-                  <div className="space-y-1">
-                    {detailDocs.map(({ files }) =>
-                      files.map((f) => (
-                        <div
-                          key={f.id}
-                          className="flex items-center justify-between bg-white rounded-lg p-2.5 border border-gray-100"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded font-mono">
-                              {f.extension}
-                            </span>
-                            <span className="text-sm text-gray-700">
-                              {f.fileName}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-xs text-gray-400">
-                              {(Number(f.fileSize) / 1024).toFixed(1)} KB
-                            </span>
-                            <button
-                              onClick={() =>
-                                downloadFile(f.filePath, f.documentId)
-                              }
-                              className="text-blue-600 hover:text-blue-800 cursor-pointer p-1"
-                            >
-                              <svg
-                                className="w-4 h-4"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                              >
-                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
-                              </svg>
-                            </button>
-                          </div>
-                        </div>
-                      )),
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* توضیحات قبلی */}
-              {(selectedRequest.requestCommentOutputDtos || []).length > 0 && (
-                <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-100">
-                  <h4 className="font-bold text-yellow-800 mb-3 text-base border-b border-yellow-200 pb-2">
-                    توضیحات کارشناس
-                  </h4>
-                  <div className="space-y-2">
-                    {selectedRequest.requestCommentOutputDtos.map((c: any) => {
-                      const userData = getUserCacheData(c.userId || 0);
-                      return (
-                        <div
-                          key={c.id}
-                          className="bg-white rounded-lg p-3 border border-yellow-100"
-                        >
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs text-gray-500">
-                              {userData.name} — {userData.role}
-                            </span>
-                            <span className="text-xs text-gray-400">
-                              {c.creationTime
-                                ? isoToPersian(c.creationTime)
-                                : "-"}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-700">
-                            {c.description}
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* افزودن توضیح */}
-              <div className="border-t pt-3">
-                <h4 className="font-bold text-sm mb-2">افزودن توضیح</h4>
+            <RequestDetailsPanel
+              request={selectedRequest}
+              documents={detailDocs}
+              getUserData={getUserCacheData}
+              onDownloadFile={(file) =>
+                downloadFile(file.filePath, file.documentId)
+              }
+            >
+              <RequestDetailSection
+                icon={<MessageSquareText className="h-4.5 w-4.5" />}
+                title="افزودن توضیح"
+                tone="amber"
+              >
                 <FormTextarea
                   id="review-comment"
                   name="review-comment"
@@ -656,8 +444,8 @@ export default function RequestReviewPage() {
                   rows={3}
                   dir="rtl"
                 />
-              </div>
-            </div>
+              </RequestDetailSection>
+            </RequestDetailsPanel>
           );
         }}
       />

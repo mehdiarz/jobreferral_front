@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Eye, Pencil, Download, Trash2, Upload } from "lucide-react";
+import { Pencil, Download, Trash2, Upload } from "lucide-react";
 
 import { MainLayout } from "../../../baseComponents/MainLayout";
 import FormInput from "../../../baseComponents/FormInput";
@@ -11,6 +11,9 @@ import FormButton from "../../../baseComponents/FormButton";
 import PageTitle from "../../../baseComponents/PageTitle";
 import DataTable from "../../../baseComponents/DataTable";
 import Modal from "../../../baseComponents/Modal";
+import RequestDetailsPanel, {
+  ViewDetailsButton,
+} from "../../../baseComponents/RequestDetailsPanel";
 import { useToast } from "../../../libs/toastContext";
 import { useAuthStore } from "../../../libs/store";
 
@@ -44,6 +47,7 @@ import { editCollatral } from "../../../services/CollatralCrud/update";
 import { deleteCollatral } from "../../../services/CollatralCrud/delete";
 import {
   extractEntityId,
+  filterRequestItems,
   getErrorMessage,
   REQUEST_CHUNK_SIZE,
   uploadChunksSequentially,
@@ -136,24 +140,10 @@ function isCollateralEmpty(collateral: CollateralFormData): boolean {
 function isCollateralValid(collateral: CollateralFormData): boolean {
   return Boolean(
     collateral.personTypeId &&
-      collateral.collatralTypeId &&
-      collateral.firstName.trim(),
+    collateral.collatralTypeId &&
+    collateral.firstName.trim(),
   );
 }
-
-// ─── Sub-Components ──────────────────────────────────────────────
-const InfoRow: React.FC<{
-  label: string;
-  value: string | null | undefined;
-  isBold?: boolean;
-}> = ({ label, value, isBold }) => (
-  <div>
-    <span className="text-gray-500 text-xs">{label}:</span>{" "}
-    <span className={`mr-2 text-gray-800 ${isBold ? "font-bold" : ""}`}>
-      {value || "-"}
-    </span>
-  </div>
-);
 
 // ─── Main Component ──────────────────────────────────────────────
 export default function RequestViewPage() {
@@ -221,11 +211,19 @@ export default function RequestViewPage() {
   // ─── Queries ───────────────────────────────────────────────────
   // 1. بهینه‌سازی شده: Server-Side Pagination با SkipCount و MaxResultCount
   const requestsQuery = useQuery({
-    queryKey: ["requests-all-view", pagination.pageIndex, pagination.pageSize],
+    queryKey: [
+      "requests-all-view",
+      pagination.pageIndex,
+      pagination.pageSize,
+      filters,
+    ],
     queryFn: async () => {
+      const hasActiveFilter = filters.some((filter) => filter.value.trim());
       const response = await getAllRequests({
-        skipCount: pagination.pageIndex * pagination.pageSize,
-        maxResultCount: pagination.pageSize,
+        skipCount: hasActiveFilter
+          ? 0
+          : pagination.pageIndex * pagination.pageSize,
+        maxResultCount: hasActiveFilter ? 5000 : pagination.pageSize,
         sorting: "creationTime desc",
       });
       return response;
@@ -234,26 +232,18 @@ export default function RequestViewPage() {
       const items = (data?.items ?? []) as RequestItem[];
       const totalCount = data.totalCount ?? items.length;
 
-      // Client-side filtering روی داده‌های صفحه فعلی
-      const titleFilter =
-        filters
-          .find((f) => f.key === "title")
-          ?.value?.trim()
-          .toLocaleLowerCase("fa") ?? "";
-      const loanFilter =
-        filters.find((f) => f.key === "loanNumber")?.value?.trim() ?? "";
-
-      const filteredItems = items.filter(
-        (r: RequestItem) =>
-          (!titleFilter ||
-            (r.title ?? "").toLocaleLowerCase("fa").includes(titleFilter)) &&
-          (!loanFilter || String(r.loanNumber ?? "").includes(loanFilter)),
-      );
+      const filteredItems = filterRequestItems(items, filters);
+      const hasActiveFilter = filters.some((filter) => filter.value.trim());
+      const pageStart = pagination.pageIndex * pagination.pageSize;
+      const listResult = hasActiveFilter
+        ? filteredItems.slice(pageStart, pageStart + pagination.pageSize)
+        : filteredItems;
+      const filteredTotal = hasActiveFilter ? filteredItems.length : totalCount;
 
       return {
-        listResult: filteredItems,
-        total: totalCount,
-        totalPages: Math.max(1, Math.ceil(totalCount / pagination.pageSize)),
+        listResult,
+        total: filteredTotal,
+        totalPages: Math.max(1, Math.ceil(filteredTotal / pagination.pageSize)),
       };
     },
     placeholderData: (previousData) => previousData,
@@ -710,9 +700,9 @@ export default function RequestViewPage() {
         fileSize: file.size,
         chunkSize: REQUEST_CHUNK_SIZE,
       });
-      const uploadId = (
-        startRes as typeof startRes & { result?: { uploadId?: string } }
-      ).result?.uploadId ?? startRes.uploadId;
+      const uploadId =
+        (startRes as typeof startRes & { result?: { uploadId?: string } })
+          .result?.uploadId ?? startRes.uploadId;
       if (!uploadId) {
         throw new Error("شناسه آپلود از سرور دریافت نشد");
       }
@@ -874,7 +864,9 @@ export default function RequestViewPage() {
     const activeCollaterals = editCollaterals.filter(
       (collateral) => !isCollateralEmpty(collateral),
     );
-    if (activeCollaterals.some((collateral) => !isCollateralValid(collateral))) {
+    if (
+      activeCollaterals.some((collateral) => !isCollateralValid(collateral))
+    ) {
       showToast("اطلاعات وثیقه‌گذار را کامل وارد کنید", "error");
       return;
     }
@@ -1033,12 +1025,7 @@ export default function RequestViewPage() {
         id: "detail",
         header: "جزئیات",
         cell: ({ row }) => (
-          <button
-            onClick={() => handleView(row.original)}
-            className="text-blue-600 hover:text-blue-800 cursor-pointer"
-          >
-            <Eye className="w-4 h-4" />
-          </button>
+          <ViewDetailsButton onClick={() => handleView(row.original)} />
         ),
       },
       {
@@ -1089,6 +1076,16 @@ export default function RequestViewPage() {
           filterFields={[
             { field: "title", label: "عنوان" },
             { field: "loanNumber", label: "شماره پرونده" },
+            { field: "requestStatusTitle", label: "مرحله فرآیند" },
+            {
+              field: "actorUserFullName",
+              label: "نام کاربر اقدام‌کننده",
+            },
+            {
+              field: "creationTime",
+              label: "تاریخ",
+              placeholder: "مثال: 1405-05-11",
+            },
           ]}
           searchMode="onEnter"
           skeletonColumns={7}
@@ -1105,252 +1102,22 @@ export default function RequestViewPage() {
         overlayLock={false}
         renderContent={() => {
           if (!selectedRequest) return <p>در حال بارگذاری...</p>;
-
-          const histories = selectedRequest.requestHistoryOutputDtos || [];
-
-          const createHistory = histories.find((history) =>
-            history.description?.includes("ایجاد گردید"),
-          );
-
-          const matchedDept = selectedRequest.departmentOutputDto?.title || "-";
-
-          const customerDisplay = selectedRequest.customerOutputDto
-            ? `${selectedRequest.customerOutputDto.name} (${selectedRequest.customerOutputDto.cifNumber || selectedRequest.customerId})`
-            : `مشتری شماره ${selectedRequest.customerId || "-"}`;
-
           return (
-            <div className="space-y-4 text-sm max-h-[65vh] overflow-y-auto">
-              {/* اطلاعات درخواست */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h4 className="font-bold text-blue-900 mb-3 text-base border-b border-gray-200 pb-2">
-                  اطلاعات درخواست
-                </h4>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-                  <InfoRow
-                    label="شماره پرونده"
-                    value={selectedRequest.loanNumber}
-                  />
-                  <InfoRow label="عنوان" value={selectedRequest.title} />
-                  <InfoRow
-                    label="شماره مصوبه"
-                    value={selectedRequest.requestCode || "-"}
-                  />
-                  <InfoRow
-                    label="مبلغ (ریال)"
-                    value={Number(selectedRequest.amount).toLocaleString(
-                      "fa-IR",
-                    )}
-                    isBold
-                  />
-                  <InfoRow
-                    label="مرحله"
-                    value={selectedRequest.requestStatusTitle || "-"}
-                  />
-                  <InfoRow
-                    label="تاریخ ثبت"
-                    value={
-                      selectedRequest.creationTime
-                        ? isoToPersian(selectedRequest.creationTime)
-                        : "-"
-                    }
-                  />
-                  <InfoRow label="دپارتمان" value={matchedDept} />
-                  <InfoRow label="درخواست کننده" value={customerDisplay} />
-                </div>
-                {selectedRequest.description && (
-                  <div className="mt-3 pt-3 border-t border-gray-200">
-                    <span className="text-gray-500 text-xs">توضیحات:</span>
-                    <p className="text-gray-700 mt-1">
-                      {selectedRequest.description}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* کاربر ایجاد کننده */}
-              {createHistory && (
-                <div className="bg-blue-50 rounded-lg p-4 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                    <span className="text-blue-600 text-sm font-bold">
-                      {(createHistory.description?.match(
-                        /توسط کاربر (.+?) با کد/,
-                      ) || ["", "?"])[1]?.charAt(0) || "?"}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-800 text-sm">
-                      {(createHistory.description?.match(
-                        /توسط کاربر (.+?) با کد/,
-                      ) || ["", "-"])[1] || "-"}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {getUserCacheData(createHistory.reviewerUserId ?? 0).role}
-                      {createHistory.creationTime
-                        ? isoToPersian(createHistory.creationTime)
-                        : "-"}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* تاریخچه اقدامات */}
-              {histories.length > 0 && (
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <h4 className="font-bold text-blue-900 mb-3 text-base border-b border-gray-200 pb-2">
-                    تاریخچه اقدامات{" "}
-                    <span className="text-gray-400 text-xs font-normal mr-2">
-                      ({histories.length} اقدام)
-                    </span>
-                  </h4>
-                  <div className="relative">
-                    <div className="absolute right-4 top-0 bottom-0 w-0.5 bg-blue-200"></div>
-                    <div className="space-y-3">
-                      {histories.map((history, index) => (
-                        <div
-                          key={history.id}
-                          className="flex items-start gap-3 relative"
-                        >
-                          <div
-                            className={`w-3 h-3 rounded-full mt-1 z-10 flex-shrink-0 ${
-                              index === 0
-                                ? "bg-blue-500 ring-2 ring-blue-200"
-                                : "bg-gray-300"
-                            }`}
-                          ></div>
-                          <div className="flex-1 bg-white rounded-lg p-3 border border-gray-100">
-                            <p className="text-xs text-gray-700">
-                              {history.description}
-                            </p>
-                            <p className="text-xs text-gray-400 mt-1">
-                              {history.creationTime
-                                ? isoToPersian(history.creationTime)
-                                : "-"}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* وثیقه گذاران */}
-              {detailCollaterals.length > 0 && (
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <h4 className="font-bold text-blue-900 mb-3 text-base border-b border-gray-200 pb-2">
-                    وثیقه گذاران{" "}
-                    <span className="text-gray-400 text-xs font-normal mr-2">
-                      ({detailCollaterals.length} نفر)
-                    </span>
-                  </h4>
-                  <div className="space-y-2">
-                    {detailCollaterals.map((c, i) => (
-                      <div
-                        key={c.id}
-                        className="flex items-center justify-between bg-white rounded-lg p-3 border border-gray-100"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center text-green-600 text-xs font-bold">
-                            {i + 1}
-                          </div>
-                          <div>
-                            <p className="font-medium text-gray-800">
-                              {c.firstName} {c.lastName}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              کد ملی: {c.nationalCode}
-                            </p>
-                          </div>
-                        </div>
-                        <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">
-                          {persTypeOpts.find(
-                            (o) => String(o.id) === String(c.personTypeId),
-                          )?.title || "—"}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* مدارک پیوست */}
-              {detailDocs.some(({ files }) => files.length > 0) && (
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <h4 className="font-bold text-blue-900 mb-3 text-base border-b border-gray-200 pb-2">
-                    مدارک پیوست
-                  </h4>
-                  <div className="space-y-1">
-                    {detailDocs.map(({ files }) =>
-                      files.map((f) => (
-                        <div
-                          key={f.id}
-                          className="flex items-center justify-between bg-white rounded-lg p-2.5 border border-gray-100"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded font-mono">
-                              {f.extension}
-                            </span>
-                            <span className="text-sm text-gray-700">
-                              {f.fileName}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-xs text-gray-400">
-                              {(Number(f.fileSize) / 1024).toFixed(1)} KB
-                            </span>
-                            <button
-                              onClick={() =>
-                                downloadFile(f.filePath, f.documentId)
-                              }
-                              className="text-blue-600 hover:text-blue-800 cursor-pointer p-1"
-                            >
-                              <Download className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      )),
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* توضیحات کارشناس */}
-              {detailComments.length > 0 && (
-                <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-100">
-                  <h4 className="font-bold text-yellow-800 mb-3 text-base border-b border-yellow-200 pb-2">
-                    توضیحات کارشناس{" "}
-                    <span className="text-yellow-600 text-xs font-normal mr-2">
-                      ({detailComments.length} مورد)
-                    </span>
-                  </h4>
-                  <div className="space-y-2">
-                    {detailComments.map((c) => {
-                      const userData = getUserCacheData(c.userId || 0);
-                      return (
-                        <div
-                          key={c.id}
-                          className="bg-white rounded-lg p-3 border border-yellow-100"
-                        >
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs text-gray-500">
-                              {userData.name} — {userData.role}
-                            </span>
-                            <span className="text-xs text-gray-400">
-                              {c.creationTime
-                                ? isoToPersian(c.creationTime)
-                                : "-"}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-700">
-                            {c.description}
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
+            <RequestDetailsPanel
+              request={selectedRequest}
+              documents={detailDocs}
+              comments={detailComments}
+              collaterals={detailCollaterals}
+              getUserData={getUserCacheData}
+              getPersonTypeTitle={(personTypeId) =>
+                persTypeOpts.find(
+                  (option) => String(option.id) === String(personTypeId),
+                )?.title || "—"
+              }
+              onDownloadFile={(file) =>
+                downloadFile(file.filePath, file.documentId)
+              }
+            />
           );
         }}
         footerButtons={
@@ -1473,9 +1240,7 @@ export default function RequestViewPage() {
                 />
                 <button
                   onClick={handleEditFindCustomer}
-                  disabled={
-                    !editCustomerCif.trim() || isEditSearchingCustomer
-                  }
+                  disabled={!editCustomerCif.trim() || isEditSearchingCustomer}
                   className="absolute bottom-2 left-2 rounded-md p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <svg
