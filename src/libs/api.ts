@@ -47,7 +47,12 @@ export class ApiClient {
       throw new Error(errorMessage);
     }
 
-    return response.json();
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    const responseText = await response.text();
+    return responseText ? (JSON.parse(responseText) as T) : (undefined as T);
   }
 }
 
@@ -81,7 +86,12 @@ export class LocalhostClient {
         `خطا در برقراری ارتباط با سرور (${response.status})`;
       throw new Error(errorMessage);
     }
-    return response.json();
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    const responseText = await response.text();
+    return responseText ? (JSON.parse(responseText) as T) : (undefined as T);
   }
 }
 
@@ -97,11 +107,11 @@ export const queryKeys = {
     all: ["menu"] as const,
   },
   reports: {
-    all: (params?: any) => ["reports", params] as const,
+    all: (params?: unknown) => ["reports", params] as const,
     categories: ["reports", "categories"] as const,
   },
   cards: {
-    all: (params?: any) => ["cards", params] as const,
+    all: (params?: unknown) => ["cards", params] as const,
   },
   roles: {
     all: ["roles", "all"] as const,

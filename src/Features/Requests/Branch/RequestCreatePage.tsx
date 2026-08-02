@@ -1,5 +1,4 @@
 import { useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Plus, Trash2, Upload } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 
@@ -17,25 +16,23 @@ import { useToast } from "../../../libs/toastContext";
 import { useAuthStore } from "../../../libs/store";
 
 import { createRequest } from "../../../services/RequestCrud/create";
-import { getAllRequestTypes } from "../../../services/RequestTypeCrud/getAll";
-import { getAllDepartments } from "../../../services/DepartmentCrud/getAll";
-import { getAllPersonalTypes } from "../../../services/PersonalTypeCrud/getAll";
-import { getAllCollatralTypes } from "../../../services/CollatralTypeCrud/getAll";
-import { getAllDocumentTypes } from "../../../services/DocumentTypeCrud/getAll";
 import { createCollatral } from "../../../services/CollatralCrud/create";
 import { startUpload } from "../../../services/FileService/start";
-import { uploadChunk } from "../../../services/FileService/uploadChunk";
-import type { RequestTypeItem } from "../../../services/RequestTypeCrud/types";
-import type { DepartmentItem } from "../../../services/DepartmentCrud/types";
-import type { PersonalTypeItem } from "../../../services/PersonalTypeCrud/types";
-import type { CollatralTypeItem } from "../../../services/CollatralTypeCrud/types";
 import type { DocumentTypeItem } from "../../../services/DocumentTypeCrud/types";
 import { isoToPersian } from "../../../utils/persianToISO";
-import { createDocument } from "../../../services/DocumentCrud/create.ts";
-import { completeBatchUpload } from "../../../services/FileService/completeBatch.ts";
+import { createDocument } from "../../../services/DocumentCrud/create";
+import { completeBatchUpload } from "../../../services/FileService/completeBatch";
 import { findCustomer } from "../../../services/CustomerCrud/find";
 import type { CustomerItem } from "../../../services/CustomerCrud/types";
 import { createRequestComment } from "../../../services/RequestCommentCrud/create";
+import {
+  extractEntityId,
+  getErrorMessage,
+  REQUEST_CHUNK_SIZE,
+  uploadChunksSequentially,
+  type UploadState,
+} from "./requestShared";
+import { useRequestReferenceData } from "./useRequestReferenceData";
 
 // ─── Types ───
 type CollateralForm = {
@@ -96,26 +93,12 @@ const emptyRequest: RequestForm = {
   departmentId: null,
   description: "",
 };
-const CHUNK_SIZE = 2 * 1024 * 1024;
-
 export default function RequestCreatePage() {
   const { showToast } = useToast();
   const { user, fullName } = useAuthStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cancelRef = useRef<Set<string>>(new Set());
-  const uploadStateRef = useRef<
-    Map<
-      string,
-      {
-        file: File;
-        uploadId: string;
-        totalChunks: number;
-        lastUploadedChunk: number;
-        isPaused: boolean;
-        isCompleting: boolean;
-      }
-    >
-  >(new Map());
+  const uploadStateRef = useRef<Map<string, UploadState>>(new Map());
   const today = isoToPersian(new Date().toISOString());
   const now = new Date().toLocaleTimeString("fa-IR");
 
@@ -147,74 +130,15 @@ export default function RequestCreatePage() {
   const userName = fullName || user?.username || "";
   const branchName = user?.branchName || "";
 
-  // ─── Queries ───
-  const { data: requestTypes = [] } = useQuery({
-    queryKey: ["request-types-all"],
-    queryFn: () => getAllRequestTypes({ maxResultCount: 1000 }),
-    select: (d) => (d as any)?.items ?? (d as any)?.result?.items ?? [],
-  });
-  const { data: departments = [] } = useQuery({
-    queryKey: ["departments-all"],
-    queryFn: () => getAllDepartments({ maxResultCount: 1000 }),
-    select: (d) => d?.items ?? [],
-  });
-  const { data: personalTypes = [] } = useQuery({
-    queryKey: ["personal-types-all"],
-    queryFn: () => getAllPersonalTypes({ maxResultCount: 1000 }),
-    select: (d) => d?.items ?? [],
-  });
-  const { data: collateralTypes = [] } = useQuery({
-    queryKey: ["collateral-types-all"],
-    queryFn: () => getAllCollatralTypes({ maxResultCount: 1000 }),
-    select: (d) => d?.items ?? [],
-  });
-  const { data: documentTypes = [] } = useQuery({
-    queryKey: ["document-types-all"],
-    queryFn: () => getAllDocumentTypes({ maxResultCount: 1000 }),
-    select: (d) => d?.items ?? [],
-  });
-
-  // ─── Options ───
-  const requestTypeOptions = useMemo(
-    () =>
-      requestTypes.map((i: RequestTypeItem) => ({
-        id: i.id,
-        title: i.title ?? "",
-      })),
-    [requestTypes],
-  );
-  const departmentOptions = useMemo(
-    () =>
-      departments.map((i: DepartmentItem) => ({
-        id: i.id,
-        title: i.title ?? "",
-      })),
-    [departments],
-  );
-  const personalTypeOptions = useMemo(
-    () =>
-      personalTypes.map((i: PersonalTypeItem) => ({
-        id: i.id,
-        title: i.title ?? "",
-      })),
-    [personalTypes],
-  );
-  const collateralTypeOptions = useMemo(
-    () =>
-      collateralTypes.map((i: CollatralTypeItem) => ({
-        id: i.id,
-        title: i.title ?? "",
-      })),
-    [collateralTypes],
-  );
-  const documentTypeOptions = useMemo(
-    () =>
-      documentTypes.map((i: DocumentTypeItem) => ({
-        id: i.id,
-        title: i.title ?? "",
-      })),
-    [documentTypes],
-  );
+  const {
+    personalTypes,
+    documentTypes,
+    requestTypeOptions,
+    departmentOptions,
+    personalTypeOptions,
+    collateralTypeOptions,
+    documentTypeOptions,
+  } = useRequestReferenceData();
 
   // ─── File Upload with Resume ───
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -239,7 +163,12 @@ export default function RequestCreatePage() {
     const docType = documentTypes.find(
       (d: DocumentTypeItem) => d.id === selectedDocTypeId,
     );
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    if (file.size === 0) {
+      showToast("فایل انتخاب‌شده خالی است", "error");
+      return;
+    }
+
+    const totalChunks = Math.ceil(file.size / REQUEST_CHUNK_SIZE);
 
     const newFile: UploadedFile = {
       id: docId,
@@ -266,14 +195,17 @@ export default function RequestCreatePage() {
 
     try {
       // Start
-      const startRes: any = await startUpload({
+      const startRes = await startUpload({
         fileName: file.name,
         fileSize: file.size,
-        chunkSize: CHUNK_SIZE,
+        chunkSize: REQUEST_CHUNK_SIZE,
       });
-      const uploadId = startRes?.result?.uploadId || startRes?.uploadId;
-
-      console.log("🆕 New uploadId:", uploadId);
+      const uploadId = (
+        startRes as typeof startRes & { result?: { uploadId?: string } }
+      ).result?.uploadId ?? startRes.uploadId;
+      if (!uploadId) {
+        throw new Error("شناسه آپلود از سرور دریافت نشد");
+      }
 
       // Save state for resume
       uploadStateRef.current.set(docId, {
@@ -289,7 +221,16 @@ export default function RequestCreatePage() {
       );
 
       // Upload chunks
-      await uploadChunksInBatches(docId, file, uploadId, totalChunks, 0);
+      await uploadChunksSequentially({
+        itemId: docId,
+        file,
+        uploadId,
+        totalChunks,
+        startIndex: 0,
+        cancelRef,
+        uploadStateRef,
+        setFiles: setUploadedFiles,
+      });
 
       // Completing
       // setUploadedFiles((prev) =>
@@ -325,15 +266,16 @@ export default function RequestCreatePage() {
       );
       uploadStateRef.current.delete(docId);
       showToast("فایل با موفقیت آپلود شد", "success");
-    } catch (err: any) {
-      if (err.message === "آپلود لغو شد") {
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      if (message === "آپلود لغو شد") {
         // کاربر دستی pause کرده - فایل بمونه
       } else {
         // خطای شبکه یا سرور - فایل بمونه توی حالت paused
         setUploadedFiles((prev) =>
           prev.map((f) => (f.id === docId ? { ...f, isUploading: false } : f)),
         );
-        showToast(`خطا: ${err.message}. می‌توانید ادامه دهید.`, "warning");
+        showToast(`خطا: ${message}. می‌توانید ادامه دهید.`, "warning");
       }
     } finally {
       setIsUploading(false);
@@ -363,8 +305,8 @@ export default function RequestCreatePage() {
         setFoundCustomers(customers);
         setIsCustomerModalOpen(true);
       }
-    } catch (err: any) {
-      showToast(err?.message || "خطا در استعلام", "error");
+    } catch (error: unknown) {
+      showToast(getErrorMessage(error, "خطا در استعلام"), "error");
     } finally {
       setIsSearchingCustomer(false);
     }
@@ -378,64 +320,6 @@ export default function RequestCreatePage() {
     });
     setIsCustomerModalOpen(false);
     showToast("مشتری انتخاب شد", "success");
-  };
-
-  const uploadChunksInBatches = async (
-    docId: string,
-    file: File,
-    uploadId: string,
-    totalChunks: number,
-    startIndex: number,
-  ) => {
-    for (let i = startIndex; i < totalChunks; i++) {
-      if (cancelRef.current.has(docId)) {
-        cancelRef.current.delete(docId);
-        throw new Error("آپلود لغو شد");
-      }
-
-      const state = uploadStateRef.current.get(docId);
-      if (state?.isPaused) {
-        state.lastUploadedChunk = i - 1;
-        throw new Error("آپلود متوقف شد");
-      }
-
-      const start = i * CHUNK_SIZE;
-      const end = Math.min(start + CHUNK_SIZE, file.size);
-      const chunk = file.slice(start, end);
-
-      try {
-        await uploadChunk(uploadId, i, chunk, file.name, (chunkPercent) => {
-          const overall = Math.round(
-            ((i + chunkPercent / 100) / totalChunks) * 100,
-          );
-          setUploadedFiles((prev) =>
-            prev.map((f) =>
-              f.id === docId ? { ...f, uploadProgress: overall } : f,
-            ),
-          );
-        });
-
-        // Update state
-        if (state) state.lastUploadedChunk = i;
-        setUploadedFiles((prev) =>
-          prev.map((f) =>
-            f.id === docId
-              ? {
-                  ...f,
-                  uploadProgress: Math.round(((i + 1) / totalChunks) * 100),
-                }
-              : f,
-          ),
-        );
-      } catch (chunkErr: any) {
-        // خطا توی آپلود chunk - متوقف کن و state رو ذخیره کن
-        if (state) {
-          state.lastUploadedChunk = i - 1;
-          state.isPaused = true;
-        }
-        throw new Error(`خطا در آپلود: ${chunkErr.message}`);
-      }
-    }
   };
 
   const handleResumeUpload = async (file: UploadedFile) => {
@@ -454,13 +338,16 @@ export default function RequestCreatePage() {
     );
 
     try {
-      await uploadChunksInBatches(
-        file.id,
-        state.file,
-        state.uploadId,
-        state.totalChunks,
+      await uploadChunksSequentially({
+        itemId: file.id,
+        file: state.file,
+        uploadId: state.uploadId,
+        totalChunks: state.totalChunks,
         startIndex,
-      );
+        cancelRef,
+        uploadStateRef,
+        setFiles: setUploadedFiles,
+      });
 
       // Completing
       // setUploadedFiles((prev) =>
@@ -494,11 +381,14 @@ export default function RequestCreatePage() {
       );
       uploadStateRef.current.delete(file.id);
       showToast("فایل با موفقیت آپلود شد", "success");
-    } catch (err: any) {
+    } catch (error: unknown) {
       setUploadedFiles((prev) =>
         prev.map((f) => (f.id === file.id ? { ...f, isUploading: false } : f)),
       );
-      showToast(`خطا: ${err.message}. می‌توانید ادامه دهید.`, "warning");
+      showToast(
+        `خطا: ${getErrorMessage(error)}. می‌توانید ادامه دهید.`,
+        "warning",
+      );
     }
   };
 
@@ -530,14 +420,18 @@ export default function RequestCreatePage() {
     if (collaterals.length > 1)
       setCollaterals((p) => p.filter((_, idx) => idx !== i));
   };
-  const updateCollateral = (i: number, f: keyof CollateralForm, v: any) =>
+  const updateCollateral = (
+    i: number,
+    f: keyof CollateralForm,
+    v: CollateralForm[keyof CollateralForm],
+  ) =>
     setCollaterals((p) =>
       p.map((c, idx) => (idx === i ? { ...c, [f]: v } : c)),
     );
 
   // ─── Submit ───
   const handleSubmit = async () => {
-    if (!requestForm.loanNumber) {
+    if (!requestForm.loanNumber.trim()) {
       showToast("شماره پرونده الزامی است", "error");
       return;
     }
@@ -545,12 +439,25 @@ export default function RequestCreatePage() {
       showToast("نوع درخواست الزامی است", "error");
       return;
     }
-    if (!requestForm.title) {
+    if (!requestForm.title.trim()) {
       showToast("عنوان الزامی است", "error");
       return;
     }
-    if (!requestForm.amount) {
+    const amount = Number(requestForm.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
       showToast("مبلغ الزامی است", "error");
+      return;
+    }
+    if (!requestForm.departmentId) {
+      showToast("دپارتمان الزامی است", "error");
+      return;
+    }
+    if (!requestForm.personalTypeId) {
+      showToast("نوع شخص الزامی است", "error");
+      return;
+    }
+    if (!customerId) {
+      showToast("لطفاً ابتدا مشتری را استعلام و انتخاب کنید", "error");
       return;
     }
 
@@ -558,20 +465,20 @@ export default function RequestCreatePage() {
     try {
       const body = {
         requestTypeId: requestForm.requestTypeId!,
-        departmentId: requestForm.departmentId || 0,
-        customerId: customerId || 0,
-        title: requestForm.title,
+        departmentId: requestForm.departmentId,
+        customerId,
+        title: requestForm.title.trim(),
         requestCode: requestForm.requestCode || "",
-        loanNumber: requestForm.loanNumber,
-        amount: parseFloat(requestForm.amount),
+        loanNumber: requestForm.loanNumber.trim(),
+        amount,
         description: requestForm.description || "",
-        personalTypeId: requestForm.personalTypeId || 0,
+        personalTypeId: requestForm.personalTypeId,
         // currentApprovalStepId: 0,
         // requestStatusCode: 0,
       };
       // 1. Create Request
-      const requestRes: any = await createRequest(body);
-      const requestId = requestRes?.result?.id || requestRes?.id;
+      const requestRes = await createRequest(body);
+      const requestId = extractEntityId(requestRes, "درخواست");
 
       // 1.5 Save expert comment (اگه نوشته باشه)
       if (expertComment.trim()) {
@@ -611,12 +518,11 @@ export default function RequestCreatePage() {
 
       for (const [docTypeId, files] of filesByType) {
         // Create document
-        const docRes: any = await createDocument({
+        const docRes = await createDocument({
           documentTypeId: docTypeId,
           requestId,
         });
-        const documentId = docRes?.result?.id || docRes?.id;
-        console.log(`📄 Document created (typeId=${docTypeId}):`, documentId);
+        const documentId = extractEntityId(docRes, "سند");
 
         // Attach all files to this document
         for (const file of files) {
@@ -628,9 +534,7 @@ export default function RequestCreatePage() {
 
       // 5. Complete all files in ONE request
       if (batchItems.length > 0) {
-        console.log("📦 Sending CompleteBatch:", batchItems);
         await completeBatchUpload({ items: batchItems });
-        console.log("✅ CompleteBatch done");
       }
 
       showToast("درخواست با موفقیت ثبت شد", "success");
@@ -643,16 +547,15 @@ export default function RequestCreatePage() {
       setCustomerId(null);
       setCustomerInfo(null);
       setExpertComment("");
-    } catch (err: any) {
-      showToast(err?.message || "خطا", "error");
+    } catch (error: unknown) {
+      showToast(getErrorMessage(error, "خطا"), "error");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   // ─── Columns ───
-  const fileColumns = useMemo<ColumnDef<UploadedFile, any>[]>(
-    () => [
+  const fileColumns: ColumnDef<UploadedFile, unknown>[] = [
       {
         id: "documentTypeTitle",
         header: "نوع مدرک",
@@ -797,12 +700,9 @@ export default function RequestCreatePage() {
           </div>
         ),
       },
-    ],
-    [],
-  );
+  ];
 
-  const customerColumns = useMemo<ColumnDef<CustomerItem, any>[]>(
-    () => [
+  const customerColumns: ColumnDef<CustomerItem, unknown>[] = [
       {
         id: "cifNumber",
         header: "شماره مشتری",
@@ -821,7 +721,7 @@ export default function RequestCreatePage() {
         accessorKey: "personalTypeId",
         cell: ({ row }) => {
           const typeId = row.original.personalTypeId;
-          const type = personalTypes.find((t: any) => t.id === typeId);
+          const type = personalTypes.find((item) => item.id === typeId);
           return type?.title || "-";
         },
       },
@@ -837,9 +737,7 @@ export default function RequestCreatePage() {
           />
         ),
       },
-    ],
-    [personalTypes],
-  );
+  ];
 
   const filesQueryResult = useMemo(
     () => ({
@@ -851,23 +749,6 @@ export default function RequestCreatePage() {
       isLoading: false,
       isError: false,
       isFetching: false,
-      isSuccess: true,
-      isPending: false,
-      isLoadingError: false,
-      isRefetchError: false,
-      dataUpdatedAt: 0,
-      errorUpdatedAt: 0,
-      failureCount: 0,
-      failureReason: null,
-      error: null,
-      status: "success" as const,
-      fetchStatus: "idle" as const,
-      refetch: () => {},
-      promise: Promise.resolve({
-        listResult: uploadedFiles,
-        total: uploadedFiles.length,
-        totalPages: 1,
-      }),
     }),
     [uploadedFiles],
   );
@@ -882,23 +763,6 @@ export default function RequestCreatePage() {
       isLoading: false,
       isError: false,
       isFetching: false,
-      isSuccess: true,
-      isPending: false,
-      isLoadingError: false,
-      isRefetchError: false,
-      dataUpdatedAt: 0,
-      errorUpdatedAt: 0,
-      failureCount: 0,
-      failureReason: null,
-      error: null,
-      status: "success" as const,
-      fetchStatus: "idle" as const,
-      refetch: () => {},
-      promise: Promise.resolve({
-        listResult: foundCustomers,
-        total: foundCustomers.length,
-        totalPages: 1,
-      }),
     }),
     [foundCustomers],
   );
@@ -1288,7 +1152,7 @@ export default function RequestCreatePage() {
         {uploadedFiles.length > 0 && (
           <div className="mt-4">
             <DataTable<UploadedFile>
-              query={filesQueryResult as any}
+              query={filesQueryResult}
               columns={fileColumns}
               pagination={{ pageIndex: 0, pageSize: 10 }}
               onPaginationChange={() => {}}
@@ -1367,7 +1231,7 @@ export default function RequestCreatePage() {
               {requestForm.requesterName}" یافت شد. لطفاً یکی را انتخاب کنید:
             </p>
             <DataTable<CustomerItem>
-              query={customersQueryResult as any}
+              query={customersQueryResult}
               columns={customerColumns}
               pagination={{ pageIndex: 0, pageSize: 10 }}
               onPaginationChange={() => {}}

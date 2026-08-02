@@ -7,7 +7,6 @@ import {
   type PaginationState,
   type Updater,
 } from "@tanstack/react-table";
-import type { UseQueryResult } from "@tanstack/react-query";
 import { useMemo, useCallback, useState, useEffect } from "react";
 import type { SortingState } from "@tanstack/react-table";
 import TableLoading, { TableLoadingOverlay } from "./TableLoading";
@@ -33,15 +32,23 @@ interface FilterField {
   options?: Array<{ value: string; label: string }>;
 }
 
-interface QueryData {
+export interface DataTableQueryData {
   listResult?: unknown[];
   total?: number;
   totalPages?: number;
 }
 
+export interface DataTableQuery {
+  data?: DataTableQueryData;
+  isLoading: boolean;
+  isError: boolean;
+  isFetching: boolean;
+  refetch?: () => unknown;
+}
+
 interface DataTableProps<T> {
   // Data and query configuration
-  query: UseQueryResult<QueryData, Error>;
+  query: DataTableQuery;
 
   // State management callbacks
   onSortingChange?: (sorting: SortingState) => void;
@@ -54,7 +61,7 @@ interface DataTableProps<T> {
   filters: Array<{ key: string; value: string }>;
 
   // Table configuration
-  columns: ColumnDef<T, string | number | boolean | null | undefined>[];
+  columns: ColumnDef<T, unknown>[];
   filterFields: FilterField[];
 
   // NEW: Search mode - "instant" (default) or "onEnter"
@@ -91,19 +98,20 @@ export default function DataTable<T>({
 
   const [localSorting, setLocalSorting] = useState<SortingState>([]);
 
-  const rowNumberColumn: ColumnDef<
-    T,
-    string | number | boolean | null | undefined
-  > = {
-    id: "rowNumber",
-    header: "ردیف",
-    cell: ({ row, table }) => {
-      const { pageIndex, pageSize } = table.getState().pagination;
-      return pageIndex * pageSize + row.index + 1;
-    },
-  };
-
-  const allColumns = useMemo(() => [rowNumberColumn, ...columns], [columns]);
+  const allColumns = useMemo<ColumnDef<T, unknown>[]>(
+    () => [
+      {
+        id: "rowNumber",
+        header: "ردیف",
+        cell: ({ row, table }) => {
+          const { pageIndex, pageSize } = table.getState().pagination;
+          return pageIndex * pageSize + row.index + 1;
+        },
+      },
+      ...columns,
+    ],
+    [columns],
+  );
 
   const handlePaginationChange = useCallback(
     (updaterOrValue: Updater<PaginationState>) => {
@@ -365,7 +373,9 @@ export default function DataTable<T>({
             <p className="text-sm text-gray-700 dark:text-slate-300 mb-4">
               خطا در دریافت اطلاعات
             </p>
-            <FormButton title="تلاش مجدد" onClick={() => query.refetch()} />
+            {query.refetch && (
+              <FormButton title="تلاش مجدد" onClick={() => query.refetch?.()} />
+            )}
           </div>
         )}
 

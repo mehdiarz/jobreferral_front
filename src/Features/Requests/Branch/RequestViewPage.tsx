@@ -17,15 +17,10 @@ import { useAuthStore } from "../../../libs/store";
 import { getAllRequests } from "../../../services/RequestCrud/getAll";
 import { getRequest } from "../../../services/RequestCrud/get";
 import { editRequest } from "../../../services/RequestCrud/update";
-import { getAllRequestTypes } from "../../../services/RequestTypeCrud/getAll";
-import { getAllPersonalTypes } from "../../../services/PersonalTypeCrud/getAll";
-import { getAllCollatralTypes } from "../../../services/CollatralTypeCrud/getAll";
-import { getAllDocumentTypes } from "../../../services/DocumentTypeCrud/getAll";
 import { getAllDocuments } from "../../../services/DocumentCrud/getAll";
 import { getDocumentAllFiles } from "../../../services/FileService/GetDocumentAllFiles";
 import { downloadFile } from "../../../services/FileService/download";
 import { startUpload } from "../../../services/FileService/start";
-import { uploadChunk } from "../../../services/FileService/uploadChunk";
 import { completeBatchUpload } from "../../../services/FileService/completeBatch";
 import { createDocument } from "../../../services/DocumentCrud/create";
 import { createRequestComment } from "../../../services/RequestCommentCrud/create";
@@ -44,7 +39,17 @@ import type { CollatralItem } from "../../../services/CollatralCrud/types";
 import type { CustomerItem } from "../../../services/CustomerCrud/types";
 import type { DocumentTypeItem } from "../../../services/DocumentTypeCrud/types";
 import { isoToPersian } from "../../../utils/persianToISO";
-import { getAllDepartments } from "../../../services/DepartmentCrud/getAll";
+import { createCollatral } from "../../../services/CollatralCrud/create";
+import { editCollatral } from "../../../services/CollatralCrud/update";
+import { deleteCollatral } from "../../../services/CollatralCrud/delete";
+import {
+  extractEntityId,
+  getErrorMessage,
+  REQUEST_CHUNK_SIZE,
+  uploadChunksSequentially,
+  type UploadState,
+} from "./requestShared";
+import { useRequestReferenceData } from "./useRequestReferenceData";
 
 // ─── Type Definitions ────────────────────────────────────────────
 type TableFilter = { key: string; value: string };
@@ -71,6 +76,7 @@ interface UploadedFile {
 }
 
 interface CollateralFormData {
+  id?: number;
   personTypeId: number | null;
   collatralTypeId: number | null;
   firstName: string;
@@ -105,13 +111,7 @@ interface UserCacheData {
   role: string;
 }
 
-interface OptionItem {
-  id: number;
-  title: string;
-}
-
 // ─── Constants ───────────────────────────────────────────────────
-const CHUNK_SIZE = 2 * 1024 * 1024;
 const EMPTY_EDIT_FORM: EditFormData = {
   loanNumber: "",
   title: "",
@@ -122,6 +122,24 @@ const EMPTY_EDIT_FORM: EditFormData = {
   personalTypeId: null,
   description: "",
 };
+
+function isCollateralEmpty(collateral: CollateralFormData): boolean {
+  return (
+    !collateral.personTypeId &&
+    !collateral.collatralTypeId &&
+    !collateral.firstName.trim() &&
+    !collateral.lastName.trim() &&
+    !collateral.nationalCode.trim()
+  );
+}
+
+function isCollateralValid(collateral: CollateralFormData): boolean {
+  return Boolean(
+    collateral.personTypeId &&
+      collateral.collatralTypeId &&
+      collateral.firstName.trim(),
+  );
+}
 
 // ─── Sub-Components ──────────────────────────────────────────────
 const InfoRow: React.FC<{
@@ -168,6 +186,7 @@ export default function RequestViewPage() {
     [],
   );
   const [editCustomerId, setEditCustomerId] = useState<number | null>(null);
+  const [editCustomerCif, setEditCustomerCif] = useState("");
   const [editCustomerInfo, setEditCustomerInfo] = useState<{
     cif: string;
     name: string;
@@ -189,14 +208,15 @@ export default function RequestViewPage() {
   const [isEditUploading, setIsEditUploading] = useState(false);
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const editCancelRef = useRef<Set<string>>(new Set());
-  const editUploadStateRef = useRef<Map<string, any>>(new Map());
+  const editUploadStateRef = useRef<Map<string, UploadState>>(new Map());
   const [editFileToDelete, setEditFileToDelete] = useState<string | null>(null);
   const activeRequestIdRef = useRef<number | null>(null);
 
-  const editQueriesEnabled = isEditOpen && !!selectedRequest?.id;
+  const referenceQueriesEnabled = isDetailOpen || isEditOpen;
 
   // Cache with ref to prevent unnecessary re-renders
   const userCacheRef = useRef<Map<number, UserCacheData>>(new Map());
+  const [, setUserCacheVersion] = useState(0);
 
   // ─── Queries ───────────────────────────────────────────────────
   // 1. بهینه‌سازی شده: Server-Side Pagination با SkipCount و MaxResultCount
@@ -212,7 +232,7 @@ export default function RequestViewPage() {
     },
     select: (data) => {
       const items = (data?.items ?? []) as RequestItem[];
-      const totalCount = (data as any)?.totalCount ?? items.length;
+      const totalCount = data.totalCount ?? items.length;
 
       // Client-side filtering روی داده‌های صفحه فعلی
       const titleFilter =
@@ -239,108 +259,33 @@ export default function RequestViewPage() {
     placeholderData: (previousData) => previousData,
   });
 
-  // 2. Reference data queries - فقط وقتی modal باز میشه فعال میشن
-  const typesQuery = useQuery({
-    queryKey: ["req-types-all-view"],
-    queryFn: () => getAllRequestTypes({ maxResultCount: 1000 }),
-    select: (d) => (d as any)?.items ?? [],
-    enabled: editQueriesEnabled,
-    staleTime: 5 * 60 * 1000, // 5 دقیقه cache برای داده‌های مرجع
-  });
-
-  const persTypesQuery = useQuery({
-    queryKey: ["pers-types-all-view"],
-    queryFn: () => getAllPersonalTypes({ maxResultCount: 1000 }),
-    select: (d) => d?.items ?? [],
-    enabled: editQueriesEnabled,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const deptsQuery = useQuery({
-    queryKey: ["depts-all-view"],
-    queryFn: () => getAllDepartments({ maxResultCount: 1000 }),
-    select: (d) => d?.items ?? [],
-    enabled: editQueriesEnabled,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const collTypesQuery = useQuery({
-    queryKey: ["coll-types-all-view"],
-    queryFn: () => getAllCollatralTypes({ maxResultCount: 1000 }),
-    select: (d) => d?.items ?? [],
-    enabled: editQueriesEnabled,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const docTypesQuery = useQuery({
-    queryKey: ["doc-types-all-view"],
-    queryFn: () => getAllDocumentTypes({ maxResultCount: 1000 }),
-    select: (d) => d?.items ?? [],
-    enabled: editQueriesEnabled,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  // ─── Memoized Options ──────────────────────────────────────────
-  const typeOpts = useMemo<OptionItem[]>(
-    () =>
-      (typesQuery.data ?? []).map((i: any) => ({
-        id: i.id,
-        title: i.title ?? "",
-      })),
-    [typesQuery.data],
-  );
-
-  const deptOpts = useMemo<OptionItem[]>(
-    () =>
-      (deptsQuery.data ?? []).map((i: any) => ({
-        id: i.id,
-        title: i.title ?? "",
-      })),
-    [deptsQuery.data],
-  );
-
-  const persTypeOpts = useMemo<OptionItem[]>(
-    () =>
-      (persTypesQuery.data ?? []).map((i: any) => ({
-        id: i.id,
-        title: i.title ?? "",
-      })),
-    [persTypesQuery.data],
-  );
-
-  const collTypeOpts = useMemo<OptionItem[]>(
-    () =>
-      (collTypesQuery.data ?? []).map((i: any) => ({
-        id: i.id,
-        title: i.title ?? "",
-      })),
-    [collTypesQuery.data],
-  );
-
-  const docTypeOpts = useMemo<OptionItem[]>(
-    () =>
-      (docTypesQuery.data ?? []).map((i: DocumentTypeItem) => ({
-        id: i.id,
-        title: i.title ?? "",
-      })),
-    [docTypesQuery.data],
-  );
+  const {
+    documentTypes,
+    requestTypeOptions: typeOpts,
+    departmentOptions: deptOpts,
+    personalTypeOptions: persTypeOpts,
+    collateralTypeOptions: collTypeOpts,
+    documentTypeOptions: docTypeOpts,
+  } = useRequestReferenceData(referenceQueriesEnabled);
 
   // ─── بهینه‌سازی شده: Fetch کاربران با deduplication و parallel ───
   useEffect(() => {
     const idsToFetch = new Set<number>();
 
     // جمع‌آوری ID های کاربران از تاریخچه - مستقیماً از selectedRequest
-    (selectedRequest?.requestHistoryOutputDtos || []).forEach((h: any) => {
-      if (h.reviewerUserId && !userCacheRef.current.has(h.reviewerUserId)) {
-        idsToFetch.add(h.reviewerUserId);
+    (selectedRequest?.requestHistoryOutputDtos || []).forEach((history) => {
+      if (
+        history.reviewerUserId &&
+        !userCacheRef.current.has(history.reviewerUserId)
+      ) {
+        idsToFetch.add(history.reviewerUserId);
       }
     });
 
     // جمع‌آوری ID های کاربران از کامنت‌های detail
-    (selectedRequest?.requestCommentOutputDtos || []).forEach((c: any) => {
-      if (c.userId && !userCacheRef.current.has(c.userId)) {
-        idsToFetch.add(c.userId);
+    (selectedRequest?.requestCommentOutputDtos || []).forEach((comment) => {
+      if (comment.userId && !userCacheRef.current.has(comment.userId)) {
+        idsToFetch.add(comment.userId);
       }
     });
 
@@ -389,6 +334,7 @@ export default function RequestViewPage() {
       });
 
       userCacheRef.current = newCache;
+      setUserCacheVersion((version) => version + 1);
     };
 
     fetchUsers();
@@ -407,6 +353,10 @@ export default function RequestViewPage() {
   const handleView = useCallback(
     async (req: RequestItem) => {
       activeRequestIdRef.current = req.id;
+      setSelectedRequest(null);
+      setDetailDocs([]);
+      setDetailComments([]);
+      setDetailCollaterals([]);
       setIsDetailOpen(true);
 
       try {
@@ -420,12 +370,13 @@ export default function RequestViewPage() {
         setSelectedRequest(detail);
 
         // فقط برای document ها باید جداگانه call کنیم
-        const allDocs = await getAllDocuments({ maxResultCount: 5000 });
+        const allDocs = await getAllDocuments({
+          requestId: req.id,
+          maxResultCount: 5000,
+        });
         if (activeRequestIdRef.current !== req.id) return;
 
-        const reqDocs = (allDocs.items ?? []).filter(
-          (d: DocumentItem) => d.requestId === req.id,
-        );
+        const reqDocs = allDocs.items ?? [];
 
         const docsWithFiles = await Promise.all(
           reqDocs.map(async (doc: DocumentItem) => ({
@@ -451,6 +402,12 @@ export default function RequestViewPage() {
   const handleEdit = useCallback(
     async (req: RequestItem) => {
       activeRequestIdRef.current = req.id;
+      setSelectedRequest(null);
+      setEditUploadedFiles([]);
+      setEditComments([]);
+      setEditCustomerId(null);
+      setEditCustomerCif("");
+      setEditCustomerInfo(null);
       setIsEditOpen(true);
 
       try {
@@ -475,6 +432,9 @@ export default function RequestViewPage() {
         // مشتری
         if (detail.customerId && detail.customerOutputDto) {
           setEditCustomerId(detail.customerId);
+          setEditCustomerCif(
+            detail.customerOutputDto.cifNumber || String(detail.customerId),
+          );
           setEditCustomerInfo({
             cif:
               detail.customerOutputDto.cifNumber || String(detail.customerId),
@@ -482,6 +442,7 @@ export default function RequestViewPage() {
           });
         } else {
           setEditCustomerId(null);
+          setEditCustomerCif("");
           setEditCustomerInfo(null);
         }
 
@@ -490,6 +451,7 @@ export default function RequestViewPage() {
         setEditCollaterals(
           collaterals.length > 0
             ? collaterals.map((c): CollateralFormData => ({
+                id: c.id,
                 personTypeId: c.personTypeId ?? null,
                 collatralTypeId: c.collatralTypeId ?? null,
                 firstName: c.firstName ?? "",
@@ -508,12 +470,13 @@ export default function RequestViewPage() {
         );
 
         // فقط document ها جداگانه
-        const allDocs = await getAllDocuments({ maxResultCount: 5000 });
+        const allDocs = await getAllDocuments({
+          requestId: req.id,
+          maxResultCount: 5000,
+        });
         if (activeRequestIdRef.current !== req.id) return;
 
-        const reqDocs = (allDocs.items ?? []).filter(
-          (d: DocumentItem) => d.requestId === req.id,
-        );
+        const reqDocs = allDocs.items ?? [];
 
         const docsWithFiles = await Promise.all(
           reqDocs.map(async (doc: DocumentItem) => ({
@@ -628,69 +591,6 @@ export default function RequestViewPage() {
     [],
   );
 
-  const editUploadChunksInBatches = useCallback(
-    async (
-      docId: string,
-      file: File,
-      uploadId: string,
-      totalChunks: number,
-      startIndex: number,
-    ) => {
-      for (let i = startIndex; i < totalChunks; i++) {
-        if (editCancelRef.current.has(docId)) {
-          editCancelRef.current.delete(docId);
-          throw new Error("آپلود لغو شد");
-        }
-
-        const state = editUploadStateRef.current.get(docId);
-        if (state?.isPaused) {
-          state.lastUploadedChunk = i - 1;
-          throw new Error("آپلود متوقف شد");
-        }
-
-        const start = i * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, file.size);
-        const chunk = file.slice(start, end);
-
-        try {
-          await uploadChunk(uploadId, i, chunk, file.name, (chunkPercent) => {
-            const overall = Math.round(
-              ((i + chunkPercent / 100) / totalChunks) * 100,
-            );
-            setEditUploadedFiles((prev) =>
-              prev.map((f) =>
-                f.id === docId ? { ...f, uploadProgress: overall } : f,
-              ),
-            );
-          });
-
-          if (state) state.lastUploadedChunk = i;
-
-          setEditUploadedFiles((prev) =>
-            prev.map((f) =>
-              f.id === docId
-                ? {
-                    ...f,
-                    uploadProgress: Math.round(((i + 1) / totalChunks) * 100),
-                  }
-                : f,
-            ),
-          );
-        } catch (chunkErr: any) {
-          if (state) {
-            state.lastUploadedChunk = i - 1;
-            state.isPaused = true;
-          }
-          throw new Error(
-            `خطا در آپلود: ${chunkErr?.message || "خطای ناشناخته"}`,
-            { cause: chunkErr },
-          );
-        }
-      }
-    },
-    [],
-  );
-
   const handleEditResumeUpload = useCallback(
     async (file: UploadedFile) => {
       const state = editUploadStateRef.current.get(file.id);
@@ -711,13 +611,16 @@ export default function RequestViewPage() {
       );
 
       try {
-        await editUploadChunksInBatches(
-          file.id,
-          state.file,
-          state.uploadId,
-          state.totalChunks,
+        await uploadChunksSequentially({
+          itemId: file.id,
+          file: state.file,
+          uploadId: state.uploadId,
+          totalChunks: state.totalChunks,
           startIndex,
-        );
+          cancelRef: editCancelRef,
+          uploadStateRef: editUploadStateRef,
+          setFiles: setEditUploadedFiles,
+        });
 
         setEditUploadedFiles((prev) =>
           prev.map((f) =>
@@ -734,16 +637,16 @@ export default function RequestViewPage() {
 
         editUploadStateRef.current.delete(file.id);
         showToast("فایل با موفقیت آپلود شد", "success");
-      } catch (err: any) {
+      } catch (error: unknown) {
         setEditUploadedFiles((prev) =>
           prev.map((f) =>
             f.id === file.id ? { ...f, isUploading: false } : f,
           ),
         );
-        showToast(`خطا: ${err.message}`, "warning");
+        showToast(`خطا: ${getErrorMessage(error)}`, "warning");
       }
     },
-    [editUploadChunksInBatches, showToast],
+    [showToast],
   );
 
   const handleEditPauseUpload = useCallback((docId: string) => {
@@ -767,10 +670,15 @@ export default function RequestViewPage() {
     const file = editSelectedFile;
     const docId = crypto.randomUUID();
     const format = file.name.split(".").pop() || "";
-    const docType = docTypesQuery.data?.find(
+    const docType = documentTypes.find(
       (d: DocumentTypeItem) => d.id === editDocTypeId,
     );
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    if (file.size === 0) {
+      showToast("فایل انتخاب‌شده خالی است", "error");
+      return;
+    }
+
+    const totalChunks = Math.ceil(file.size / REQUEST_CHUNK_SIZE);
 
     const newFile: UploadedFile = {
       id: docId,
@@ -797,12 +705,17 @@ export default function RequestViewPage() {
     setIsEditUploading(true);
 
     try {
-      const startRes: any = await startUpload({
+      const startRes = await startUpload({
         fileName: file.name,
         fileSize: file.size,
-        chunkSize: CHUNK_SIZE,
+        chunkSize: REQUEST_CHUNK_SIZE,
       });
-      const uploadId = startRes?.result?.uploadId || startRes?.uploadId;
+      const uploadId = (
+        startRes as typeof startRes & { result?: { uploadId?: string } }
+      ).result?.uploadId ?? startRes.uploadId;
+      if (!uploadId) {
+        throw new Error("شناسه آپلود از سرور دریافت نشد");
+      }
 
       editUploadStateRef.current.set(docId, {
         file,
@@ -817,7 +730,16 @@ export default function RequestViewPage() {
         prev.map((f) => (f.id === docId ? { ...f, uploadId } : f)),
       );
 
-      await editUploadChunksInBatches(docId, file, uploadId, totalChunks, 0);
+      await uploadChunksSequentially({
+        itemId: docId,
+        file,
+        uploadId,
+        totalChunks,
+        startIndex: 0,
+        cancelRef: editCancelRef,
+        uploadStateRef: editUploadStateRef,
+        setFiles: setEditUploadedFiles,
+      });
 
       setEditUploadedFiles((prev) =>
         prev.map((f) =>
@@ -835,12 +757,13 @@ export default function RequestViewPage() {
 
       editUploadStateRef.current.delete(docId);
       showToast("فایل با موفقیت آپلود شد", "success");
-    } catch (err: any) {
-      if (err.message !== "آپلود لغو شد" && err.message !== "آپلود متوقف شد") {
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      if (message !== "آپلود لغو شد" && message !== "آپلود متوقف شد") {
         setEditUploadedFiles((prev) =>
           prev.map((f) => (f.id === docId ? { ...f, isUploading: false } : f)),
         );
-        showToast(`خطا: ${err.message}`, "warning");
+        showToast(`خطا: ${message}`, "warning");
       }
     } finally {
       setIsEditUploading(false);
@@ -848,12 +771,11 @@ export default function RequestViewPage() {
   }, [
     editDocTypeId,
     editSelectedFile,
-    docTypesQuery.data,
+    documentTypes,
     userName,
     user?.roles,
     today,
     now,
-    editUploadChunksInBatches,
     showToast,
   ]);
 
@@ -874,7 +796,7 @@ export default function RequestViewPage() {
 
   // ─── Customer Search Handlers ──────────────────────────────────
   const handleEditFindCustomer = useCallback(async () => {
-    const cif = String(editCustomerId || "").trim();
+    const cif = editCustomerCif.trim();
     if (!cif) {
       showToast("لطفاً شماره مشتری را وارد کنید", "error");
       return;
@@ -899,16 +821,17 @@ export default function RequestViewPage() {
         setEditFoundCustomers(customers);
         setIsEditCustomerModalOpen(true);
       }
-    } catch (err: any) {
-      console.error("Error finding customer:", err);
-      showToast(err?.message || "خطا در جستجوی مشتری", "error");
+    } catch (error: unknown) {
+      console.error("Error finding customer:", error);
+      showToast(getErrorMessage(error, "خطا در جستجوی مشتری"), "error");
     } finally {
       setIsEditSearchingCustomer(false);
     }
-  }, [editCustomerId, showToast]);
+  }, [editCustomerCif, showToast]);
 
   const handleEditSelectCustomer = useCallback((c: CustomerItem) => {
     setEditCustomerId(c.id);
+    setEditCustomerCif(c.cifNumber || "");
     setEditCustomerInfo({
       cif: c.cifNumber || "",
       name: c.name || "-",
@@ -918,6 +841,7 @@ export default function RequestViewPage() {
 
   const handleClearCustomer = useCallback(() => {
     setEditCustomerId(null);
+    setEditCustomerCif("");
     setEditCustomerInfo(null);
   }, []);
 
@@ -925,21 +849,89 @@ export default function RequestViewPage() {
   const handleSaveEdit = useCallback(async () => {
     if (!selectedRequest) return;
 
+    const amount = Number(editForm.amount);
+    if (!editForm.loanNumber.trim() || !editForm.title.trim()) {
+      showToast("شماره پرونده و عنوان الزامی هستند", "error");
+      return;
+    }
+    if (
+      !editForm.requestTypeId ||
+      !editForm.departmentId ||
+      !editForm.personalTypeId
+    ) {
+      showToast("نوع درخواست، دپارتمان و نوع شخص الزامی هستند", "error");
+      return;
+    }
+    if (!editCustomerId) {
+      showToast("لطفاً مشتری را استعلام و انتخاب کنید", "error");
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      showToast("مبلغ واردشده معتبر نیست", "error");
+      return;
+    }
+
+    const activeCollaterals = editCollaterals.filter(
+      (collateral) => !isCollateralEmpty(collateral),
+    );
+    if (activeCollaterals.some((collateral) => !isCollateralValid(collateral))) {
+      showToast("اطلاعات وثیقه‌گذار را کامل وارد کنید", "error");
+      return;
+    }
+
     setIsSaving(true);
     try {
       await editRequest({
         id: selectedRequest.id,
-        requestTypeId: editForm.requestTypeId ?? 0,
-        departmentId: editForm.departmentId ?? 0,
-        customerId: editCustomerId || selectedRequest.customerId || 0,
-        title: editForm.title,
+        requestTypeId: editForm.requestTypeId,
+        departmentId: editForm.departmentId,
+        customerId: editCustomerId,
+        title: editForm.title.trim(),
         requestCode: editForm.requestCode,
-        loanNumber: editForm.loanNumber,
-        amount: parseFloat(editForm.amount) || 0,
+        loanNumber: editForm.loanNumber.trim(),
+        amount,
         description: editForm.description,
-        personalTypeId: editForm.personalTypeId ?? 0,
+        personalTypeId: editForm.personalTypeId,
         requestStatusCode: selectedRequest.requestStatusCode,
       } as EditRequestBody);
+
+      const originalCollateralIds = new Set(
+        (selectedRequest.collatralOutputDtos ?? []).map(
+          (collateral) => collateral.id,
+        ),
+      );
+      const retainedCollateralIds = new Set(
+        activeCollaterals
+          .map((collateral) => collateral.id)
+          .filter((id): id is number => typeof id === "number"),
+      );
+
+      const collateralOperations: Promise<unknown>[] = [];
+
+      originalCollateralIds.forEach((id) => {
+        if (!retainedCollateralIds.has(id)) {
+          collateralOperations.push(deleteCollatral(id));
+        }
+      });
+
+      activeCollaterals.forEach((collateral) => {
+        const body = {
+          collatralTypeId: collateral.collatralTypeId!,
+          requestId: selectedRequest.id,
+          firstName: collateral.firstName.trim(),
+          lastName: collateral.lastName.trim(),
+          nationalCode: collateral.nationalCode.trim(),
+          personTypeId: collateral.personTypeId!,
+        };
+
+        collateralOperations.push(
+          collateral.id
+            ? editCollatral({ id: collateral.id, ...body })
+            : createCollatral(body),
+        );
+      });
+
+      await Promise.all(collateralOperations);
 
       // Add comment if exists
       if (newComment.trim()) {
@@ -968,22 +960,17 @@ export default function RequestViewPage() {
         const batchItems: { uploadId: string; documentId: number }[] = [];
 
         for (const [dtId, files] of filesByType) {
-          const docRes: any = await createDocument({
+          const docRes = await createDocument({
             documentTypeId: dtId,
             requestId: selectedRequest.id,
           });
-          const docId = docRes?.result?.id || docRes?.id;
-
-          if (!docId) {
-            console.error("شناسه سند پس از ایجاد دریافت نشد");
-            continue; // یا throw error
-          }
+          const docId = extractEntityId(docRes, "سند");
 
           files.forEach((f) => {
             if (f.uploadId)
               batchItems.push({ uploadId: f.uploadId, documentId: docId });
           });
-        } // 👈 این رو اضافه کن - بسته شدن if (files.length > 0)
+        }
 
         if (batchItems.length > 0) {
           await completeBatchUpload({ items: batchItems });
@@ -993,9 +980,9 @@ export default function RequestViewPage() {
       showToast("ذخیره شد", "success");
       setIsEditOpen(false);
       requestsQuery.refetch();
-    } catch (err: any) {
-      console.error("Error saving edit:", err);
-      showToast(err?.message || "خطا در ذخیره‌سازی", "error");
+    } catch (error: unknown) {
+      console.error("Error saving edit:", error);
+      showToast(getErrorMessage(error, "خطا در ذخیره‌سازی"), "error");
     } finally {
       setIsSaving(false);
     }
@@ -1003,6 +990,7 @@ export default function RequestViewPage() {
     selectedRequest,
     editForm,
     editCustomerId,
+    editCollaterals,
     newComment,
     user,
     editUploadedFiles,
@@ -1120,8 +1108,8 @@ export default function RequestViewPage() {
 
           const histories = selectedRequest.requestHistoryOutputDtos || [];
 
-          const createHistory = histories.find((h: any) =>
-            h.description?.includes("ایجاد گردید"),
+          const createHistory = histories.find((history) =>
+            history.description?.includes("ایجاد گردید"),
           );
 
           const matchedDept = selectedRequest.departmentOutputDto?.title || "-";
@@ -1217,25 +1205,25 @@ export default function RequestViewPage() {
                   <div className="relative">
                     <div className="absolute right-4 top-0 bottom-0 w-0.5 bg-blue-200"></div>
                     <div className="space-y-3">
-                      {histories.map((h: any, i: number) => (
+                      {histories.map((history, index) => (
                         <div
-                          key={h.id}
+                          key={history.id}
                           className="flex items-start gap-3 relative"
                         >
                           <div
                             className={`w-3 h-3 rounded-full mt-1 z-10 flex-shrink-0 ${
-                              i === 0
+                              index === 0
                                 ? "bg-blue-500 ring-2 ring-blue-200"
                                 : "bg-gray-300"
                             }`}
                           ></div>
                           <div className="flex-1 bg-white rounded-lg p-3 border border-gray-100">
                             <p className="text-xs text-gray-700">
-                              {h.description}
+                              {history.description}
                             </p>
                             <p className="text-xs text-gray-400 mt-1">
-                              {h.creationTime
-                                ? isoToPersian(h.creationTime)
+                              {history.creationTime
+                                ? isoToPersian(history.creationTime)
                                 : "-"}
                             </p>
                           </div>
@@ -1475,9 +1463,10 @@ export default function RequestViewPage() {
                   id="e-requester"
                   name="requesterName"
                   label="درخواست کننده (شماره مشتری)"
-                  value={editCustomerId ? String(editCustomerId) : ""}
+                  value={editCustomerCif}
                   onChange={(v) => {
-                    setEditCustomerId(v ? Number(v) : null);
+                    setEditCustomerCif(v);
+                    setEditCustomerId(null);
                     setEditCustomerInfo(null);
                   }}
                   dir="ltr"
@@ -1485,8 +1474,7 @@ export default function RequestViewPage() {
                 <button
                   onClick={handleEditFindCustomer}
                   disabled={
-                    !String(editCustomerId || "").trim() ||
-                    isEditSearchingCustomer
+                    !editCustomerCif.trim() || isEditSearchingCustomer
                   }
                   className="absolute bottom-2 left-2 rounded-md p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
@@ -1636,7 +1624,11 @@ export default function RequestViewPage() {
                     {editUploadedFiles.map((f) => (
                       <tr key={f.id} className="border-b">
                         <td className="p-2 border">
-                          {f.documentTypeTitle || "-"}
+                          {docTypeOpts.find(
+                            (option) => option.id === f.documentTypeId,
+                          )?.title ||
+                            f.documentTypeTitle ||
+                            "-"}
                         </td>
                         <td className="p-2 border">{f.fileName}</td>
                         <td className="p-2 border">
@@ -1810,33 +1802,31 @@ export default function RequestViewPage() {
               {editFoundCustomers.length} مشتری یافت شد:
             </p>
             <DataTable<CustomerItem>
-              query={
-                {
-                  data: {
-                    listResult: editFoundCustomers,
-                    total: editFoundCustomers.length,
-                    totalPages: 1,
-                  },
-                  isLoading: false,
-                  isError: false,
-                  isFetching: false,
-                } as any
-              }
+              query={{
+                data: {
+                  listResult: editFoundCustomers,
+                  total: editFoundCustomers.length,
+                  totalPages: 1,
+                },
+                isLoading: false,
+                isError: false,
+                isFetching: false,
+              }}
               columns={[
                 {
                   id: "cifNumber",
                   header: "شماره مشتری",
-                  cell: ({ row }: any) => row.original.cifNumber || "-",
+                  cell: ({ row }) => row.original.cifNumber || "-",
                 },
                 {
                   id: "name",
                   header: "نام مشتری",
-                  cell: ({ row }: any) => row.original.name || "-",
+                  cell: ({ row }) => row.original.name || "-",
                 },
                 {
                   id: "select",
                   header: "انتخاب",
-                  cell: ({ row }: any) => (
+                  cell: ({ row }) => (
                     <FormButton
                       title="انتخاب"
                       variant="primary"
