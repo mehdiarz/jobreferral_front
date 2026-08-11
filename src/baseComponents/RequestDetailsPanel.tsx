@@ -160,7 +160,7 @@ export default function RequestDetailsPanel({
 
   return (
     <div className="max-h-[68vh] space-y-4 overflow-y-auto px-0.5 pb-1 text-sm">
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-l from-blue-950 via-blue-800 to-cyan-700 p-5 text-white shadow-lg">
+      <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="absolute -left-12 -top-16 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
         <div className="absolute -bottom-20 right-1/3 h-40 w-40 rounded-full bg-cyan-300/10 blur-2xl" />
         <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -169,11 +169,11 @@ export default function RequestDetailsPanel({
               <FileText className="h-6 w-6" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs text-blue-100">پرونده درخواست</p>
+              <p className="text-xs text-slate-800">پرونده درخواست</p>
               <h2 className="mt-1 truncate text-lg font-bold">
                 {request.title || "بدون عنوان"}
               </h2>
-              <p className="mt-1 text-xs text-blue-100">
+              <p className="mt-1 text-xs text-slate-800">
                 شماره پرونده: {request.loanNumber || "-"}
               </p>
             </div>
@@ -246,7 +246,7 @@ export default function RequestDetailsPanel({
                 >
                   <div
                     className={`mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${
-                      index === 0
+                      index === histories.length - 1
                         ? "bg-blue-600 text-white shadow-sm"
                         : "bg-white text-slate-400 ring-1 ring-slate-200"
                     }`}

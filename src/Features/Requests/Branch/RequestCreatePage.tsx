@@ -787,7 +787,7 @@ export default function RequestCreatePage() {
         className="mb-5"
       />
 
-      <div className="relative mb-5 overflow-hidden rounded-3xl bg-gradient-to-l from-blue-950 via-blue-800 to-cyan-700 p-5 text-white shadow-lg">
+      <div className="relative mb-5 overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="absolute -left-12 -top-16 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
         <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
@@ -795,7 +795,7 @@ export default function RequestCreatePage() {
               <FilePlus2 className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-xs text-blue-100">فرم ثبت پرونده</p>
+              <p className="text-xs text-slate-800">فرم ثبت پرونده</p>
               <h2 className="mt-1 text-lg font-bold">
                 درخواست جدید شعبه {branchName || "-"}
               </h2>
@@ -1008,7 +1008,8 @@ export default function RequestCreatePage() {
                 value={requestForm.amount}
                 onChange={(v) => setRequestForm((p) => ({ ...p, amount: v }))}
                 dir="ltr"
-                type="number"
+                type="text"
+                currency={true}
                 required
               />
             </FluidCol>

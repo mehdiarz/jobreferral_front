@@ -710,7 +710,8 @@ export default function CreditLimitAuthoritiesPage() {
                 name="modal-minAmount"
                 label="حداقل مبلغ (ریال)"
                 value={formData.minAmount}
-                type="number"
+                type="text"
+                currency={true}
                 dir="ltr"
                 required
                 onChange={(v) => setFormData((p) => ({ ...p, minAmount: v }))}
@@ -722,7 +723,8 @@ export default function CreditLimitAuthoritiesPage() {
                 name="modal-maxAmount"
                 label="حداکثر مبلغ (ریال)"
                 value={formData.maxAmount}
-                type="number"
+                type="text"
+                currency={true}
                 dir="ltr"
                 required
                 onChange={(v) => setFormData((p) => ({ ...p, maxAmount: v }))}

@@ -96,8 +96,9 @@ export default function RequestAssetReviewPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const activeRequestIdRef = useRef<number | null>(null);
 
-  // Upload states
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  // Upload states - با ref برای حفظ بین رندرها
+  const uploadedFilesRef = useRef<UploadedFile[]>([]);
+  const [_uploadedFilesVersion, setUploadedFilesVersion] = useState(0);
   const [docTypeId, setDocTypeId] = useState<number | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -106,6 +107,15 @@ export default function RequestAssetReviewPage() {
   const uploadStateRef = useRef<Map<string, any>>(new Map());
 
   const userCacheRef = useRef<Map<number, UserCacheData>>(new Map());
+
+  // helper برای آپدیت uploadedFiles
+  const updateUploadedFiles = useCallback(
+    (updater: (prev: UploadedFile[]) => UploadedFile[]) => {
+      uploadedFilesRef.current = updater(uploadedFilesRef.current);
+      setUploadedFilesVersion((v) => v + 1);
+    },
+    [],
+  );
 
   // ─── Queries ───────────────────────────────────────────────────
   const requestsQuery = useQuery({
@@ -125,7 +135,7 @@ export default function RequestAssetReviewPage() {
     },
     select: (data) => {
       const items = ((data?.items ?? []) as RequestItem[]).filter(
-        (r) => r.requestStatusCode === 3, // فقط ارزیابی ملک
+        (r) => r.requestStatusCode === 4 || r.requestStatusCode === 5,
       );
       const filteredItems = filterRequestItems(items, filters);
       const pageStart = pagination.pageIndex * pagination.pageSize;
@@ -143,6 +153,8 @@ export default function RequestAssetReviewPage() {
     },
     placeholderData: (previousData) => previousData,
   });
+
+  const isStatusFive = selectedRequest?.requestStatusCode === 5;
 
   const docTypesQuery = useQuery({
     queryKey: ["doc-types-asset-review"],
@@ -232,7 +244,8 @@ export default function RequestAssetReviewPage() {
       activeRequestIdRef.current = req.id;
       setSelectedRequest(null);
       setDetailDocs([]);
-      setUploadedFiles([]);
+      uploadedFilesRef.current = [];
+      setUploadedFilesVersion((v) => v + 1);
       setComment("");
       setDocTypeId(null);
       setSelectedFile(null);
@@ -306,14 +319,14 @@ export default function RequestAssetReviewPage() {
           const overall = Math.round(
             ((i + chunkPercent / 100) / totalChunks) * 100,
           );
-          setUploadedFiles((prev) =>
+          updateUploadedFiles((prev) =>
             prev.map((f) =>
               f.id === docId ? { ...f, uploadProgress: overall } : f,
             ),
           );
         });
 
-        setUploadedFiles((prev) =>
+        updateUploadedFiles((prev) =>
           prev.map((f) =>
             f.id === docId
               ? {
@@ -325,7 +338,7 @@ export default function RequestAssetReviewPage() {
         );
       }
     },
-    [],
+    [updateUploadedFiles],
   );
 
   const handleStartUpload = useCallback(async () => {
@@ -360,7 +373,7 @@ export default function RequestAssetReviewPage() {
       totalChunks,
     };
 
-    setUploadedFiles((prev) => [newFile, ...prev]);
+    updateUploadedFiles((prev) => [newFile, ...prev]);
     setSelectedFile(null);
     setIsUploading(true);
 
@@ -379,13 +392,13 @@ export default function RequestAssetReviewPage() {
         lastUploadedChunk: -1,
       });
 
-      setUploadedFiles((prev) =>
+      updateUploadedFiles((prev) =>
         prev.map((f) => (f.id === docId ? { ...f, uploadId } : f)),
       );
 
       await uploadChunksInBatches(docId, file, uploadId, totalChunks, 0);
 
-      setUploadedFiles((prev) =>
+      updateUploadedFiles((prev) =>
         prev.map((f) =>
           f.id === docId
             ? {
@@ -403,7 +416,7 @@ export default function RequestAssetReviewPage() {
       showToast("فایل با موفقیت آپلود شد", "success");
     } catch (err: any) {
       if (err.message !== "آپلود لغو شد") {
-        setUploadedFiles((prev) =>
+        updateUploadedFiles((prev) =>
           prev.map((f) => (f.id === docId ? { ...f, isUploading: false } : f)),
         );
         showToast(`خطا: ${err.message}`, "warning");
@@ -420,14 +433,18 @@ export default function RequestAssetReviewPage() {
     today,
     now,
     uploadChunksInBatches,
+    updateUploadedFiles,
     showToast,
   ]);
 
-  const handleDeleteFile = useCallback((id: string) => {
-    cancelRef.current.add(id);
-    uploadStateRef.current.delete(id);
-    setUploadedFiles((prev) => prev.filter((f) => f.id !== id));
-  }, []);
+  const handleDeleteFile = useCallback(
+    (id: string) => {
+      cancelRef.current.add(id);
+      uploadStateRef.current.delete(id);
+      updateUploadedFiles((prev) => prev.filter((f) => f.id !== id));
+    },
+    [updateUploadedFiles],
+  );
 
   // ─── Action Handlers ───────────────────────────────────────────
   const handleAction = useCallback(
@@ -444,8 +461,8 @@ export default function RequestAssetReviewPage() {
           });
         }
 
-        // Upload files if any
-        const newFiles = uploadedFiles.filter((f) => f.isCompleted);
+        // Upload files if any - از ref بخون
+        const newFiles = uploadedFilesRef.current.filter((f) => f.isCompleted);
         if (newFiles.length > 0) {
           const filesByType = new Map<number, UploadedFile[]>();
           newFiles.forEach((f) => {
@@ -494,7 +511,7 @@ export default function RequestAssetReviewPage() {
         setIsSubmitting(false);
       }
     },
-    [selectedRequest, comment, uploadedFiles, user, requestsQuery, showToast],
+    [selectedRequest, comment, user, requestsQuery, showToast],
   );
 
   // ─── Columns ───────────────────────────────────────────────────
@@ -545,6 +562,9 @@ export default function RequestAssetReviewPage() {
     setPagination((p) => ({ ...p, pageIndex: 0 }));
   }, []);
 
+  // uploadedFiles برای JSX
+  const uploadedFiles = uploadedFilesRef.current;
+
   // ─── Render ──────────────────────────────────────────────────
   return (
     <MainLayout.Main maxWidth="screen-xl">
@@ -582,27 +602,32 @@ export default function RequestAssetReviewPage() {
         onClose={() => setIsDetailOpen(false)}
         overlayLock={isSubmitting}
         footerButtons={
-          <div className="flex gap-2">
+          isStatusFive ? (
             <FormButton
-              title="سهل البیع نیست"
+              title="مختومه"
               variant="danger"
               onClick={() => handleAction(false)}
               isLoading={isSubmitting}
               disabled={isSubmitting}
             />
-            <FormButton
-              title="تأیید"
-              variant="success"
-              onClick={() => handleAction(true)}
-              isLoading={isSubmitting}
-              disabled={isSubmitting}
-            />
-            <FormButton
-              title="بستن"
-              variant="secondary"
-              onClick={() => setIsDetailOpen(false)}
-            />
-          </div>
+          ) : (
+            <div className="flex gap-2">
+              <FormButton
+                title="سهل البیع نیست"
+                variant="danger"
+                onClick={() => handleAction(false)}
+                isLoading={isSubmitting}
+                disabled={isSubmitting}
+              />
+              <FormButton
+                title="تأیید"
+                variant="success"
+                onClick={() => handleAction(true)}
+                isLoading={isSubmitting}
+                disabled={isSubmitting}
+              />
+            </div>
+          )
         }
         renderContent={() => {
           if (!selectedRequest) return <p>در حال بارگذاری...</p>;
@@ -616,100 +641,105 @@ export default function RequestAssetReviewPage() {
                 downloadFile(file.filePath, file.documentId)
               }
             >
-              <RequestDetailSection
-                icon={<Upload className="h-4.5 w-4.5" />}
-                title="بارگذاری فایل ارزیابی ملک"
-              >
-                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                  <div className="w-48">
-                    <FormSelect<number>
-                      id="asset-doc-type"
-                      name="asset-doc-type"
-                      label="نوع مدارک"
-                      value={docTypeId ?? ""}
-                      onChange={(v) => setDocTypeId(v ? Number(v) : null)}
-                      options={docTypeOpts}
-                    />
-                  </div>
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-gray-300 hover:border-blue-400 hover:bg-blue-50 cursor-pointer text-sm"
+              {!isStatusFive && (
+                <>
+                  <RequestDetailSection
+                    icon={<Upload className="h-4.5 w-4.5" />}
+                    title="بارگذاری فایل ارزیابی ملک"
                   >
-                    <Upload className="w-4 h-4 text-blue-500" />
-                    <span className="truncate max-w-[120px]">
-                      {selectedFile ? selectedFile.name : "انتخاب فایل"}
-                    </span>
-                  </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    className="hidden"
-                    onChange={handleFileSelect}
-                  />
-                  <FormButton
-                    title="آپلود"
-                    variant="primary"
-                    size="sm"
-                    onClick={handleStartUpload}
-                    isLoading={isUploading}
-                    disabled={isUploading || !selectedFile || !docTypeId}
-                  />
-                </div>
-              </RequestDetailSection>
+                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                      <div className="w-48">
+                        <FormSelect<number>
+                          id="asset-doc-type"
+                          name="asset-doc-type"
+                          label="نوع مدارک"
+                          value={docTypeId ?? ""}
+                          onChange={(v) => setDocTypeId(v ? Number(v) : null)}
+                          options={docTypeOpts}
+                        />
+                      </div>
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-gray-300 hover:border-blue-400 hover:bg-blue-50 cursor-pointer text-sm"
+                      >
+                        <Upload className="w-4 h-4 text-blue-500" />
+                        <span className="truncate max-w-[120px]">
+                          {selectedFile ? selectedFile.name : "انتخاب فایل"}
+                        </span>
+                      </button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        className="hidden"
+                        onChange={handleFileSelect}
+                      />
+                      <FormButton
+                        title="آپلود"
+                        variant="primary"
+                        size="sm"
+                        onClick={handleStartUpload}
+                        isLoading={isUploading}
+                        disabled={isUploading || !selectedFile || !docTypeId}
+                      />
+                    </div>
+                  </RequestDetailSection>
 
-              {/* جدول فایل‌های آپلود شده */}
-              {uploadedFiles.length > 0 && (
-                <RequestDetailSection
-                  icon={<Paperclip className="h-4.5 w-4.5" />}
-                  title="فایل‌های آپلود شده"
-                  count={`${uploadedFiles.length} فایل`}
-                >
-                  <div className="overflow-x-auto rounded-xl border border-slate-200">
-                    <table className="w-full text-xs">
-                      <thead className="bg-slate-50">
-                        <tr>
-                          <th className="p-3 text-right">عنوان فایل</th>
-                          <th className="p-3 text-right">نوع فایل</th>
-                          <th className="p-3 text-right">حجم</th>
-                          <th className="p-3 text-right">بارگذار</th>
-                          <th className="p-3 text-right">نقش سازمانی</th>
-                          <th className="p-3 text-right">تاریخ</th>
-                          <th className="p-3 text-center">عملیات</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {uploadedFiles.map((f) => (
-                          <tr key={f.id} className="bg-white">
-                            <td className="p-3">{f.fileName}</td>
-                            <td className="p-3">{f.fileFormat}</td>
-                            <td className="p-3">
-                              {(f.fileSize / 1024).toFixed(1)} KB
-                            </td>
-                            <td className="p-3">{f.userName}</td>
-                            <td className="p-3">{f.userRole}</td>
-                            <td className="p-3">{f.uploadDate}</td>
-                            <td className="p-3 text-center">
-                              {f.isCompleted && (
-                                <button
-                                  onClick={() => downloadFile(f.fileAddress, 0)}
-                                  className="mx-1 text-blue-600"
-                                >
-                                  <Download className="h-3.5 w-3.5" />
-                                </button>
-                              )}
-                              <button
-                                onClick={() => handleDeleteFile(f.id)}
-                                className="mx-1 text-red-600"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </RequestDetailSection>
+                  {uploadedFiles.length > 0 && (
+                    <RequestDetailSection
+                      icon={<Paperclip className="h-4.5 w-4.5" />}
+                      title="فایل‌های آپلود شده"
+                      count={`${uploadedFiles.length} فایل`}
+                    >
+                      <div className="overflow-x-auto rounded-xl border border-slate-200">
+                        <table className="w-full text-xs">
+                          <thead className="bg-slate-50">
+                            <tr>
+                              <th className="p-3 text-right">عنوان فایل</th>
+                              <th className="p-3 text-right">نوع فایل</th>
+                              <th className="p-3 text-right">حجم</th>
+                              <th className="p-3 text-right">بارگذار</th>
+                              <th className="p-3 text-right">نقش سازمانی</th>
+                              <th className="p-3 text-right">تاریخ</th>
+                              <th className="p-3 text-center">عملیات</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {uploadedFiles.map((f) => (
+                              <tr key={f.id} className="bg-white">
+                                <td className="p-3">{f.fileName}</td>
+                                <td className="p-3">{f.fileFormat}</td>
+                                <td className="p-3">
+                                  {(f.fileSize / 1024).toFixed(1)} KB
+                                </td>
+                                <td className="p-3">{f.userName}</td>
+                                <td className="p-3">{f.userRole}</td>
+                                <td className="p-3">{f.uploadDate}</td>
+                                <td className="p-3 text-center">
+                                  {f.isCompleted && (
+                                    <button
+                                      onClick={() =>
+                                        downloadFile(f.fileAddress, 0)
+                                      }
+                                      className="mx-1 text-blue-600"
+                                    >
+                                      <Download className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => handleDeleteFile(f.id)}
+                                    className="mx-1 text-red-600"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </RequestDetailSection>
+                  )}
+                </>
               )}
 
               <RequestDetailSection

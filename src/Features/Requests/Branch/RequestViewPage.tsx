@@ -43,6 +43,7 @@ import { createRequestComment } from "../../../services/RequestCommentCrud/creat
 import { findCustomer } from "../../../services/CustomerCrud/find";
 import { getUserById } from "../../../services/Users/getUserById";
 import { viewRequest } from "../../../services/RequestCrud/viewRequest";
+import { deleteDocumentFiles } from "../../../services/FileService/deleteDocumentFiles";
 
 import type {
   RequestItem,
@@ -219,6 +220,8 @@ export default function RequestViewPage() {
 
   // Cache with ref to prevent unnecessary re-renders
   const userCacheRef = useRef<Map<number, UserCacheData>>(new Map());
+  const deletedFileIdsRef = useRef<number[]>([]);
+
   const [, setUserCacheVersion] = useState(0);
 
   // ─── Queries ───────────────────────────────────────────────────
@@ -790,12 +793,24 @@ export default function RequestViewPage() {
     if (editFileToDelete) {
       editCancelRef.current.add(editFileToDelete);
       editUploadStateRef.current.delete(editFileToDelete);
+
+      // اگه فایل موجود بود (source: "existing")، id رو ذخیره کن برای حذف از سرور
+      const fileToDelete = editUploadedFiles.find(
+        (f) => f.id === editFileToDelete,
+      );
+      if (fileToDelete?.source === "existing") {
+        const numericId = Number(editFileToDelete);
+        if (!isNaN(numericId)) {
+          deletedFileIdsRef.current.push(numericId);
+        }
+      }
+
       setEditUploadedFiles((prev) =>
         prev.filter((f) => f.id !== editFileToDelete),
       );
       setEditFileToDelete(null);
     }
-  }, [editFileToDelete]);
+  }, [editFileToDelete, editUploadedFiles]);
 
   // ─── Customer Search Handlers ──────────────────────────────────
   const handleEditFindCustomer = useCallback(async () => {
@@ -937,6 +952,12 @@ export default function RequestViewPage() {
       });
 
       await Promise.all(collateralOperations);
+
+      // حذف فایل‌های حذف‌شده از سرور
+      if (deletedFileIdsRef.current.length > 0) {
+        await deleteDocumentFiles(deletedFileIdsRef.current);
+        deletedFileIdsRef.current = [];
+      }
 
       // Add comment if exists
       if (newComment.trim()) {
@@ -1131,13 +1152,6 @@ export default function RequestViewPage() {
             />
           );
         }}
-        footerButtons={
-          <FormButton
-            title="بستن"
-            variant="secondary"
-            onClick={() => setIsDetailOpen(false)}
-          />
-        }
       />
 
       {/* ─── مودال ویرایش ─── */}
@@ -1206,7 +1220,8 @@ export default function RequestViewPage() {
                   value={editForm.amount}
                   onChange={(v) => handleEditFormChange("amount", v)}
                   dir="ltr"
-                  type="number"
+                  type="text"
+                  currency={true}
                   required
                 />
                 <FormSelect<number>

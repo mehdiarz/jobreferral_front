@@ -12,6 +12,7 @@ import { ErrorPage } from "../baseComponents/ErrorPage";
 import { SuspenseLoading } from "../baseComponents/SuspenseLoading";
 import AuthLayout from "../layout/Login/LoginLayout";
 import { authStore, authActions } from "./store/authActions";
+import LogoImage from "../assets/images/Logo.svg";
 
 /**
  * تابع کمکی برای چک کردن وضعیت احراز هویت
@@ -81,7 +82,7 @@ const loginRoute = createRoute({
       <SuspenseLoading>
         <AuthLayout>
           <div className="mx-auto mb-6">
-            <img src="./images/Logo.svg" className="w-40" alt="Logo" />
+            <img src={LogoImage} className="w-40" alt="Logo" />
           </div>
           <LoginForm />
         </AuthLayout>

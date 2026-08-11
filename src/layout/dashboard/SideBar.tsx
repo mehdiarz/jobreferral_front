@@ -19,6 +19,7 @@ import {
 
 import { useAppStore, useMenuStore } from "../../libs/store";
 import { appActions } from "../../libs/store/appActions";
+import LogoImage from "../../assets/images/Logo.svg";
 
 const textValue = (value: unknown, fallback = ""): string => {
   if (typeof value === "string") return value;
@@ -477,7 +478,7 @@ export const Sidebar = () => {
       >
         {/* Logo Section */}
         <div className="flex justify-center border-b border-gray-100 dark:border-slate-700/50 p-5">
-          <img src="./images/Logo.svg" className="mx-auto w-32" alt="Logo" />
+          <img src={LogoImage} className="mx-auto w-32" alt="Logo" />
         </div>
 
         {/* Navigation */}

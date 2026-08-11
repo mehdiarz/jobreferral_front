@@ -189,7 +189,7 @@ export default function Header() {
         {/* Left side - Date and Time */}
         <div
           className="hidden sm:flex items-center bg-white dark:bg-gray-800 rounded-xl px-4 py-2 h-11
-          shadow-sm border border-gray-200/60 dark:border-gray-700/60"
+          shadow-sm border border-gray-200/60 dark:border-gray-700/60 min-w-[280px] justify-center"
         >
           <span className="text-sm text-gray-600 dark:text-gray-300 font-medium">
             {currentDateTime || "در حال بارگذاری..."}

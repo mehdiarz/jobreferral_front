@@ -81,7 +81,10 @@ export default function RequestReviewPage() {
     select: (data) => {
       // نمایش status 1 و 2
       const items = ((data?.items ?? []) as RequestItem[]).filter(
-        (r) => r.requestStatusCode === 1 || r.requestStatusCode === 2,
+        (r) =>
+          r.requestStatusCode === 1 ||
+          r.requestStatusCode === 2 ||
+          r.requestStatusCode === 3,
       );
       const filteredItems = filterRequestItems(items, filters);
       const pageStart = pagination.pageIndex * pagination.pageSize;
@@ -103,6 +106,7 @@ export default function RequestReviewPage() {
   // ─── تشخیص status فعلی ────────────────────────────────────────
   const isStatusOne = selectedRequest?.requestStatusCode === 1;
   const isStatusTwo = selectedRequest?.requestStatusCode === 2;
+  const isStatusThree = selectedRequest?.requestStatusCode === 3;
 
   // ─── Fetch کاربران ────────────────────────────────────────────
   useEffect(() => {
@@ -324,20 +328,13 @@ export default function RequestReviewPage() {
     if (isStatusOne) {
       // Status 1: فقط ارسال جهت بررسی
       return (
-        <div className="flex gap-2">
-          <FormButton
-            title="ارسال جهت بررسی"
-            variant="primary"
-            onClick={handleSendForReview}
-            isLoading={isSubmitting}
-            disabled={isSubmitting}
-          />
-          <FormButton
-            title="بستن"
-            variant="secondary"
-            onClick={() => setIsDetailOpen(false)}
-          />
-        </div>
+        <FormButton
+          title="ارسال جهت بررسی"
+          variant="primary"
+          onClick={handleSendForReview}
+          isLoading={isSubmitting}
+          disabled={isSubmitting}
+        />
       );
     }
 
@@ -359,23 +356,21 @@ export default function RequestReviewPage() {
             isLoading={isSubmitting}
             disabled={isSubmitting}
           />
-          <FormButton
-            title="بستن"
-            variant="secondary"
-            onClick={() => setIsDetailOpen(false)}
-          />
         </div>
       );
     }
 
-    // پیش‌فرض
-    return (
-      <FormButton
-        title="بستن"
-        variant="secondary"
-        onClick={() => setIsDetailOpen(false)}
-      />
-    );
+    if (isStatusThree) {
+      return (
+        <FormButton
+          title="مختومه"
+          variant="danger"
+          onClick={() => handleApproveReject(false)}
+          isLoading={isSubmitting}
+          disabled={isSubmitting}
+        />
+      );
+    }
   };
 
   // ─── Render ──────────────────────────────────────────────────
