@@ -1,31 +1,77 @@
 import { apiClient } from "../../libs/api";
-import type { GetAllCreditLimitAuthoritiesParams, CreditLimitAuthorityItem } from "./types";
+import type {
+  CreditLimitAuthorityItem,
+  GetAllCreditLimitAuthoritiesParams,
+} from "./types";
+
+type GetAllCreditLimitAuthoritiesApiResponse = {
+  result?: {
+    items?: CreditLimitAuthorityItem[];
+    totalCount?: number;
+  };
+  items?: CreditLimitAuthorityItem[];
+  totalCount?: number;
+};
 
 export async function getAllCreditLimitAuthorities(
-    params?: GetAllCreditLimitAuthoritiesParams
-): Promise<{ items: CreditLimitAuthorityItem[]; totalCount: number }> {
-    const searchParams = new URLSearchParams();
+  params?: GetAllCreditLimitAuthoritiesParams,
+): Promise<{
+  items: CreditLimitAuthorityItem[];
+  totalCount: number;
+}> {
+  const searchParams = new URLSearchParams();
 
-    if (params?.sorting) {
-        searchParams.set("Sorting", params.sorting);
-    }
+  const personalTypeName = params?.personalTypeName?.trim();
+  const collatralTypeName = params?.collatralTypeName?.trim();
+  const departmentGradeName = params?.departmentGradeName?.trim();
 
-    if (typeof params?.skipCount === "number") {
-        searchParams.set("SkipCount", String(params.skipCount));
-    }
+  if (typeof params?.departmentGradeId === "number") {
+    searchParams.set("DepartmentGradeId", String(params.departmentGradeId));
+  }
 
-    if (typeof params?.maxResultCount === "number") {
-        searchParams.set("MaxResultCount", String(params.maxResultCount));
-    }
+  if (personalTypeName) {
+    searchParams.set("PersonalTypeName", personalTypeName);
+  }
 
-    const query = searchParams.toString();
-    const url = query
-        ? `/services/app/CreditLimitAuthorityCrud/GetAll?${query}`
-        : "/services/app/CreditLimitAuthorityCrud/GetAll";
+  if (collatralTypeName) {
+    searchParams.set("CollatralTypeName", collatralTypeName);
+  }
 
-    const res = await apiClient.request<any>(url, { method: "GET" });
-    const items = res?.items ?? res?.result?.items ?? [];
-    const totalCount = res?.totalCount ?? res?.result?.totalCount ?? items.length;
+  if (departmentGradeName) {
+    searchParams.set("DepartmentGradeName", departmentGradeName);
+  }
 
-    return { items, totalCount };
+  if (params?.sorting?.trim()) {
+    searchParams.set("Sorting", params.sorting.trim());
+  }
+
+  if (typeof params?.skipCount === "number") {
+    searchParams.set("SkipCount", String(params.skipCount));
+  }
+
+  if (typeof params?.maxResultCount === "number") {
+    searchParams.set("MaxResultCount", String(params.maxResultCount));
+  }
+
+  const query = searchParams.toString();
+
+  const url = query
+    ? `/services/app/CreditLimitAuthorityCrud/GetAll?${query}`
+    : "/services/app/CreditLimitAuthorityCrud/GetAll";
+
+  const res = await apiClient.request<GetAllCreditLimitAuthoritiesApiResponse>(
+    url,
+    {
+      method: "GET",
+    },
+  );
+
+  const items = res?.result?.items ?? res?.items ?? [];
+
+  const totalCount = res?.result?.totalCount ?? res?.totalCount ?? items.length;
+
+  return {
+    items,
+    totalCount,
+  };
 }

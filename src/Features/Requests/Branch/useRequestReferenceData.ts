@@ -7,7 +7,9 @@ import { getAllCollatralTypes } from "../../../services/CollatralTypeCrud/getAll
 import { getAllDocumentTypes } from "../../../services/DocumentTypeCrud/getAll";
 import type { RequestOption } from "./requestShared";
 
-const REFERENCE_DATA_LIMIT = 1000;
+// Reference lists are used by dropdowns; never fall back to the API's default
+// page size (usually 10).
+const REFERENCE_DATA_LIMIT = 5000;
 
 export const requestReferenceQueryKeys = {
   requestTypes: ["request-types"] as const,

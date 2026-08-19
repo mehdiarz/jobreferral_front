@@ -1,7 +1,7 @@
 export interface RequestCommentItem {
   id: number;
   requestId?: number;
-  userId?: number;
+  userId?: number | null;
   description?: string;
   creationTime?: string;
 }

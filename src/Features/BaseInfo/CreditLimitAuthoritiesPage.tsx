@@ -27,19 +27,17 @@ import type {
 import { getAllCollatralTypes } from "../../services/CollatralTypeCrud/getAll";
 import type { CollatralTypeItem } from "../../services/CollatralTypeCrud/types";
 
-import { getAllRegions } from "../../services/RegionCrud/getAll";
-import type { RegionItem } from "../../services/RegionCrud/getAll";
-
 import { getAllPersonalTypes } from "../../services/PersonalTypeCrud/getAll";
 import type { PersonalTypeItem } from "../../services/PersonalTypeCrud/types";
 
 import { getAllDepartmentGrades } from "../../services/DepartmentGradeCrud/getAll";
 import type { DepartmentGradeItem } from "../../services/DepartmentGradeCrud/types";
 
+import { getAllPages } from "../../utils/getAllPages";
+
 type CreditLimitAuthorityForm = {
   personalTypeId: number | null;
   collateralTypeId: number | null;
-  regionId: number | null;
   departmentGradeId: number | null;
   minAmount: string;
   maxAmount: string;
@@ -50,23 +48,9 @@ type TableFilter = {
   value: string;
 };
 
-type CreditLimitAuthoritiesApiResponse = {
-  items?: CreditLimitAuthorityItem[];
-  result?: { items?: CreditLimitAuthorityItem[] };
-  listResult?: CreditLimitAuthorityItem[];
-  data?: CreditLimitAuthorityItem[];
-};
-
-type CreditLimitAuthoritiesQueryData = {
-  listResult: CreditLimitAuthorityItem[];
-  total: number;
-  totalPages: number;
-};
-
 const emptyForm: CreditLimitAuthorityForm = {
   personalTypeId: null,
   collateralTypeId: null,
-  regionId: null,
   departmentGradeId: null,
   minAmount: "",
   maxAmount: "",
@@ -87,90 +71,123 @@ export default function CreditLimitAuthoritiesPage() {
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
   const [filters, setFilters] = useState<TableFilter[]>([]);
 
-  const creditLimitAuthoritiesQuery = useQuery({
-    queryKey: [
-      "credit-limit-authorities",
-      filters,
-      pagination.pageIndex,
-      pagination.pageSize,
-    ],
-    queryFn: () => getAllCreditLimitAuthorities(),
-    select: (data): CreditLimitAuthoritiesQueryData => {
-      const apiData = data as CreditLimitAuthoritiesApiResponse;
-      const allItems: CreditLimitAuthorityItem[] =
-        apiData?.items ??
-        apiData?.result?.items ??
-        apiData?.listResult ??
-        apiData?.data ??
-        [];
+  const departmentGradeIdFilterValue =
+    filters.find((f) => f.key === "departmentGradeId")?.value?.trim() ||
+    undefined;
 
-      const personalTypeFilter =
-        filters.find((f) => f.key === "personalTypeId")?.value?.trim() ?? "";
-      const collateralTypeFilter =
-        filters.find((f) => f.key === "collateralTypeId")?.value?.trim() ?? "";
-      const regionFilter =
-        filters.find((f) => f.key === "regionId")?.value?.trim() ?? "";
-      const departmentGradeFilter =
-        filters.find((f) => f.key === "departmentGradeId")?.value?.trim() ?? "";
+  const departmentGradeIdFilter = departmentGradeIdFilterValue
+    ? Number(departmentGradeIdFilterValue)
+    : undefined;
 
-      const filteredItems = allItems.filter((item) => {
-        if (
-          personalTypeFilter &&
-          String(item.personalTypeId ?? "") !== personalTypeFilter
-        )
-          return false;
-        if (
-          collateralTypeFilter &&
-          String(item.collatralTypeId ?? "") !== collateralTypeFilter
-        )
-          return false;
-        if (regionFilter && String(item.regionId ?? "") !== regionFilter)
-          return false;
-        if (
-          departmentGradeFilter &&
-          String(item.departmentGradeId ?? "") !== departmentGradeFilter
-        )
-          return false;
-        return true;
-      });
+  const personalTypeIdFilterValue =
+    filters.find((f) => f.key === "personalTypeId")?.value?.trim() || undefined;
 
-      const total = filteredItems.length;
-      const totalPages = Math.max(1, Math.ceil(total / pagination.pageSize));
-      const startIndex = pagination.pageIndex * pagination.pageSize;
-
-      return {
-        listResult: filteredItems.slice(
-          startIndex,
-          startIndex + pagination.pageSize,
-        ),
-        total,
-        totalPages,
-      };
-    },
-  });
+  const collateralTypeIdFilterValue =
+    filters.find((f) => f.key === "collateralTypeId")?.value?.trim() ||
+    undefined;
 
   const collateralTypesQuery = useQuery({
     queryKey: ["collateral-types-all"],
-    queryFn: () => getAllCollatralTypes({ maxResultCount: 1000 }),
-    select: (data) => data?.items ?? [],
-  });
-
-  const regionsQuery = useQuery({
-    queryKey: ["regions-all"],
-    queryFn: () => getAllRegions(),
-    select: (data) => data?.items ?? [],
+    queryFn: () =>
+      getAllPages((params) =>
+        getAllCollatralTypes({
+          skipCount: params.skipCount,
+          maxResultCount: params.maxResultCount,
+        }),
+      ),
+    select: (data) => data ?? [],
   });
 
   const personalTypesQuery = useQuery({
     queryKey: ["personal-types-all"],
-    queryFn: () => getAllPersonalTypes({ maxResultCount: 1000 }),
-    select: (data) => data?.items ?? [],
+    queryFn: () =>
+      getAllPages((params) =>
+        getAllPersonalTypes({
+          skipCount: params.skipCount,
+          maxResultCount: params.maxResultCount,
+        }),
+      ),
+    select: (data) => data ?? [],
   });
 
   const departmentGradesQuery = useQuery({
     queryKey: ["department-grades-all"],
-    queryFn: () => getAllDepartmentGrades({ maxResultCount: 1000 }),
-    select: (data) => data?.items ?? [],
+    queryFn: () =>
+      getAllPages((params) =>
+        getAllDepartmentGrades({
+          skipCount: params.skipCount,
+          maxResultCount: params.maxResultCount,
+        }),
+      ),
+    select: (data) => data ?? [],
+  });
+
+  const selectedPersonalType = personalTypeIdFilterValue
+    ? (personalTypesQuery.data ?? []).find(
+        (item: PersonalTypeItem) =>
+          String(item.id) === personalTypeIdFilterValue,
+      )
+    : undefined;
+
+  const selectedCollateralType = collateralTypeIdFilterValue
+    ? (collateralTypesQuery.data ?? []).find(
+        (item: CollatralTypeItem) =>
+          String(item.id) === collateralTypeIdFilterValue,
+      )
+    : undefined;
+
+  const selectedDepartmentGrade = departmentGradeIdFilterValue
+    ? (departmentGradesQuery.data ?? []).find(
+        (item: DepartmentGradeItem) =>
+          String(item.id) === departmentGradeIdFilterValue,
+      )
+    : undefined;
+
+  const creditLimitAuthoritiesQuery = useQuery({
+    queryKey: [
+      "credit-limit-authorities",
+      pagination.pageIndex,
+      pagination.pageSize,
+      personalTypeIdFilterValue,
+      collateralTypeIdFilterValue,
+      departmentGradeIdFilterValue,
+      selectedPersonalType?.title,
+      selectedCollateralType?.title,
+      selectedDepartmentGrade?.title,
+    ],
+
+    queryFn: () =>
+      getAllCreditLimitAuthorities({
+        skipCount: pagination.pageIndex * pagination.pageSize,
+        maxResultCount: pagination.pageSize,
+
+        ...(selectedPersonalType?.title
+          ? { personalTypeName: selectedPersonalType.title }
+          : {}),
+
+        ...(selectedCollateralType?.title
+          ? { collatralTypeName: selectedCollateralType.title }
+          : {}),
+
+        ...(selectedDepartmentGrade?.title
+          ? { departmentGradeName: selectedDepartmentGrade.title }
+          : {}),
+
+        ...(typeof departmentGradeIdFilter === "number" &&
+        !Number.isNaN(departmentGradeIdFilter)
+          ? { departmentGradeId: departmentGradeIdFilter }
+          : {}),
+      }),
+
+    select: (data) => {
+      const total = data.totalCount;
+
+      return {
+        listResult: data.items,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / pagination.pageSize)),
+      };
+    },
   });
 
   const collateralTypeOptions = useMemo(
@@ -180,15 +197,6 @@ export default function CreditLimitAuthoritiesPage() {
         title: item.title ?? "",
       })),
     [collateralTypesQuery.data],
-  );
-
-  const regionOptions = useMemo(
-    () =>
-      (regionsQuery.data ?? []).map((item: RegionItem) => ({
-        id: item.id,
-        title: item.title ?? "",
-      })),
-    [regionsQuery.data],
   );
 
   const personalTypeOptions = useMemo(
@@ -257,7 +265,6 @@ export default function CreditLimitAuthoritiesPage() {
     setFormData({
       personalTypeId: item.personalTypeId ?? null,
       collateralTypeId: item.collatralTypeId ?? null,
-      regionId: item.regionId ?? null,
       departmentGradeId: item.departmentGradeId ?? null,
       minAmount: item.minAmount?.toString() ?? "",
       maxAmount: item.maxAmount?.toString() ?? "",
@@ -286,10 +293,6 @@ export default function CreditLimitAuthoritiesPage() {
       showToast("انتخاب نوع وثیقه الزامی است", "error");
       return;
     }
-    if (!formData.regionId) {
-      showToast("انتخاب منطقه الزامی است", "error");
-      return;
-    }
     if (!formData.departmentGradeId) {
       showToast("انتخاب رتبه دپارتمان الزامی است", "error");
       return;
@@ -310,7 +313,6 @@ export default function CreditLimitAuthoritiesPage() {
     const body = {
       personalTypeId: formData.personalTypeId,
       collatralTypeId: formData.collateralTypeId,
-      regionId: formData.regionId,
       departmentGradeId: formData.departmentGradeId,
       minAmount: parseFloat(formData.minAmount),
       maxAmount: parseFloat(formData.maxAmount),
@@ -346,17 +348,6 @@ export default function CreditLimitAuthoritiesPage() {
           const id = row.original.collatralTypeId;
           const item = (collateralTypesQuery.data ?? []).find(
             (t: CollatralTypeItem) => t.id === id,
-          );
-          return item?.title ?? "-";
-        },
-      },
-      {
-        id: "region",
-        header: "منطقه استانی",
-        cell: ({ row }) => {
-          const id = row.original.regionId;
-          const item = (regionsQuery.data ?? []).find(
-            (r: RegionItem) => r.id === id,
           );
           return item?.title ?? "-";
         },
@@ -425,7 +416,6 @@ export default function CreditLimitAuthoritiesPage() {
     ],
     [
       collateralTypesQuery.data,
-      regionsQuery.data,
       personalTypesQuery.data,
       departmentGradesQuery.data,
       deleteMutation.isPending,
@@ -444,7 +434,6 @@ export default function CreditLimitAuthoritiesPage() {
     const headers = [
       "نوع شخص",
       "نوع وثیقه",
-      "منطقه استانی",
       "رتبه دپارتمان",
       "حداقل مبلغ",
       "حداکثر مبلغ",
@@ -456,16 +445,12 @@ export default function CreditLimitAuthoritiesPage() {
       const ct = (collateralTypesQuery.data ?? []).find(
         (t: CollatralTypeItem) => t.id === item.collatralTypeId,
       );
-      const r = (regionsQuery.data ?? []).find(
-        (r: RegionItem) => r.id === item.regionId,
-      );
       const dg = (departmentGradesQuery.data ?? []).find(
         (g: DepartmentGradeItem) => g.id === item.departmentGradeId,
       );
       return [
         pt?.title ?? "",
         ct?.title ?? "",
-        r?.title ?? "",
         dg?.title ?? "",
         item.minAmount ?? "",
         item.maxAmount ?? "",
@@ -502,13 +487,10 @@ export default function CreditLimitAuthoritiesPage() {
         const ct = (collateralTypesQuery.data ?? []).find(
           (t: CollatralTypeItem) => t.id === item.collatralTypeId,
         );
-        const r = (regionsQuery.data ?? []).find(
-          (r: RegionItem) => r.id === item.regionId,
-        );
         const dg = (departmentGradesQuery.data ?? []).find(
           (g: DepartmentGradeItem) => g.id === item.departmentGradeId,
         );
-        return `<tr><td>${pt?.title ?? ""}</td><td>${ct?.title ?? ""}</td><td>${r?.title ?? ""}</td><td>${dg?.title ?? ""}</td><td>${item.minAmount ?? ""}</td><td>${item.maxAmount ?? ""}</td></tr>`;
+        return `<tr><td>${pt?.title ?? ""}</td><td>${ct?.title ?? ""}</td><td>${dg?.title ?? ""}</td><td>${item.minAmount ?? ""}</td><td>${item.maxAmount ?? ""}</td></tr>`;
       })
       .join("");
     const printWindow = window.open("", "_blank");
@@ -519,7 +501,7 @@ export default function CreditLimitAuthoritiesPage() {
     printWindow.document
       .write(`<html dir="rtl" lang="fa"><head><title>PDF</title>
     <style>body{font-family:Tahoma,Arial;direction:rtl;padding:24px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:right}th{background:#f3f4f6}</style></head>
-    <body><h2>حدود اختیار رکن اعتباری</h2><table><thead><tr><th>نوع شخص</th><th>نوع وثیقه</th><th>منطقه</th><th>رتبه دپارتمان</th><th>حداقل مبلغ</th><th>حداکثر مبلغ</th></tr></thead>
+    <body><h2>حدود اختیار رکن اعتباری</h2><table><thead><tr><th>نوع شخص</th><th>نوع وثیقه</th><th>رتبه دپارتمان</th><th>حداقل مبلغ</th><th>حداکثر مبلغ</th></tr></thead>
     <tbody>${tableRows}</tbody></table><script>window.onload=function(){window.print()}</script></body></html>`);
     printWindow.document.close();
   };
@@ -590,15 +572,6 @@ export default function CreditLimitAuthoritiesPage() {
               })),
             },
             {
-              field: "regionId",
-              label: "منطقه استانی",
-              type: "select",
-              options: regionOptions.map((o) => ({
-                value: String(o.id),
-                label: o.title,
-              })),
-            },
-            {
               field: "departmentGradeId",
               label: "رتبه دپارتمان",
               type: "select",
@@ -608,7 +581,7 @@ export default function CreditLimitAuthoritiesPage() {
               })),
             },
           ]}
-          skeletonColumns={7}
+          skeletonColumns={6}
           emptyStateMessage="هیچ رکن اعتباری یافت نشد"
           emptyStateDescription="موردی برای نمایش وجود ندارد."
         />
@@ -673,19 +646,6 @@ export default function CreditLimitAuthoritiesPage() {
                   }))
                 }
                 options={collateralTypeOptions}
-              />
-            </FluidCol>
-            <FluidCol colSpan={12}>
-              <FormSelect<number>
-                id="modal-regionId"
-                name="modal-regionId"
-                label="منطقه استانی"
-                value={formData.regionId ?? ""}
-                required
-                onChange={(v) =>
-                  setFormData((p) => ({ ...p, regionId: v ? Number(v) : null }))
-                }
-                options={regionOptions}
               />
             </FluidCol>
             <FluidCol colSpan={12}>

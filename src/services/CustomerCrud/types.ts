@@ -4,6 +4,10 @@ export interface CustomerItem {
   cifNumber?: string | null;
   name?: string | null;
   creationTime?: string;
+  lastModificationTime?: string | null;
+  nationalCode?: string | null;
+  isDeleted?: boolean;
+  deletionTime?: string | null;
 }
 
 export interface CreateCustomerBody {

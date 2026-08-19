@@ -1,35 +1,79 @@
 import { apiClient } from "../../libs/api";
-import type { GetAllDepartmentGradesParams, DepartmentGradeItem } from "./types";
+import type {
+  DepartmentGradeItem,
+  GetAllDepartmentGradesParams,
+} from "./types";
+
+type GetAllDepartmentGradesResponse = {
+  result?: {
+    items?: DepartmentGradeItem[];
+    totalCount?: number;
+  };
+
+  items?: DepartmentGradeItem[];
+  totalCount?: number;
+};
 
 export async function getAllDepartmentGrades(
-    params?: GetAllDepartmentGradesParams
-): Promise<{ items: DepartmentGradeItem[]; totalCount: number }> {
-    const searchParams = new URLSearchParams();
+  params?: GetAllDepartmentGradesParams,
+): Promise<{
+  items: DepartmentGradeItem[];
+  totalCount: number;
+}> {
+  const searchParams = new URLSearchParams();
 
-    if (typeof params?.isActive === "boolean") {
-        searchParams.set("IsActive", String(params.isActive));
-    }
+  const title = params?.title?.trim();
+  const code = params?.code?.trim();
+  const description = params?.description?.trim();
 
-    if (params?.sorting) {
-        searchParams.set("Sorting", params.sorting);
-    }
+  if (title) {
+    searchParams.set("Title", title);
+  }
 
-    if (typeof params?.skipCount === "number") {
-        searchParams.set("SkipCount", String(params.skipCount));
-    }
+  if (code) {
+    searchParams.set("Code", code);
+  }
 
-    if (typeof params?.maxResultCount === "number") {
-        searchParams.set("MaxResultCount", String(params.maxResultCount));
-    }
+  if (typeof params?.grade === "number") {
+    searchParams.set("Grade", String(params.grade));
+  }
 
-    const query = searchParams.toString();
-    const url = query
-        ? `/services/app/DepartmentGrade/GetAll?${query}`
-        : "/services/app/DepartmentGrade/GetAll";
+  if (description) {
+    searchParams.set("Description", description);
+  }
 
-    const res = await apiClient.request<any>(url, { method: "GET" });
-    const items = res?.items ?? res?.result?.items ?? [];
-    const totalCount = res?.totalCount ?? res?.result?.totalCount ?? items.length;
+  if (typeof params?.isActive === "boolean") {
+    searchParams.set("IsActive", String(params.isActive));
+  }
 
-    return { items, totalCount };
+  if (params?.sorting?.trim()) {
+    searchParams.set("Sorting", params.sorting.trim());
+  }
+
+  if (typeof params?.skipCount === "number") {
+    searchParams.set("SkipCount", String(params.skipCount));
+  }
+
+  if (typeof params?.maxResultCount === "number") {
+    searchParams.set("MaxResultCount", String(params.maxResultCount));
+  }
+
+  const query = searchParams.toString();
+
+  const url = query
+    ? `/services/app/DepartmentGrade/GetAll?${query}`
+    : "/services/app/DepartmentGrade/GetAll";
+
+  const res = await apiClient.request<GetAllDepartmentGradesResponse>(url, {
+    method: "GET",
+  });
+
+  const items = res?.result?.items ?? res?.items ?? [];
+
+  const totalCount = res?.result?.totalCount ?? res?.totalCount ?? items.length;
+
+  return {
+    items,
+    totalCount,
+  };
 }

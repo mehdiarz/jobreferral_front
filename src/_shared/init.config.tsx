@@ -107,12 +107,12 @@ export const defaultMenuItems = [
         path: "/dashboard/base-info/department-types",
         permissions: [Permissions.Pages_DepartmentTypes],
       },
-      {
-        id: "departments",
-        title: "دپارتمان‌ها",
-        path: "/dashboard/base-info/departments",
-        permissions: [Permissions.Pages_Departments],
-      },
+      // {
+      //   id: "departments",
+      //   title: "دپارتمان‌ها",
+      //   path: "/dashboard/base-info/departments",
+      //   permissions: [Permissions.Pages_Departments],
+      // },
       {
         id: "person-types",
         title: "انواع شخص",
@@ -163,13 +163,13 @@ export const defaultMenuItems = [
           },
           {
             id: "requests-referral",
-            title: "ارجاع به کارشناس رسمی دادگستری",
+            title: "نتیجه ارزیابی ارجاع به کارشناس رسمی دادگستری",
             path: "/dashboard/requests/branch/referral",
             permissions: [],
           },
           {
             id: "requests-fee-calculation",
-            title: "نتیجه ارزیابی و محاسبه کارمزد کارشناس رسمی دادگستری",
+            title: "محاسبه کارمزد کارشناس رسمی دادگستری",
             path: "/dashboard/requests/branch/fee-calculation",
             permissions: [],
           },
@@ -178,13 +178,58 @@ export const defaultMenuItems = [
       {
         id: "independent-branch",
         title: "شعبه مستقل",
-        path: "/dashboard/requests/independent",
+        children: [
+          {
+            id: "requests-independent-view",
+            title: "مشاهده و پیگیری درخواست‌ها",
+            path: "/dashboard/requests/independent/view",
+            permissions: [],
+          },
+          {
+            id: "requests-independent-create",
+            title: "ایجاد درخواست جدید",
+            path: "/dashboard/requests/independent/create",
+            permissions: [],
+          },
+          {
+            id: "requests-independent-review",
+            title: "بررسی درخواست توسط شعبه مستقل",
+            path: "/dashboard/requests/independent/review",
+            permissions: [],
+          },
+          {
+            id: "requests-independent-asset-review",
+            title: "بازنگری اطلاعات ملک توسط شعبه مستقل",
+            path: "/dashboard/requests/independent/asset-review",
+            permissions: [],
+          },
+        ],
       },
-      { id: "region", title: "منطقه", path: "/dashboard/requests/region" },
+      {
+        id: "region",
+        title: "منطقه",
+        icon: "map-marker",
+        children: [
+          {
+            id: "requests-region-view",
+            title: "مشاهده و پیگیری درخواست‌ها",
+            path: "/dashboard/requests/region/view",
+            permissions: [],
+          },
+        ],
+      },
       {
         id: "main-office",
         title: "ستاد",
-        path: "/dashboard/requests/main-office",
+        icon: "building",
+        children: [
+          {
+            id: "requests-main-office-view",
+            title: "مشاهده و پیگیری درخواست‌ها",
+            path: "/dashboard/requests/main-office/view",
+            permissions: [],
+          },
+        ],
       },
     ],
   },

@@ -5,11 +5,22 @@ export interface ChangeStatusBody {
   requestId: number;
 }
 
+export interface ChangeStatusResponse {
+  result?: {
+    requestId?: number;
+    statusCode?: number;
+    statusTitle?: string;
+  };
+}
+
 export async function changeRequestStatus(
   body: ChangeStatusBody,
-): Promise<any> {
-  return apiClient.request<any>("/services/app/RequestCrud/ChangeStatus", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+): Promise<ChangeStatusResponse> {
+  return apiClient.request<ChangeStatusResponse>(
+    "/services/app/RequestCrud/ChangeStatus",
+    {
+      method: "POST",
+      body: JSON.stringify(body),
+    },
+  );
 }

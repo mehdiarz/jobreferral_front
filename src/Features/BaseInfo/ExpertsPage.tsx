@@ -16,8 +16,8 @@ import { getAllExperts } from "../../services/JudicialExperts/getAllExperts";
 import { createExpert } from "../../services/JudicialExperts/createExpert";
 import { updateExpert } from "../../services/JudicialExperts/updateExpert";
 import { deleteExpert } from "../../services/JudicialExperts/deleteExpert";
-import { getAllExpertiseZones } from "../../services/JudicialExperts/getAllExpertiseZones";
-import { getAllRegions } from "../../services/JudicialExperts/getAllRegions";
+import { getAllExpertiseZones } from "../../services/ExpertiseZoneCrud/getAll";
+import { getAllRegions } from "../../services/RegionCrud/getAll";
 import type { CreateExpertBody } from "../../services/JudicialExperts/createExpert";
 import { persianToISO, isoToPersian } from "../../utils/persianToISO";
 
@@ -50,6 +50,7 @@ type Expert = {
   lastName?: string;
   code?: string;
   nationalCode?: string;
+  rank?: number;
   expertiseZoneId?: number | string;
   expertiseZoneTitle?: string;
   expertiseZone?: { title?: string; name?: string };
@@ -72,6 +73,7 @@ type ExpertForm = {
   firstName: string;
   lastName: string;
   code: string;
+  rank: string;
   expertiseZoneId: string;
   regionId: string;
   licenseNumber: string;
@@ -87,6 +89,7 @@ const emptyForm: ExpertForm = {
   firstName: "",
   lastName: "",
   code: "",
+  rank: "",
   expertiseZoneId: "",
   regionId: "",
   licenseNumber: "",
@@ -152,6 +155,7 @@ const makePayload = (form: ExpertForm): CreateExpertBody => {
     firstName: form.firstName,
     lastName: form.lastName,
     code: form.code,
+    rank: Number(form.rank ?? 0),
     expertiseZoneId: Number(form.expertiseZoneId ?? 0),
     regionId: Number(form.regionId ?? 0),
     licenseNumber: form.licenseNumber,
@@ -186,11 +190,19 @@ export default function ExpertsPage() {
 
   const zonesQuery = useQuery({
     queryKey: ["expertise-zones"],
-    queryFn: getAllExpertiseZones,
+    queryFn: () =>
+      getAllExpertiseZones({
+        skipCount: 0,
+        maxResultCount: 10000,
+      }),
   });
   const regionsQuery = useQuery({
     queryKey: ["regions"],
-    queryFn: getAllRegions,
+    queryFn: () =>
+      getAllRegions({
+        skipCount: 0,
+        maxResultCount: 10000,
+      }),
   });
 
   const zoneOptions: SelectOption[] = useMemo(() => {
@@ -225,47 +237,50 @@ export default function ExpertsPage() {
     { id: "inactive", title: "غیرفعال" },
   ];
 
+  const activeFilter = filters[0];
+
+  const filterKey = activeFilter?.key ?? "";
+  const filterValue = activeFilter?.value?.trim() ?? "";
+
   const expertsQuery = useQuery({
-    queryKey: ["experts", filters, pagination.pageIndex, pagination.pageSize],
-    queryFn: getAllExperts,
+    queryKey: [
+      "experts",
+      pagination.pageIndex,
+      pagination.pageSize,
+      filterKey,
+      filterValue,
+    ],
+
+    queryFn: () => {
+      const skipCount = pagination.pageIndex * pagination.pageSize;
+
+      return getAllExperts({
+        skipCount,
+        maxResultCount: pagination.pageSize,
+
+        ...(filterKey === "fullName" && filterValue
+          ? { firstName: filterValue }
+          : {}),
+
+        ...(filterKey === "code" && filterValue ? { code: filterValue } : {}),
+
+        ...(filterKey === "expertiseZone" && filterValue
+          ? { expertiseZoneTitle: filterValue }
+          : {}),
+
+        ...(filterKey === "licenseNumber" && filterValue
+          ? { licenseNumber: filterValue }
+          : {}),
+      });
+    },
+
     select: (data) => {
-      const items = getArrayData(data) as Expert[];
-      const af = filters[0];
-      const fk = af?.key ?? "";
-      const fv = af?.value?.trim() ?? "";
-      const filtered = fv
-        ? items.filter((expert) => {
-            switch (fk) {
-              case "fullName":
-                return getExpertFullName(expert)
-                  .toLocaleLowerCase("fa")
-                  .includes(fv.toLocaleLowerCase("fa"));
-              case "code":
-                return getExpertCode(expert)
-                  .toLocaleLowerCase("fa")
-                  .includes(fv.toLocaleLowerCase("fa"));
-              case "expertiseZone":
-                return getExpertiseZoneTitle(expert, zoneOptions)
-                  .toLocaleLowerCase("fa")
-                  .includes(fv.toLocaleLowerCase("fa"));
-              case "licenseNumber":
-                return safeText(expert.licenseNumber)
-                  .toLocaleLowerCase("fa")
-                  .includes(fv.toLocaleLowerCase("fa"));
-              default:
-                return `${getExpertFullName(expert)} ${getExpertCode(expert)} ${safeText(expert.licenseNumber)}`
-                  .toLocaleLowerCase("fa")
-                  .includes(fv.toLocaleLowerCase("fa"));
-            }
-          })
-        : items;
-      const total = filtered.length;
-      const tp = Math.max(1, Math.ceil(total / pagination.pageSize));
-      const si = pagination.pageIndex * pagination.pageSize;
+      const total = data.totalCount;
+
       return {
-        listResult: filtered.slice(si, si + pagination.pageSize),
+        listResult: data.items as Expert[],
         total,
-        totalPages: tp,
+        totalPages: Math.max(1, Math.ceil(total / pagination.pageSize)),
       };
     },
   });
@@ -319,6 +334,7 @@ export default function ExpertsPage() {
       firstName: safeText(expert.firstName),
       lastName: safeText(expert.lastName),
       code: getExpertCode(expert),
+      rank: safeText(expert.rank),
       expertiseZoneId: safeOptionId(expert.expertiseZoneId),
       regionId: safeOptionId(expert.regionId),
       status: expert.isActive ? "active" : "inactive",
@@ -372,6 +388,11 @@ export default function ExpertsPage() {
         accessorKey: "code",
         header: "کدملی",
         cell: ({ row }) => getExpertCode(row.original),
+      },
+      {
+        accessorKey: "rank", // 👈 اضافه کن
+        header: "رتبه",
+        cell: ({ row }) => safeText(row.original.rank),
       },
       {
         id: "expertiseZone",
@@ -446,6 +467,7 @@ export default function ExpertsPage() {
     const headers = [
       "نام و نام خانوادگی",
       "کدملی",
+      "رتبه",
       "حدود صلاحیت",
       "شماره پروانه",
       "تاریخ انقضا",
@@ -454,6 +476,7 @@ export default function ExpertsPage() {
     const csvRows = rows.map((item) => [
       getExpertFullName(item),
       getExpertCode(item),
+      safeText(item.rank),
       getExpertiseZoneTitle(item, zoneOptions),
       safeText(item.licenseNumber),
       getLicenseExpirationDate(item),
@@ -485,7 +508,7 @@ export default function ExpertsPage() {
     const trs = rows
       .map(
         (item) =>
-          `<tr><td>${getExpertFullName(item)}</td><td>${getExpertCode(item)}</td><td>${getExpertiseZoneTitle(item, zoneOptions)}</td><td>${safeText(item.licenseNumber)}</td><td>${getLicenseExpirationDate(item)}</td><td>${getStatusTitle(item)}</td></tr>`,
+          `<tr><td>${getExpertFullName(item)}</td><td>${getExpertCode(item)}</td><td>${safeText(item.rank)}</td><td>${getExpertiseZoneTitle(item, zoneOptions)}</td><td>${safeText(item.licenseNumber)}</td><td>${getLicenseExpirationDate(item)}</td><td>${getStatusTitle(item)}</td></tr>`,
       )
       .join("");
     const pw = window.open("", "_blank");
@@ -494,7 +517,7 @@ export default function ExpertsPage() {
       return;
     }
     pw.document.write(
-      `<html dir="rtl" lang="fa"><head><title>PDF</title><style>body{font-family:Tahoma,Arial;direction:rtl;padding:24px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:right}th{background:#f3f4f6}</style></head><body><h2>لیست کارشناسان دادگستری</h2><table><thead><tr><th>نام و نام خانوادگی</th><th>کدملی</th><th>حدود صلاحیت</th><th>شماره پروانه</th><th>تاریخ انقضا</th><th>وضعیت</th></tr></thead><tbody>${trs}</tbody></table><script>window.onload=function(){window.print()}</script></body></html>`,
+      `<html dir="rtl" lang="fa"><head><title>PDF</title><style>body{font-family:Tahoma,Arial;direction:rtl;padding:24px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:right}th{background:#f3f4f6}</style></head><body><h2>لیست کارشناسان دادگستری</h2><table><thead><tr><th>نام و نام خانوادگی</th><th>کدملی</th><th>رتبه</th><th>حدود صلاحیت</th><th>شماره پروانه</th><th>تاریخ انقضا</th><th>وضعیت</th></tr></thead><tbody>${trs}</tbody></table><script>window.onload=function(){window.print()}</script></body></html>`,
     );
     pw.document.close();
   };
@@ -568,7 +591,7 @@ export default function ExpertsPage() {
             },
           ]}
           searchMode="onEnter"
-          skeletonColumns={7}
+          skeletonColumns={8}
           emptyStateMessage="هیچ کارشناسی یافت نشد"
           emptyStateDescription="موردی برای نمایش وجود ندارد."
         />
@@ -626,6 +649,15 @@ export default function ExpertsPage() {
               dir="ltr"
               maxLength={10}
               required
+            />
+            <FormInput
+              id="modal-rank" // 👈 اضافه کن
+              name="rank"
+              label="رتبه"
+              value={formData.rank}
+              onChange={(v) => setFormData((p) => ({ ...p, rank: v }))}
+              dir="ltr"
+              type="number"
             />
             <FormSelect<string>
               id="modal-expertiseZoneId"

@@ -1,43 +1,65 @@
 import { apiClient } from "../../libs/api";
 
 export interface ExpertiseZoneItem {
-    id: number;
-    code: string | null;
-    title: string | null;
-    description?: string | null;
+  id: number;
+  code: string | null;
+  title: string | null;
+  description?: string | null;
 }
 
 export interface GetAllExpertiseZonesParams {
-    sorting?: string;
-    skipCount?: number;
-    maxResultCount?: number;
+  sorting?: string;
+  skipCount?: number;
+  maxResultCount?: number;
+  title?: string;
+  code?: string;
 }
 
 export async function getAllExpertiseZones(
-    params?: GetAllExpertiseZonesParams,
+  params?: GetAllExpertiseZonesParams,
 ): Promise<{ items: ExpertiseZoneItem[]; totalCount: number }> {
-    const searchParams = new URLSearchParams();
+  const searchParams = new URLSearchParams();
 
-    if (params?.sorting) {
-        searchParams.set("Sorting", params.sorting);
-    }
+  const title = params?.title?.trim();
+  const code = params?.code?.trim();
+  const sorting = params?.sorting?.trim();
 
-    if (typeof params?.skipCount === "number") {
-        searchParams.set("SkipCount", String(params.skipCount));
-    }
+  if (title) {
+    searchParams.set("Title", title);
+  }
 
-    if (typeof params?.maxResultCount === "number") {
-        searchParams.set("MaxResultCount", String(params.maxResultCount));
-    }
+  if (code) {
+    searchParams.set("Code", code);
+  }
 
-    const query = searchParams.toString();
-    const url = query
-        ? `/services/app/ExpertiseZoneCrud/GetAll?${query}`
-        : "/services/app/ExpertiseZoneCrud/GetAll";
+  if (sorting) {
+    searchParams.set("Sorting", sorting);
+  }
 
-    const res = await apiClient.request<any>(url, { method: "GET" });
-    const items = res?.items ?? res?.result?.items ?? [];
-    const totalCount = res?.totalCount ?? res?.result?.totalCount ?? items.length;
+  if (typeof params?.skipCount === "number") {
+    searchParams.set("SkipCount", String(params.skipCount));
+  }
 
-    return { items, totalCount };
+  if (typeof params?.maxResultCount === "number") {
+    searchParams.set("MaxResultCount", String(params.maxResultCount));
+  }
+
+  const query = searchParams.toString();
+
+  const url = query
+    ? `/services/app/ExpertiseZoneCrud/GetAll?${query}`
+    : "/services/app/ExpertiseZoneCrud/GetAll";
+
+  const res = await apiClient.request<any>(url, {
+    method: "GET",
+  });
+
+  const items: ExpertiseZoneItem[] = res?.result?.items ?? res?.items ?? [];
+
+  const totalCount = res?.result?.totalCount ?? res?.totalCount ?? items.length;
+
+  return {
+    items,
+    totalCount,
+  };
 }

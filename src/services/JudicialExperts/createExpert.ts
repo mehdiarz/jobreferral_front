@@ -4,6 +4,7 @@ export interface CreateExpertBody {
   firstName: string;
   lastName: string;
   code: string;
+  rank?: number;
   expertiseZoneId: number;
   regionId: number;
   licenseNumber?: string;

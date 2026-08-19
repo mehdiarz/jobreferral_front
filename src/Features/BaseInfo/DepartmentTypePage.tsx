@@ -25,12 +25,6 @@ import type {
 
 type DepartmentTypeForm = { name: string };
 type TableFilter = { key: string; value: string };
-type ApiResponse = {
-  items?: DepartmentTypeItem[];
-  result?: { items?: DepartmentTypeItem[] };
-  listResult?: DepartmentTypeItem[];
-  data?: DepartmentTypeItem[];
-};
 
 const emptyForm: DepartmentTypeForm = { name: "" };
 
@@ -47,42 +41,29 @@ export default function DepartmentTypePage() {
   );
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
   const [filters, setFilters] = useState<TableFilter[]>([]);
+  const nameFilter =
+    filters.find((f) => f.key === "name")?.value?.trim() || undefined;
 
   const query = useQuery({
     queryKey: [
       "department-types",
-      filters,
       pagination.pageIndex,
       pagination.pageSize,
+      nameFilter,
     ],
-    queryFn: () => getAllDepartmentTypes(),
+    queryFn: () =>
+      getAllDepartmentTypes({
+        skipCount: pagination.pageIndex * pagination.pageSize,
+        maxResultCount: pagination.pageSize,
+        ...(nameFilter ? { name: nameFilter } : {}),
+      }),
     select: (data) => {
-      const apiData = data as ApiResponse;
-      const items =
-        apiData?.items ??
-        apiData?.result?.items ??
-        apiData?.listResult ??
-        apiData?.data ??
-        [];
-      const nameFilter =
-        filters
-          .find((f) => f.key === "name")
-          ?.value?.trim()
-          .toLocaleLowerCase("fa") ?? "";
-      const filtered = nameFilter
-        ? items.filter((i) =>
-            String(i.name ?? "")
-              .toLocaleLowerCase("fa")
-              .includes(nameFilter),
-          )
-        : items;
-      const total = filtered.length;
-      const totalPages = Math.max(1, Math.ceil(total / pagination.pageSize));
-      const start = pagination.pageIndex * pagination.pageSize;
+      const total = data.totalCount;
+
       return {
-        listResult: filtered.slice(start, start + pagination.pageSize),
+        listResult: data.items,
         total,
-        totalPages,
+        totalPages: Math.max(1, Math.ceil(total / pagination.pageSize)),
       };
     },
   });
@@ -203,19 +184,32 @@ export default function DepartmentTypePage() {
     ],
   );
 
-  const handleExportExcel = () => {
-    const rows = query.data?.listResult ?? [];
+  const handleExportExcel = async () => {
+    const result = await getAllDepartmentTypes({
+      skipCount: 0,
+      maxResultCount: 10000,
+      ...(nameFilter ? { name: nameFilter } : {}),
+    });
+
+    const rows = result.items;
+
     if (!rows.length) {
       alert("داده‌ای برای خروجی وجود ندارد");
       return;
     }
+
     const csvContent = [
       "نام",
-      ...rows.map((i: DepartmentTypeItem) => `"${i.name ?? ""}"`),
+      ...rows.map(
+        (i: DepartmentTypeItem) =>
+          `"${String(i.name ?? "").replace(/"/g, '""')}"`,
+      ),
     ].join("\n");
+
     const blob = new Blob(["\uFEFF" + csvContent], {
       type: "text/csv;charset=utf-8;",
     });
+
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -224,23 +218,54 @@ export default function DepartmentTypePage() {
     URL.revokeObjectURL(url);
   };
 
-  const handleExportPdf = () => {
-    const rows = query.data?.listResult ?? [];
+  const handleExportPdf = async () => {
+    const result = await getAllDepartmentTypes({
+      skipCount: 0,
+      maxResultCount: 10000,
+      ...(nameFilter ? { name: nameFilter } : {}),
+    });
+
+    const rows = result.items;
+
     if (!rows.length) {
       alert("داده‌ای برای خروجی وجود ندارد");
       return;
     }
+
     const trs = rows
       .map((i: DepartmentTypeItem) => `<tr><td>${i.name ?? ""}</td></tr>`)
       .join("");
+
     const pw = window.open("", "_blank");
     if (!pw) {
       alert("امکان باز کردن پنجره چاپ وجود ندارد");
       return;
     }
-    pw.document.write(
-      `<html dir="rtl" lang="fa"><head><title>PDF</title><style>body{font-family:Tahoma,Arial;direction:rtl;padding:24px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:right}th{background:#f3f4f6}</style></head><body><h2>لیست انواع دپارتمان</h2><table><thead><tr><th>نام</th></tr></thead><tbody>${trs}</tbody></table><script>window.onload=function(){window.print()}</script></body></html>`,
-    );
+
+    pw.document.write(`
+    <html dir="rtl" lang="fa">
+      <head>
+        <title>انواع دپارتمان</title>
+        <style>
+          body { font-family: Tahoma, Arial, sans-serif; direction: rtl; padding: 24px; }
+          table { width: 100%; border-collapse: collapse; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: right; }
+          th { background: #f3f4f6; }
+        </style>
+      </head>
+      <body>
+        <h2>لیست انواع دپارتمان</h2>
+        <table>
+          <thead>
+            <tr><th>نام</th></tr>
+          </thead>
+          <tbody>${trs}</tbody>
+        </table>
+        <script>window.onload=function(){window.print()}</script>
+      </body>
+    </html>
+  `);
+
     pw.document.close();
   };
 

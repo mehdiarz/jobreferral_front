@@ -48,6 +48,10 @@ import {
   type UploadState,
 } from "./requestShared";
 import { useRequestReferenceData } from "./useRequestReferenceData";
+import {
+  REQUEST_DEPARTMENT_TYPES,
+  type RequestDepartmentTypeConfig,
+} from "../requestDepartmentTypes";
 
 // ─── Types ───
 type CollateralForm = {
@@ -66,7 +70,6 @@ type RequestForm = {
   personalTypeId: number | null;
   requesterName: string;
   amount: string;
-  departmentId: number | null;
   description: string;
 };
 
@@ -105,10 +108,15 @@ const emptyRequest: RequestForm = {
   personalTypeId: null,
   requesterName: "",
   amount: "",
-  departmentId: null,
   description: "",
 };
-export default function RequestCreatePage() {
+interface RequestCreatePageProps {
+  departmentType: RequestDepartmentTypeConfig;
+}
+
+export function DepartmentRequestCreatePage({
+  departmentType,
+}: RequestCreatePageProps) {
   const { showToast } = useToast();
   const { user, fullName } = useAuthStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -133,6 +141,7 @@ export default function RequestCreatePage() {
   const [customerInfo, setCustomerInfo] = useState<{
     cif: string;
     name: string;
+    nationalCode: string;
   } | null>(null);
   const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
@@ -149,7 +158,6 @@ export default function RequestCreatePage() {
     personalTypes,
     documentTypes,
     requestTypeOptions,
-    departmentOptions,
     personalTypeOptions,
     collateralTypeOptions,
     documentTypeOptions,
@@ -158,7 +166,19 @@ export default function RequestCreatePage() {
   // ─── File Upload with Resume ───
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) setSelectedFile(file);
+    if (!file) return;
+
+    // ⬅️ اعتبارسنجی فرمت فایل
+    const allowedFormats = ["pdf", "png", "jpg", "jpeg"];
+    const fileExtension = file.name.split(".").pop()?.toLowerCase() || "";
+
+    if (!allowedFormats.includes(fileExtension)) {
+      showToast("فایل‌های PDF، PNG، JPG و JPEG مجاز هستند", "error");
+      e.target.value = "";
+      return;
+    }
+
+    setSelectedFile(file);
     e.target.value = "";
   };
 
@@ -298,29 +318,46 @@ export default function RequestCreatePage() {
   };
 
   const handleFindCustomer = async () => {
-    const cif = requestForm.requesterName.trim();
-    if (!cif) {
-      showToast("لطفاً شماره مشتری را وارد کنید", "error");
+    const nationalCode = requestForm.requesterName.trim();
+    if (!nationalCode) {
+      showToast("لطفاً کد ملی را وارد کنید", "error");
       return;
     }
 
     setIsSearchingCustomer(true);
     try {
-      const customers = await findCustomer(cif);
+      console.log("🔍 Searching with nationalCode:", nationalCode);
+
+      const customers = await findCustomer({ nationalCode });
+
+      console.log("📦 Raw response:", customers);
+      console.log("📦 First customer:", customers[0]);
+      console.log(
+        "📦 First customer nationalCode:",
+        (customers[0] as any)?.nationalCode,
+      );
+
       if (customers.length === 0) {
         setCustomerId(null);
         setCustomerInfo(null);
-        showToast("مشتری با این شماره یافت نشد", "warning");
+        showToast("مشتری با این کد ملی یافت نشد", "warning");
       } else if (customers.length === 1) {
         const c = customers[0];
+        console.log("✅ Single customer:", c);
         setCustomerId(c.id);
-        setCustomerInfo({ cif: c.cifNumber || cif, name: c.name || "-" });
+        setCustomerInfo({
+          cif: c.cifNumber || "-",
+          name: c.name || "-",
+          nationalCode: (c as any)?.nationalCode || nationalCode,
+        });
         showToast("مشتری یافت شد", "success");
       } else {
+        console.log("👥 Multiple customers:", customers);
         setFoundCustomers(customers);
         setIsCustomerModalOpen(true);
       }
     } catch (error: unknown) {
+      console.error("❌ Error:", error);
       showToast(getErrorMessage(error, "خطا در استعلام"), "error");
     } finally {
       setIsSearchingCustomer(false);
@@ -328,10 +365,18 @@ export default function RequestCreatePage() {
   };
 
   const handleSelectCustomer = (customer: CustomerItem) => {
+    console.log("🎯 Selected customer:", customer);
+    console.log(
+      "🎯 nationalCode from customer:",
+      (customer as any)?.nationalCode,
+    );
+
     setCustomerId(customer.id);
     setCustomerInfo({
       cif: customer.cifNumber || "",
       name: customer.name || "-",
+      nationalCode:
+        (customer as any)?.nationalCode || requestForm.requesterName,
     });
     setIsCustomerModalOpen(false);
     showToast("مشتری انتخاب شد", "success");
@@ -463,10 +508,6 @@ export default function RequestCreatePage() {
       showToast("مبلغ الزامی است", "error");
       return;
     }
-    if (!requestForm.departmentId) {
-      showToast("دپارتمان الزامی است", "error");
-      return;
-    }
     if (!requestForm.personalTypeId) {
       showToast("نوع شخص الزامی است", "error");
       return;
@@ -479,8 +520,11 @@ export default function RequestCreatePage() {
     setIsSubmitting(true);
     try {
       const body = {
+        actorUserId: Number(user?.id || 0),
+        currentDepartmentTypeId: departmentType.id,
+        currentApprovalStepId: 0,
+        requestStatusCode: 1,
         requestTypeId: requestForm.requestTypeId!,
-        departmentId: requestForm.departmentId,
         customerId,
         title: requestForm.title.trim(),
         requestCode: requestForm.requestCode || "",
@@ -721,6 +765,11 @@ export default function RequestCreatePage() {
       cell: ({ row }) => row.original.cifNumber || "-",
     },
     {
+      id: "nationalCode",
+      header: "کد ملی",
+      cell: ({ row }) => (row.original as any)?.nationalCode || "-",
+    },
+    {
       id: "name",
       header: "نام مشتری",
       accessorKey: "name",
@@ -782,7 +831,7 @@ export default function RequestCreatePage() {
   return (
     <MainLayout.Main maxWidth="screen-xl">
       <PageTitle
-        title="ایجاد درخواست جدید"
+        title={`ایجاد درخواست جدید ${departmentType.name}`}
         subtitle="اطلاعات پرونده، وثیقه‌گذاران و مدارک موردنیاز را ثبت کنید."
         className="mb-5"
       />
@@ -928,7 +977,7 @@ export default function RequestCreatePage() {
                 <FormInput
                   id="requesterName"
                   name="requesterName"
-                  label="درخواست کننده (شماره مشتری)"
+                  label="درخواست کننده (کد ملی)"
                   value={requestForm.requesterName}
                   onChange={(v) => {
                     setRequestForm((p) => ({ ...p, requesterName: v }));
@@ -973,6 +1022,10 @@ export default function RequestCreatePage() {
                       <span className="font-medium text-gray-800" dir="ltr">
                         {customerInfo.cif}
                       </span>
+                      <span className="text-gray-500">کد ملی:</span>
+                      <span className="font-medium text-gray-800" dir="ltr">
+                        {customerInfo.nationalCode}
+                      </span>
                     </div>
                   </div>
                   <button
@@ -1011,21 +1064,6 @@ export default function RequestCreatePage() {
                 type="text"
                 currency={true}
                 required
-              />
-            </FluidCol>
-            <FluidCol colSpan="col-span-12 md:col-span-4">
-              <FormSelect<number>
-                id="departmentId"
-                name="departmentId"
-                label="دپارتمان"
-                value={requestForm.departmentId ?? ""}
-                onChange={(v) =>
-                  setRequestForm((p) => ({
-                    ...p,
-                    departmentId: v ? Number(v) : null,
-                  }))
-                }
-                options={departmentOptions}
               />
             </FluidCol>
           </FluidGrid>
@@ -1162,6 +1200,7 @@ export default function RequestCreatePage() {
               ref={fileInputRef}
               type="file"
               className="hidden"
+              accept=".pdf,.png,.jpg,.jpeg"
               onChange={handleFileSelect}
             />
 
@@ -1270,8 +1309,8 @@ export default function RequestCreatePage() {
         renderContent={() => (
           <div>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              {foundCustomers.length} مشتری با شماره "
-              {requestForm.requesterName}" یافت شد. لطفاً یکی را انتخاب کنید:
+              {foundCustomers.length} مشتری با کد ملی "
+              {requestForm.requesterName}" یافت شد.
             </p>
             <DataTable<CustomerItem>
               query={customersQueryResult}
@@ -1319,5 +1358,13 @@ export default function RequestCreatePage() {
         renderContent={() => <p>آیا از حذف این فایل اطمینان دارید؟</p>}
       />
     </MainLayout.Main>
+  );
+}
+
+export default function RequestCreatePage() {
+  return (
+    <DepartmentRequestCreatePage
+      departmentType={REQUEST_DEPARTMENT_TYPES.branch}
+    />
   );
 }

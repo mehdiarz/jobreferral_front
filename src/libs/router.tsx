@@ -289,18 +289,18 @@ const departmentGradeRoute = createRoute({
   },
 });
 
-const departmentRoute = createRoute({
-  getParentRoute: () => dashboardLayoutRoute,
-  path: "/base-info/departments",
-  component: () => {
-    const Page = lazy(() => import("../Features/BaseInfo/DepartmentPage"));
-    return (
-      <SuspenseLoading>
-        <Page />
-      </SuspenseLoading>
-    );
-  },
-});
+// const departmentRoute = createRoute({
+//   getParentRoute: () => dashboardLayoutRoute,
+//   path: "/base-info/departments",
+//   component: () => {
+//     const Page = lazy(() => import("../Features/BaseInfo/DepartmentPage"));
+//     return (
+//       <SuspenseLoading>
+//         <Page />
+//       </SuspenseLoading>
+//     );
+//   },
+// });
 
 const personTypeRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
@@ -321,6 +321,97 @@ const requestViewRoute = createRoute({
   component: () => {
     const Page = lazy(
       () => import("../Features/Requests/Branch/RequestViewPage"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
+const independentBranchRequestViewRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/independent/view",
+  component: () => {
+    const Page = lazy(
+      () => import("../Features/Requests/IndependentBranch/RequestViewPage"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
+const independentBranchRequestCreateRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/independent/create",
+  component: () => {
+    const Page = lazy(
+      () => import("../Features/Requests/IndependentBranch/RequestCreatePage"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
+const independentBranchRequestReviewRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/independent/review",
+  component: () => {
+    const Page = lazy(
+      () => import("../Features/Requests/IndependentBranch/RequestReviewPage"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
+const independentBranchRequestAssetReviewRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/independent/asset-review",
+  component: () => {
+    const Page = lazy(
+      () =>
+        import("../Features/Requests/IndependentBranch/RequestAssetReviewPage"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
+const regionRequestViewRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/region/view",
+  component: () => {
+    const Page = lazy(
+      () => import("../Features/Requests/Region/RequestViewPage"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
+const mainOfficeRequestViewRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/main-office/view",
+  component: () => {
+    const Page = lazy(
+      () => import("../Features/Requests/MainOffice/RequestViewPage"),
     );
     return (
       <SuspenseLoading>
@@ -408,9 +499,15 @@ const routeTree = rootRoute.addChildren([
     creditLimitAuthoritiesRoute,
     departmentTypeRoute,
     departmentGradeRoute,
-    departmentRoute,
+    // departmentRoute,
     personTypeRoute,
     requestViewRoute,
+    independentBranchRequestViewRoute,
+    independentBranchRequestCreateRoute,
+    independentBranchRequestReviewRoute,
+    independentBranchRequestAssetReviewRoute,
+    regionRequestViewRoute,
+    mainOfficeRequestViewRoute,
     requestCreateRoute,
     requestReviewRoute,
     requestAssetReviewRoute,

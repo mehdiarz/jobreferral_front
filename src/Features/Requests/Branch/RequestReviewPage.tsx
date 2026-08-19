@@ -29,8 +29,11 @@ import { getUserById } from "../../../services/Users/getUserById";
 import type { RequestItem } from "../../../services/RequestCrud/types";
 import type { DocumentItem } from "../../../services/DocumentCrud/types";
 import type { DocumentFile } from "../../../services/FileService/GetDocumentAllFiles";
-import { isoToPersian } from "../../../utils/persianToISO";
-import { filterRequestItems } from "./requestShared";
+import { isoToPersian, persianToISO } from "../../../utils/persianToISO";
+import {
+  REQUEST_DEPARTMENT_TYPES,
+  type RequestDepartmentTypeConfig,
+} from "../requestDepartmentTypes";
 
 // ─── Types ───────────────────────────────────────────────────────
 type TableFilter = { key: string; value: string };
@@ -46,7 +49,13 @@ interface UserCacheData {
 }
 
 // ─── Main Component ──────────────────────────────────────────────
-export default function RequestReviewPage() {
+interface RequestReviewPageProps {
+  departmentType: RequestDepartmentTypeConfig;
+}
+
+export function DepartmentRequestReviewPage({
+  departmentType,
+}: RequestReviewPageProps) {
   const { showToast } = useToast();
   const { user } = useAuthStore();
 
@@ -66,14 +75,25 @@ export default function RequestReviewPage() {
   const requestsQuery = useQuery({
     queryKey: [
       "requests-pending-review",
+      departmentType.id,
       pagination.pageIndex,
       pagination.pageSize,
       filters,
     ],
     queryFn: async () => {
+      const apiFilters = Object.fromEntries(
+        filters.filter((f) => f.value.trim()).map((f) => [
+          f.key,
+          f.key === "creationTime"
+            ? persianToISO(f.value.trim()) || f.value.trim()
+            : f.value.trim(),
+        ]),
+      );
       const response = await getAllRequests({
-        skipCount: 0,
-        maxResultCount: 5000,
+        ...apiFilters,
+        currentDepartmentTypeName: departmentType.name,
+        skipCount: pagination.pageIndex * pagination.pageSize,
+        maxResultCount: pagination.pageSize,
         sorting: "creationTime desc",
       });
       return response;
@@ -86,13 +106,8 @@ export default function RequestReviewPage() {
           r.requestStatusCode === 2 ||
           r.requestStatusCode === 3,
       );
-      const filteredItems = filterRequestItems(items, filters);
-      const pageStart = pagination.pageIndex * pagination.pageSize;
-      const listResult = filteredItems.slice(
-        pageStart,
-        pageStart + pagination.pageSize,
-      );
-      const totalCount = filteredItems.length;
+      const listResult = items;
+      const totalCount = data.totalCount ?? items.length;
 
       return {
         listResult,
@@ -376,7 +391,7 @@ export default function RequestReviewPage() {
   // ─── Render ──────────────────────────────────────────────────
   return (
     <MainLayout.Main maxWidth="screen-xl">
-      <PageTitle title="بررسی درخواست توسط شعبه" />
+      <PageTitle title={`بررسی درخواست توسط ${departmentType.name}`} />
       <div className="rounded-lg bg-white p-4 shadow-sm">
         <DataTable<RequestItem>
           query={requestsQuery}
@@ -443,5 +458,13 @@ export default function RequestReviewPage() {
         }}
       />
     </MainLayout.Main>
+  );
+}
+
+export default function RequestReviewPage() {
+  return (
+    <DepartmentRequestReviewPage
+      departmentType={REQUEST_DEPARTMENT_TYPES.branch}
+    />
   );
 }

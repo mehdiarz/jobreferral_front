@@ -42,13 +42,6 @@ type TableFilter = {
   value: string;
 };
 
-type RegionsApiResponse = {
-  items?: RegionItem[];
-  result?: { items?: RegionItem[] };
-  listResult?: RegionItem[];
-  data?: RegionItem[];
-};
-
 type RegionsQueryData = {
   listResult: RegionItem[];
   total: number;
@@ -75,53 +68,44 @@ export default function RegionsPage() {
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
   const [filters, setFilters] = useState<TableFilter[]>([]);
 
+  // استخراج فیلترها
+  const titleFilter =
+    filters.find((f) => f.key === "title")?.value?.trim() || undefined;
+
+  const codeFilter =
+    filters.find((f) => f.key === "code")?.value?.trim() || undefined;
+
+  const descriptionFilter =
+    filters.find((f) => f.key === "description")?.value?.trim() || undefined;
+
+  // کوئری با ساختار Server-side
   const regionsQuery = useQuery({
-    queryKey: ["regions", filters, pagination.pageIndex, pagination.pageSize],
-    queryFn: () => getAllRegions(),
+    queryKey: [
+      "regions",
+      pagination.pageIndex,
+      pagination.pageSize,
+      titleFilter,
+      descriptionFilter,
+      codeFilter,
+    ],
+
+    queryFn: () =>
+      getAllRegions({
+        skipCount: pagination.pageIndex * pagination.pageSize,
+        maxResultCount: pagination.pageSize,
+
+        ...(titleFilter ? { title: titleFilter } : {}),
+        ...(descriptionFilter ? { description: descriptionFilter } : {}),
+        ...(codeFilter ? { code: codeFilter } : {}),
+      }),
+
     select: (data): RegionsQueryData => {
-      const apiData = data as RegionsApiResponse;
-      const allItems: RegionItem[] =
-        apiData?.items ??
-        apiData?.result?.items ??
-        apiData?.listResult ??
-        apiData?.data ??
-        [];
-
-      const titleFilter =
-        filters
-          .find((f) => f.key === "title")
-          ?.value?.trim()
-          .toLocaleLowerCase("fa") ?? "";
-      const codeFilter =
-        filters
-          .find((f) => f.key === "code")
-          ?.value?.trim()
-          .toLocaleLowerCase("fa") ?? "";
-
-      const filteredItems = allItems.filter((item) => {
-        const itemTitle = String(item.title ?? "")
-          .trim()
-          .toLocaleLowerCase("fa");
-        const itemCode = String(item.code ?? "")
-          .trim()
-          .toLocaleLowerCase("fa");
-        return (
-          (!titleFilter || itemTitle.includes(titleFilter)) &&
-          (!codeFilter || itemCode.includes(codeFilter))
-        );
-      });
-
-      const total = filteredItems.length;
-      const totalPages = Math.max(1, Math.ceil(total / pagination.pageSize));
-      const startIndex = pagination.pageIndex * pagination.pageSize;
+      const total = data.totalCount;
 
       return {
-        listResult: filteredItems.slice(
-          startIndex,
-          startIndex + pagination.pageSize,
-        ),
+        listResult: data.items,
         total,
-        totalPages,
+        totalPages: Math.max(1, Math.ceil(total / pagination.pageSize)),
       };
     },
   });
@@ -275,57 +259,143 @@ export default function RegionsPage() {
     ],
   );
 
-  const handleExportExcel = () => {
-    const rows = regionsQuery.data?.listResult ?? [];
+  const handleExportExcel = async () => {
+    const allData = await getAllRegions({
+      skipCount: 0,
+      maxResultCount: 10000,
+
+      ...(titleFilter ? { title: titleFilter } : {}),
+      ...(descriptionFilter ? { description: descriptionFilter } : {}),
+      ...(codeFilter ? { code: codeFilter } : {}),
+    });
+
+    const rows = allData.items;
+
     if (!rows.length) {
-      alert("داده‌ای برای خروجی وجود ندارد");
+      showToast("داده‌ای برای خروجی وجود ندارد", "error");
       return;
     }
+
     const headers = ["کد منطقه", "نام منطقه", "توضیحات"];
+
     const csvRows = rows.map((item) => [
       item.code ?? "",
       item.title ?? "",
       item.description ?? "",
     ]);
+
     const csvContent = [
       headers.join(","),
-      ...csvRows.map((r) =>
-        r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","),
+      ...csvRows.map((row) =>
+        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","),
       ),
     ].join("\n");
+
     const blob = new Blob(["\uFEFF" + csvContent], {
       type: "text/csv;charset=utf-8;",
     });
+
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
+
     link.href = url;
     link.download = "regions.csv";
     link.click();
+
     URL.revokeObjectURL(url);
   };
 
-  const handleExportPdf = () => {
-    const rows = regionsQuery.data?.listResult ?? [];
+  const handleExportPdf = async () => {
+    const allData = await getAllRegions({
+      skipCount: 0,
+      maxResultCount: 10000,
+
+      ...(titleFilter ? { title: titleFilter } : {}),
+      ...(descriptionFilter ? { description: descriptionFilter } : {}),
+      ...(codeFilter ? { code: codeFilter } : {}),
+    });
+
+    const rows = allData.items;
+
     if (!rows.length) {
-      alert("داده‌ای برای خروجی وجود ندارد");
+      showToast("داده‌ای برای خروجی وجود ندارد", "error");
       return;
     }
+
     const tableRows = rows
       .map(
-        (item) =>
-          `<tr><td>${item.code ?? ""}</td><td>${item.title ?? ""}</td><td>${item.description ?? ""}</td></tr>`,
+        (item) => `
+        <tr>
+          <td>${item.code ?? ""}</td>
+          <td>${item.title ?? ""}</td>
+          <td>${item.description ?? ""}</td>
+        </tr>
+      `,
       )
       .join("");
+
     const printWindow = window.open("", "_blank");
+
     if (!printWindow) {
-      alert("امکان باز کردن پنجره چاپ وجود ندارد");
+      showToast("امکان باز کردن پنجره چاپ وجود ندارد", "error");
       return;
     }
-    printWindow.document
-      .write(`<html dir="rtl" lang="fa"><head><title>PDF</title>
-        <style>body{font-family:Tahoma,Arial;direction:rtl;padding:24px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:right}th{background:#f3f4f6}</style></head>
-        <body><h2>لیست مناطق استانی</h2><table><thead><tr><th>کد منطقه</th><th>نام منطقه</th><th>توضیحات</th></tr></thead>
-        <tbody>${tableRows}</tbody></table><script>window.onload=function(){window.print()}</script></body></html>`);
+
+    printWindow.document.write(`
+    <html dir="rtl" lang="fa">
+      <head>
+        <title>مناطق استانی</title>
+        <style>
+          body {
+            font-family: Tahoma, Arial, sans-serif;
+            direction: rtl;
+            padding: 24px;
+          }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+
+          th,
+          td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: right;
+          }
+
+          th {
+            background: #f3f4f6;
+          }
+        </style>
+      </head>
+
+      <body>
+        <h2>لیست مناطق استانی</h2>
+
+        <table>
+          <thead>
+            <tr>
+              <th>کد منطقه</th>
+              <th>نام منطقه</th>
+              <th>توضیحات</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+
+        <script>
+          window.onload = function () {
+            window.print();
+          };
+        </script>
+      </body>
+    </html>
+  `);
+
     printWindow.document.close();
   };
 

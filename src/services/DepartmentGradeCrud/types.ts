@@ -16,17 +16,21 @@ export interface CreateDepartmentGradeBody {
 }
 
 export interface EditDepartmentGradeBody {
-    id: number;
-    code: string;
-    title: string;
-    grade?: number;
-    description?: string;
-    isActive?: boolean;
+  id: number;
+  code: string;
+  title: string;
+  grade?: number;
+  description?: string;
+  isActive?: boolean;
 }
 
 export interface GetAllDepartmentGradesParams {
-    isActive?: boolean;
-    sorting?: string;
-    skipCount?: number;
-    maxResultCount?: number;
+  title?: string;
+  code?: string;
+  grade?: number;
+  description?: string;
+  isActive?: boolean;
+  sorting?: string;
+  skipCount?: number;
+  maxResultCount?: number;
 }

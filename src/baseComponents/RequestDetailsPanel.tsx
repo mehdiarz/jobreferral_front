@@ -19,7 +19,7 @@ import type { DocumentItem } from "../services/DocumentCrud/types";
 import type { DocumentFile } from "../services/FileService/GetDocumentAllFiles";
 import type { RequestCommentItem } from "../services/RequestCommentCrud/types";
 import type { RequestItem } from "../services/RequestCrud/types";
-import { isoToPersian } from "../utils/persianToISO";
+import { isoToPersianDateTime } from "../utils/persianToISO";
 
 export interface RequestDetailDocument {
   doc: DocumentItem;
@@ -183,9 +183,14 @@ export default function RequestDetailsPanel({
               <CheckCircle2 className="h-3.5 w-3.5" />
               {request.requestStatusTitle || "بدون مرحله"}
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 text-xs ring-1 ring-white/20">
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 text-xs ring-1 ring-white/20"
+              dir="ltr"
+            >
               <CalendarDays className="h-3.5 w-3.5" />
-              {request.creationTime ? isoToPersian(request.creationTime) : "-"}
+              {request.creationTime
+                ? isoToPersianDateTime(request.creationTime)
+                : "-"}
             </span>
           </div>
         </div>
@@ -258,9 +263,12 @@ export default function RequestDetailsPanel({
                       <p className="font-medium text-slate-700">
                         {history.description || "-"}
                       </p>
-                      <span className="shrink-0 text-[11px] text-slate-400">
+                      <span
+                        className="shrink-0 text-[11px] text-slate-400"
+                        dir="ltr"
+                      >
                         {history.creationTime
-                          ? isoToPersian(history.creationTime)
+                          ? isoToPersianDateTime(history.creationTime)
                           : "-"}
                       </span>
                     </div>
@@ -375,9 +383,9 @@ export default function RequestDetailsPanel({
                       {userData.name}
                       {userData.role !== "-" ? ` — ${userData.role}` : ""}
                     </p>
-                    <span className="text-[11px] text-slate-400">
+                    <span className="text-[11px] text-slate-400" dir="ltr">
                       {comment.creationTime
-                        ? isoToPersian(comment.creationTime)
+                        ? isoToPersianDateTime(comment.creationTime)
                         : "-"}
                     </span>
                   </div>

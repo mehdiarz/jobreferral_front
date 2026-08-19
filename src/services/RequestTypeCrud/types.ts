@@ -12,14 +12,17 @@ export interface CreateRequestTypeBody {
 }
 
 export interface EditRequestTypeBody {
-    id: number;
-    code: string;
-    title: string;
-    description?: string;
+  id: number;
+  code: string;
+  title: string;
+  description?: string;
 }
 
 export interface GetAllRequestTypesParams {
-    sorting?: string;
-    skipCount?: number;
-    maxResultCount?: number;
+  title?: string;
+  code?: string;
+  description?: string;
+  sorting?: string;
+  skipCount?: number;
+  maxResultCount?: number;
 }

@@ -26,12 +26,7 @@ import type {
 
 type DocumentTypeForm = { code: string; title: string; description: string };
 type TableFilter = { key: string; value: string };
-type DocumentTypesApiResponse = {
-  items?: DocumentTypeItem[];
-  result?: { items?: DocumentTypeItem[] };
-  listResult?: DocumentTypeItem[];
-  data?: DocumentTypeItem[];
-};
+
 type DocumentTypesQueryData = {
   listResult: DocumentTypeItem[];
   total: number;
@@ -55,54 +50,44 @@ export default function DocumentTypesPage() {
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
   const [filters, setFilters] = useState<TableFilter[]>([]);
 
+  const titleFilter =
+    filters.find((filter) => filter.key === "title")?.value?.trim() ||
+    undefined;
+
+  const codeFilter =
+    filters.find((filter) => filter.key === "code")?.value?.trim() || undefined;
+
+  const descriptionFilter =
+    filters.find((filter) => filter.key === "description")?.value?.trim() ||
+    undefined;
+
   const documentTypesQuery = useQuery({
     queryKey: [
       "document-types",
-      filters,
       pagination.pageIndex,
       pagination.pageSize,
+      titleFilter,
+      codeFilter,
+      descriptionFilter,
     ],
-    queryFn: () => getAllDocumentTypes(),
+
+    queryFn: () =>
+      getAllDocumentTypes({
+        skipCount: pagination.pageIndex * pagination.pageSize,
+        maxResultCount: pagination.pageSize,
+
+        ...(titleFilter ? { title: titleFilter } : {}),
+        ...(codeFilter ? { code: codeFilter } : {}),
+        ...(descriptionFilter ? { description: descriptionFilter } : {}),
+      }),
+
     select: (data): DocumentTypesQueryData => {
-      const apiData = data as DocumentTypesApiResponse;
-      const allItems: DocumentTypeItem[] =
-        apiData?.items ??
-        apiData?.result?.items ??
-        apiData?.listResult ??
-        apiData?.data ??
-        [];
-      const titleFilter =
-        filters
-          .find((f) => f.key === "title")
-          ?.value?.trim()
-          .toLocaleLowerCase("fa") ?? "";
-      const codeFilter =
-        filters
-          .find((f) => f.key === "code")
-          ?.value?.trim()
-          .toLocaleLowerCase("fa") ?? "";
-      const filteredItems = allItems.filter((item) => {
-        const itemTitle = String(item.title ?? "")
-          .trim()
-          .toLocaleLowerCase("fa");
-        const itemCode = String(item.code ?? "")
-          .trim()
-          .toLocaleLowerCase("fa");
-        return (
-          (!titleFilter || itemTitle.includes(titleFilter)) &&
-          (!codeFilter || itemCode.includes(codeFilter))
-        );
-      });
-      const total = filteredItems.length;
-      const totalPages = Math.max(1, Math.ceil(total / pagination.pageSize));
-      const startIndex = pagination.pageIndex * pagination.pageSize;
+      const total = data.totalCount;
+
       return {
-        listResult: filteredItems.slice(
-          startIndex,
-          startIndex + pagination.pageSize,
-        ),
+        listResult: data.items,
         total,
-        totalPages,
+        totalPages: Math.max(1, Math.ceil(total / pagination.pageSize)),
       };
     },
   });
@@ -250,33 +235,63 @@ export default function DocumentTypesPage() {
     ],
   );
 
-  const handleExportExcel = () => {
-    const rows = documentTypesQuery.data?.listResult ?? [];
+  const handleExportExcel = async () => {
+    const result = await getAllDocumentTypes({
+      skipCount: 0,
+      maxResultCount: 10000,
+
+      ...(titleFilter ? { title: titleFilter } : {}),
+      ...(codeFilter ? { code: codeFilter } : {}),
+      ...(descriptionFilter ? { description: descriptionFilter } : {}),
+    });
+
+    const rows = result.items;
+
     if (!rows.length) {
       alert("داده‌ای برای خروجی وجود ندارد");
       return;
     }
-    const headers = ["کد", "عنوان"];
-    const csvRows = rows.map((item) => [item.code ?? "", item.title ?? ""]);
+
+    const headers = ["کد", "عنوان", "توضیحات"];
+
+    const csvRows = rows.map((item) => [
+      item.code ?? "",
+      item.title ?? "",
+      item.description ?? "",
+    ]);
+
     const csvContent = [
       headers.join(","),
-      ...csvRows.map((r) =>
-        r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","),
+      ...csvRows.map((row) =>
+        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","),
       ),
     ].join("\n");
+
     const blob = new Blob(["\uFEFF" + csvContent], {
       type: "text/csv;charset=utf-8;",
     });
+
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
+
     link.href = url;
     link.download = "document-types.csv";
     link.click();
+
     URL.revokeObjectURL(url);
   };
 
-  const handleExportPdf = () => {
-    const rows = documentTypesQuery.data?.listResult ?? [];
+  const handleExportPdf = async () => {
+    const result = await getAllDocumentTypes({
+      skipCount: 0,
+      maxResultCount: 10000,
+
+      ...(titleFilter ? { title: titleFilter } : {}),
+      ...(codeFilter ? { code: codeFilter } : {}),
+      ...(descriptionFilter ? { description: descriptionFilter } : {}),
+    });
+
+    const rows = result.items;
     if (!rows.length) {
       alert("داده‌ای برای خروجی وجود ندارد");
       return;
@@ -284,7 +299,7 @@ export default function DocumentTypesPage() {
     const tableRows = rows
       .map(
         (item) =>
-          `<tr><td>${item.code ?? ""}</td><td>${item.title ?? ""}</td></tr>`,
+          `<tr><td>${item.code ?? ""}</td><td>${item.title ?? ""}</td><td>${item.description ?? ""}</td></tr>`,
       )
       .join("");
     const printWindow = window.open("", "_blank");
@@ -293,7 +308,8 @@ export default function DocumentTypesPage() {
       return;
     }
     printWindow.document.write(
-      `<html dir="rtl" lang="fa"><head><title>PDF</title><style>body{font-family:Tahoma,Arial;direction:rtl;padding:24px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:right}th{background:#f3f4f6}</style></head><body><h2>لیست انواع سند</h2><table><thead><tr><th>کد</th><th>عنوان</th></tr></thead><tbody>${tableRows}</tbody></table><script>window.onload=function(){window.print()}</script></body></html>`,
+      `<html dir="rtl" lang="fa"><head><title>PDF</title><style>body{font-family:Tahoma,Arial;direction:rtl;padding:24px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:right}th{background:#f3f4f6}</style></head><body><h2>لیست انواع سند</h2><table><thead><tr><th>کد</th><th>عنوان</th>  <th>توضیحات</th>
+          </tr></thead><tbody>${tableRows}</tbody></table><script>window.onload=function(){window.print()}</script></body></html>`,
     );
     printWindow.document.close();
   };

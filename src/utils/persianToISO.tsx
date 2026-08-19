@@ -268,3 +268,65 @@ export function unformatCurrency(formattedValue: string): string {
   if (!formattedValue) return "";
   return formattedValue.replace(/,/g, "");
 }
+
+// تابع جدید - تاریخ با ساعت و رسم‌الخط فارسی
+export function isoToPersianDateTime(isoDate: string): string {
+  try {
+    const d = new Date(isoDate);
+    const { jy, jm, jd } = toJalaali(
+      d.getUTCFullYear(),
+      d.getUTCMonth() + 1,
+      d.getUTCDate(),
+    );
+
+    const hours = d.getUTCHours();
+    const minutes = d.getUTCMinutes();
+    const seconds = d.getUTCSeconds();
+
+    const pad = (n: number) => String(n).padStart(2, "0");
+
+    // تبدیل اعداد انگلیسی به فارسی
+    const toPersianDigits = (num: number | string): string => {
+      const persianDigits = "۰۱۲۳۴۵۶۷۸۹";
+      return String(num).replace(/\d/g, (d) => persianDigits[Number(d)]);
+    };
+
+    const persianDate = `${toPersianDigits(jy)}/${toPersianDigits(pad(jm))}/${toPersianDigits(pad(jd))}`;
+    const persianTime = `${toPersianDigits(pad(hours))}:${toPersianDigits(pad(minutes))}:${toPersianDigits(pad(seconds))}`;
+
+    // استفاده از جداکننده مناسب برای RTL
+    return `${persianDate} - ${persianTime}`;
+  } catch {
+    return "";
+  }
+}
+
+// تابع جدید - تاریخ با ساعت و رسم‌الخط فارسی (بدون ثانیه)
+export function isoToPersianDateTimeShort(isoDate: string): string {
+  try {
+    const d = new Date(isoDate);
+    const { jy, jm, jd } = toJalaali(
+      d.getUTCFullYear(),
+      d.getUTCMonth() + 1,
+      d.getUTCDate(),
+    );
+
+    const hours = d.getUTCHours();
+    const minutes = d.getUTCMinutes();
+
+    const pad = (n: number) => String(n).padStart(2, "0");
+
+    // تبدیل اعداد انگلیسی به فارسی
+    const toPersianDigits = (num: number | string): string => {
+      const persianDigits = "۰۱۲۳۴۵۶۷۸۹";
+      return String(num).replace(/\d/g, (d) => persianDigits[Number(d)]);
+    };
+
+    const persianDate = `${toPersianDigits(jy)}-${toPersianDigits(pad(jm))}-${toPersianDigits(pad(jd))}`;
+    const persianTime = `${toPersianDigits(pad(hours))}:${toPersianDigits(pad(minutes))}`;
+
+    return `${persianDate} ${persianTime}`;
+  } catch {
+    return "";
+  }
+}

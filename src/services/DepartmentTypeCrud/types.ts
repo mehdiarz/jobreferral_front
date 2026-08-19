@@ -13,6 +13,7 @@ export interface EditDepartmentTypeBody {
 }
 
 export interface GetAllDepartmentTypesParams {
+  name?: string;
   sorting?: string;
   skipCount?: number;
   maxResultCount?: number;

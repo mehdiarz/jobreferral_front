@@ -6,6 +6,6 @@ export async function createCustomer(
 ): Promise<CustomerItem> {
   return apiClient.request<CustomerItem>("/services/app/CustomerCrud/Create", {
     method: "POST",
-    body: JSON.stringify({ id: 0, ...body }),
+    body: JSON.stringify(body),
   });
 }

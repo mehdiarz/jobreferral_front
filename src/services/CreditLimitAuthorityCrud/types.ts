@@ -28,6 +28,10 @@ export interface EditCreditLimitAuthorityBody {
 }
 
 export interface GetAllCreditLimitAuthoritiesParams {
+  departmentGradeId?: number;
+  personalTypeName?: string;
+  collatralTypeName?: string;
+  departmentGradeName?: string;
   sorting?: string;
   skipCount?: number;
   maxResultCount?: number;

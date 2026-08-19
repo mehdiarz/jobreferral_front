@@ -37,19 +37,6 @@ type TableFilter = {
   value: string;
 };
 
-type PersonalTypesApiResponse = {
-  items?: PersonalTypeItem[];
-  result?: { items?: PersonalTypeItem[] };
-  listResult?: PersonalTypeItem[];
-  data?: PersonalTypeItem[];
-};
-
-type PersonalTypesQueryData = {
-  listResult: PersonalTypeItem[];
-  total: number;
-  totalPages: number;
-};
-
 const emptyForm: PersonTypeForm = {
   code: "",
   title: "",
@@ -73,59 +60,69 @@ export default function PersonTypePage() {
 
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
   const [filters, setFilters] = useState<TableFilter[]>([]);
+  const titleFilter =
+    filters.find((f) => f.key === "title")?.value?.trim() || undefined;
+
+  const codeFilter =
+    filters.find((f) => f.key === "code")?.value?.trim() || undefined;
+
+  const creditScoreFilterValue =
+    filters.find((f) => f.key === "creditScore")?.value?.trim() || undefined;
+
+  const creditWeightFilterValue =
+    filters.find((f) => f.key === "creditWeight")?.value?.trim() || undefined;
+
+  const descriptionFilter =
+    filters.find((f) => f.key === "description")?.value?.trim() || undefined;
+
+  const creditScoreFilter = creditScoreFilterValue
+    ? Number(creditScoreFilterValue)
+    : undefined;
+
+  const creditWeightFilter = creditWeightFilterValue
+    ? Number(creditWeightFilterValue)
+    : undefined;
 
   const personalTypesQuery = useQuery({
     queryKey: [
       "personal-types",
-      filters,
       pagination.pageIndex,
       pagination.pageSize,
+      titleFilter,
+      codeFilter,
+      creditScoreFilter,
+      creditWeightFilter,
+      descriptionFilter,
     ],
-    queryFn: () => getAllPersonalTypes(),
-    select: (data): PersonalTypesQueryData => {
-      const apiData = data as PersonalTypesApiResponse;
-      const allItems: PersonalTypeItem[] =
-        apiData?.items ??
-        apiData?.result?.items ??
-        apiData?.listResult ??
-        apiData?.data ??
-        [];
 
-      const titleFilter =
-        filters
-          .find((f) => f.key === "title")
-          ?.value?.trim()
-          .toLocaleLowerCase("fa") ?? "";
-      const codeFilter =
-        filters
-          .find((f) => f.key === "code")
-          ?.value?.trim()
-          .toLocaleLowerCase("fa") ?? "";
+    queryFn: () =>
+      getAllPersonalTypes({
+        skipCount: pagination.pageIndex * pagination.pageSize,
+        maxResultCount: pagination.pageSize,
 
-      const filteredItems = allItems.filter((item) => {
-        const itemTitle = String(item.title ?? "")
-          .trim()
-          .toLocaleLowerCase("fa");
-        const itemCode = String(item.code ?? "")
-          .trim()
-          .toLocaleLowerCase("fa");
-        return (
-          (!titleFilter || itemTitle.includes(titleFilter)) &&
-          (!codeFilter || itemCode.includes(codeFilter))
-        );
-      });
+        ...(titleFilter ? { title: titleFilter } : {}),
+        ...(codeFilter ? { code: codeFilter } : {}),
 
-      const total = filteredItems.length;
-      const totalPages = Math.max(1, Math.ceil(total / pagination.pageSize));
-      const startIndex = pagination.pageIndex * pagination.pageSize;
+        ...(typeof creditScoreFilter === "number" &&
+        !Number.isNaN(creditScoreFilter)
+          ? { creditScore: creditScoreFilter }
+          : {}),
+
+        ...(typeof creditWeightFilter === "number" &&
+        !Number.isNaN(creditWeightFilter)
+          ? { creditWeight: creditWeightFilter }
+          : {}),
+
+        ...(descriptionFilter ? { description: descriptionFilter } : {}),
+      }),
+
+    select: (data) => {
+      const total = data.totalCount;
 
       return {
-        listResult: filteredItems.slice(
-          startIndex,
-          startIndex + pagination.pageSize,
-        ),
+        listResult: data.items,
         total,
-        totalPages,
+        totalPages: Math.max(1, Math.ceil(total / pagination.pageSize)),
       };
     },
   });
@@ -317,14 +314,36 @@ export default function PersonTypePage() {
     ],
   );
 
-  const handleExportExcel = () => {
-    const rows = personalTypesQuery.data?.listResult ?? [];
+  const handleExportExcel = async () => {
+    const result = await getAllPersonalTypes({
+      skipCount: 0,
+      maxResultCount: 10000,
+
+      ...(titleFilter ? { title: titleFilter } : {}),
+      ...(codeFilter ? { code: codeFilter } : {}),
+
+      ...(typeof creditScoreFilter === "number" &&
+      !Number.isNaN(creditScoreFilter)
+        ? { creditScore: creditScoreFilter }
+        : {}),
+
+      ...(typeof creditWeightFilter === "number" &&
+      !Number.isNaN(creditWeightFilter)
+        ? { creditWeight: creditWeightFilter }
+        : {}),
+
+      ...(descriptionFilter ? { description: descriptionFilter } : {}),
+    });
+
+    const rows = result.items;
+
     if (!rows.length) {
       alert("داده‌ای برای خروجی وجود ندارد");
       return;
     }
 
     const headers = ["عنوان", "کد", "امتیاز اعتباری", "وزن اعتباری", "توضیحات"];
+
     const csvRows = rows.map((item) => [
       item.title ?? "",
       item.code ?? "",
@@ -335,24 +354,48 @@ export default function PersonTypePage() {
 
     const csvContent = [
       headers.join(","),
-      ...csvRows.map((r) =>
-        r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","),
+      ...csvRows.map((row) =>
+        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","),
       ),
     ].join("\n");
 
     const blob = new Blob(["\uFEFF" + csvContent], {
       type: "text/csv;charset=utf-8;",
     });
+
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
+
     link.href = url;
-    link.download = "person-types.csv";
+    link.download = "personal-types.csv";
     link.click();
+
     URL.revokeObjectURL(url);
   };
 
-  const handleExportPdf = () => {
-    const rows = personalTypesQuery.data?.listResult ?? [];
+  const handleExportPdf = async () => {
+    const result = await getAllPersonalTypes({
+      skipCount: 0,
+      maxResultCount: 10000,
+
+      ...(titleFilter ? { title: titleFilter } : {}),
+      ...(codeFilter ? { code: codeFilter } : {}),
+
+      ...(typeof creditScoreFilter === "number" &&
+      !Number.isNaN(creditScoreFilter)
+        ? { creditScore: creditScoreFilter }
+        : {}),
+
+      ...(typeof creditWeightFilter === "number" &&
+      !Number.isNaN(creditWeightFilter)
+        ? { creditWeight: creditWeightFilter }
+        : {}),
+
+      ...(descriptionFilter ? { description: descriptionFilter } : {}),
+    });
+
+    const rows = result.items;
+
     if (!rows.length) {
       alert("داده‌ای برای خروجی وجود ندارد");
       return;
@@ -360,24 +403,82 @@ export default function PersonTypePage() {
 
     const tableRows = rows
       .map(
-        (item) => `<tr>
-                <td>${item.title ?? ""}</td><td>${item.code ?? ""}</td>
-                <td>${item.creditScore ?? ""}</td><td>${item.creditWeight ?? ""}</td>
-                <td>${item.description ?? ""}</td></tr>`,
+        (item) => `
+        <tr>
+          <td>${item.title ?? ""}</td>
+          <td>${item.code ?? ""}</td>
+          <td>${item.creditScore ?? ""}</td>
+          <td>${item.creditWeight ?? ""}</td>
+          <td>${item.description ?? ""}</td>
+        </tr>
+      `,
       )
       .join("");
 
     const printWindow = window.open("", "_blank");
+
     if (!printWindow) {
       alert("امکان باز کردن پنجره چاپ وجود ندارد");
       return;
     }
-    printWindow.document
-      .write(`<html dir="rtl" lang="fa"><head><title>PDF</title>
-        <style>body{font-family:Tahoma,Arial;direction:rtl;padding:24px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:right}th{background:#f3f4f6}</style></head>
-        <body><h2>لیست انواع شخص</h2><table><thead><tr>
-        <th>عنوان</th><th>کد</th><th>امتیاز اعتباری</th><th>وزن اعتباری</th><th>توضیحات</th></tr></thead>
-        <tbody>${tableRows}</tbody></table><script>window.onload=function(){window.print()}</script></body></html>`);
+
+    printWindow.document.write(`
+    <html dir="rtl" lang="fa">
+      <head>
+        <title>لیست انواع شخص</title>
+        <style>
+          body {
+            font-family: Tahoma, Arial, sans-serif;
+            direction: rtl;
+            padding: 24px;
+          }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+
+          th,
+          td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: right;
+          }
+
+          th {
+            background: #f3f4f6;
+          }
+        </style>
+      </head>
+
+      <body>
+        <h2>لیست انواع شخص</h2>
+
+        <table>
+          <thead>
+            <tr>
+              <th>عنوان</th>
+              <th>کد</th>
+              <th>امتیاز اعتباری</th>
+              <th>وزن اعتباری</th>
+              <th>توضیحات</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+
+        <script>
+          window.onload = function () {
+            window.print();
+          };
+        </script>
+      </body>
+    </html>
+  `);
+
     printWindow.document.close();
   };
 

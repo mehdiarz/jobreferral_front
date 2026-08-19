@@ -25,6 +25,11 @@ export interface EditPersonalTypeBody {
 }
 
 export interface GetAllPersonalTypesParams {
+  title?: string;
+  code?: string;
+  creditScore?: number;
+  creditWeight?: number;
+  description?: string;
   sorting?: string;
   skipCount?: number;
   maxResultCount?: number;

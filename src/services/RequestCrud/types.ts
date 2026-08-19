@@ -1,94 +1,153 @@
+export interface RequestDepartmentTypeOutputDto {
+  id: number;
+  name?: string | null;
+  title?: string | null;
+}
+
+export interface RequestTypeOutputDto {
+  id: number;
+  title?: string | null;
+}
+
+export interface DepartmentOutputDto {
+  id: number;
+  title?: string | null;
+}
+
+export interface CustomerOutputDto {
+  id: number;
+  name?: string | null;
+  cifNumber?: string | null;
+  nationalCode?: string | null;
+}
+
+export interface PersonalTypeOutputDto {
+  id: number;
+  title?: string | null;
+}
+
+export interface RequestCommentOutputDto {
+  id: number;
+  userId?: number | null;
+  description?: string | null;
+  creationTime?: string | null;
+}
+
+export interface CollatralOutputDto {
+  id: number;
+  personTypeId?: number | null;
+  collatralTypeId?: number | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  nationalCode?: string | null;
+}
+
+export interface RequestHistoryOutputDto {
+  id: number;
+  reviewerUserId?: number | null;
+  description?: string | null;
+  creationTime?: string | null;
+}
+
 export interface RequestItem {
   id: number;
+
+  branchId?: string | null;
+  supersvisionId?: string | null;
+
+  actorUserId?: number | null;
   actorUserFullName?: string | null;
-  requestStatusTitle?: string | null;
   actorUserRoleName?: string | null;
+
   requestTypeId?: number | null;
+  requestTypeOutputDto?: RequestTypeOutputDto | null;
+
   departmentId?: number | null;
+  departmentOutputDto?: DepartmentOutputDto | null;
+
+  authorityDepartmentTypeId?: number | null;
+  authorityDepartmentTypeOutputDto?: RequestDepartmentTypeOutputDto | null;
+
+  currentDepartmentTypeId?: number | null;
+  currentDepartmentTypeOutputDto?: RequestDepartmentTypeOutputDto | null;
+
   customerId?: number | null;
+  customerOutputDto?: CustomerOutputDto | null;
+
   title?: string | null;
   requestCode?: string | null;
   loanNumber?: string | null;
   amount?: number | null;
   description?: string | null;
+
   personalTypeId?: number | null;
+  personalTypeOutputDto?: PersonalTypeOutputDto | null;
+
   currentApprovalStepId?: number | null;
   requestStatusCode?: number | null;
-  creationTime?: string;
+  requestStatusTitle?: string | null;
+
+  creationTime?: string | null;
   lastModificationTime?: string | null;
   isDeleted?: boolean;
 
-  // 👇 اینارو اضافه کن
-  requestTypeOutputDto?: {
-    id: number;
-    title?: string;
-  } | null;
-  departmentOutputDto?: {
-    id: number;
-    title?: string;
-  } | null;
-  customerOutputDto?: {
-    id: number;
-    name?: string;
-    cifNumber?: string;
-  } | null;
-  personalTypeOutputDto?: {
-    id: number;
-    title?: string;
-  } | null;
-  requestCommentOutputDtos?: Array<{
-    id: number;
-    userId?: number;
-    description?: string;
-    creationTime?: string;
-  }> | null;
-  collatralOutputDtos?: Array<{
-    id: number;
-    personTypeId?: number;
-    collatralTypeId?: number;
-    firstName?: string;
-    lastName?: string;
-    nationalCode?: string;
-  }> | null;
-  requestHistoryOutputDtos?: Array<{
-    id: number;
-    reviewerUserId?: number;
-    description?: string;
-    creationTime?: string;
-  }> | null;
+  requestCommentOutputDtos?: RequestCommentOutputDto[] | null;
+  collatralOutputDtos?: CollatralOutputDto[] | null;
+  requestHistoryOutputDtos?: RequestHistoryOutputDto[] | null;
 }
+
 export interface CreateRequestBody {
-  actorUserId?: number;
+  id?: number;
+  branchId?: string | null;
+  supersvisionId?: string | null;
+
+  actorUserId: number;
   requestTypeId: number;
-  departmentId: number;
+  departmentId?: number | null;
+  authorityDepartmentTypeId?: number | null;
+  currentDepartmentTypeId?: number | null;
   customerId: number;
-  title: string;
-  requestCode: string;
-  loanNumber: string;
+
+  title?: string | null;
+  requestCode?: string | null;
+  loanNumber?: string | null;
   amount: number;
-  description?: string;
+  description?: string | null;
+
   personalTypeId: number;
-  currentApprovalStepId?: number;
-  requestStatusCode?: number;
+  currentApprovalStepId: number;
+  requestStatusCode: number;
 }
 
 export interface EditRequestBody {
   id: number;
-  actorUserId?: number;
+  branchId?: string | null;
+  supersvisionId?: string | null;
+
+  actorUserId: number;
   requestTypeId: number;
-  departmentId: number;
+  departmentId?: number | null;
+  authorityDepartmentTypeId?: number | null;
+  currentDepartmentTypeId?: number | null;
   customerId: number;
-  title: string;
-  requestCode: string;
-  loanNumber: string;
+
+  title?: string | null;
+  requestCode?: string | null;
+  loanNumber?: string | null;
   amount: number;
-  description?: string;
+  description?: string | null;
+
   personalTypeId: number;
-  currentApprovalStepId?: number;
-  requestStatusCode?: number;
+  currentApprovalStepId: number;
+  requestStatusCode: number;
 }
 
 export interface GetAllRequestsParams {
+  actorUserFullName?: string;
+  requestStatusTitle?: string;
+  creationTime?: string | Date;
+  authorityDepartmentTypeName?: string;
+  currentDepartmentTypeName?: string;
   sorting?: string;
   skipCount?: number;
   maxResultCount?: number;

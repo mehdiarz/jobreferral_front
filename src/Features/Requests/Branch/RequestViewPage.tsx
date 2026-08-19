@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
+  CheckCircle2,
+  ClipboardList,
   Download,
   FilePenLine,
   MessageSquareText,
@@ -11,7 +13,6 @@ import {
   Search,
   Trash2,
   Upload,
-  UserRound,
   UsersRound,
 } from "lucide-react";
 
@@ -24,6 +25,7 @@ import PageTitle from "../../../baseComponents/PageTitle";
 import DataTable from "../../../baseComponents/DataTable";
 import Modal from "../../../baseComponents/Modal";
 import RequestDetailsPanel, {
+  RequestDetailSection,
   ViewDetailsButton,
 } from "../../../baseComponents/RequestDetailsPanel";
 import FormSection from "../../../baseComponents/FormSection";
@@ -44,6 +46,10 @@ import { findCustomer } from "../../../services/CustomerCrud/find";
 import { getUserById } from "../../../services/Users/getUserById";
 import { viewRequest } from "../../../services/RequestCrud/viewRequest";
 import { deleteDocumentFiles } from "../../../services/FileService/deleteDocumentFiles";
+import { getPropertyAppraisalByRequestId } from "../../../services/PropertyAppraisalCrud/getByRequestId";
+import type { PropertyAppraisalOutputDto } from "../../../services/PropertyAppraisalCrud/types";
+import { getPropertyAppraisalLookups } from "../../../services/PropertyAppraisalCrud/getLookups";
+import PropertyAppraisalReadOnlyModal from "../../../baseComponents/PropertyAppraisalReadOnlyModal";
 
 import type {
   RequestItem,
@@ -55,19 +61,26 @@ import type { RequestCommentItem } from "../../../services/RequestCommentCrud/ty
 import type { CollatralItem } from "../../../services/CollatralCrud/types";
 import type { CustomerItem } from "../../../services/CustomerCrud/types";
 import type { DocumentTypeItem } from "../../../services/DocumentTypeCrud/types";
-import { isoToPersian } from "../../../utils/persianToISO";
+import {
+  isoToPersian,
+  isoToPersianDateTime,
+  persianToISO,
+} from "../../../utils/persianToISO";
 import { createCollatral } from "../../../services/CollatralCrud/create";
 import { editCollatral } from "../../../services/CollatralCrud/update";
 import { deleteCollatral } from "../../../services/CollatralCrud/delete";
 import {
   extractEntityId,
-  filterRequestItems,
   getErrorMessage,
   REQUEST_CHUNK_SIZE,
   uploadChunksSequentially,
   type UploadState,
 } from "./requestShared";
 import { useRequestReferenceData } from "./useRequestReferenceData";
+import {
+  REQUEST_DEPARTMENT_TYPES,
+  type RequestDepartmentTypeConfig,
+} from "../requestDepartmentTypes";
 
 // ─── Type Definitions ────────────────────────────────────────────
 type TableFilter = { key: string; value: string };
@@ -160,7 +173,13 @@ function isCollateralValid(collateral: CollateralFormData): boolean {
 }
 
 // ─── Main Component ──────────────────────────────────────────────
-export default function RequestViewPage() {
+interface RequestViewPageProps {
+  departmentType: RequestDepartmentTypeConfig;
+}
+
+export function DepartmentRequestViewPage({
+  departmentType,
+}: RequestViewPageProps) {
   const { showToast } = useToast();
   const { user } = useAuthStore();
   const today = isoToPersian(new Date().toISOString());
@@ -190,10 +209,11 @@ export default function RequestViewPage() {
     [],
   );
   const [editCustomerId, setEditCustomerId] = useState<number | null>(null);
-  const [editCustomerCif, setEditCustomerCif] = useState("");
+  const [editCustomerNationalCode, setEditCustomerNationalCode] = useState("");
   const [editCustomerInfo, setEditCustomerInfo] = useState<{
     cif: string;
     name: string;
+    nationalCode: string;
   } | null>(null);
   const [isEditSearchingCustomer, setIsEditSearchingCustomer] = useState(false);
   const [editFoundCustomers, setEditFoundCustomers] = useState<CustomerItem[]>(
@@ -223,43 +243,56 @@ export default function RequestViewPage() {
   const deletedFileIdsRef = useRef<number[]>([]);
 
   const [, setUserCacheVersion] = useState(0);
+  const [detailAppraisal, setDetailAppraisal] =
+    useState<PropertyAppraisalOutputDto | null>(null);
+  const [isAppraisalReadOnlyOpen, setIsAppraisalReadOnlyOpen] = useState(false);
 
   // ─── Queries ───────────────────────────────────────────────────
   // 1. بهینه‌سازی شده: Server-Side Pagination با SkipCount و MaxResultCount
   const requestsQuery = useQuery({
     queryKey: [
       "requests-all-view",
+      departmentType.id,
       pagination.pageIndex,
       pagination.pageSize,
       filters,
     ],
     queryFn: async () => {
-      const hasActiveFilter = filters.some((filter) => filter.value.trim());
-      const response = await getAllRequests({
-        skipCount: hasActiveFilter
-          ? 0
-          : pagination.pageIndex * pagination.pageSize,
-        maxResultCount: hasActiveFilter ? 5000 : pagination.pageSize,
+      const requestFilters = Object.fromEntries(
+        filters
+          .filter((filter) => filter.value.trim())
+          .map((filter) => {
+            if (filter.key === "creationTime") {
+              const rawDate = filter.value.trim();
+              const isoDate = /^\d{4}-\d{2}-\d{2}(?:T.*)?$/.test(rawDate)
+                ? rawDate
+                : persianToISO(rawDate);
+              return [filter.key, isoDate || rawDate];
+            }
+            return [filter.key, filter.value.trim()];
+          }),
+      ) as {
+        requestStatusTitle?: string;
+        actorUserFullName?: string;
+        creationTime?: string;
+      };
+
+      return getAllRequests({
+        ...requestFilters,
+        currentDepartmentTypeName: departmentType.name,
+        skipCount: pagination.pageIndex * pagination.pageSize,
+        maxResultCount: pagination.pageSize,
         sorting: "creationTime desc",
       });
-      return response;
     },
     select: (data) => {
       const items = (data?.items ?? []) as RequestItem[];
       const totalCount = data.totalCount ?? items.length;
 
-      const filteredItems = filterRequestItems(items, filters);
-      const hasActiveFilter = filters.some((filter) => filter.value.trim());
-      const pageStart = pagination.pageIndex * pagination.pageSize;
-      const listResult = hasActiveFilter
-        ? filteredItems.slice(pageStart, pageStart + pagination.pageSize)
-        : filteredItems;
-      const filteredTotal = hasActiveFilter ? filteredItems.length : totalCount;
-
       return {
-        listResult,
-        total: filteredTotal,
-        totalPages: Math.max(1, Math.ceil(filteredTotal / pagination.pageSize)),
+        listResult: items,
+        total: totalCount,
+        totalPages: Math.max(1, Math.ceil(totalCount / pagination.pageSize)),
       };
     },
     placeholderData: (previousData) => previousData,
@@ -355,6 +388,13 @@ export default function RequestViewPage() {
     editComments,
   ]);
 
+  const lookupsQuery = useQuery({
+    queryKey: ["property-appraisal-lookups"],
+    queryFn: getPropertyAppraisalLookups,
+    staleTime: 10 * 60 * 1000,
+    enabled: isDetailOpen,
+  });
+
   // ─── بهینه‌سازی شده: View Handler با درخواست‌های موازی ───
   const handleView = useCallback(
     async (req: RequestItem) => {
@@ -363,19 +403,28 @@ export default function RequestViewPage() {
       setDetailDocs([]);
       setDetailComments([]);
       setDetailCollaterals([]);
+      setDetailAppraisal(null);
+      setIsAppraisalReadOnlyOpen(false);
       setIsDetailOpen(true);
 
       try {
         await viewRequest(req.id);
         if (activeRequestIdRef.current !== req.id) return;
 
-        // فقط یه call به getRequest - همۀ اطلاعات توش هست
         const detail = await getRequest(req.id);
         if (activeRequestIdRef.current !== req.id) return;
 
         setSelectedRequest(detail);
 
-        // فقط برای document ها باید جداگانه call کنیم
+        // 👇 لود فرم ارزیابی اگه وجود داره
+        try {
+          const appraisal = await getPropertyAppraisalByRequestId(req.id);
+          if (activeRequestIdRef.current !== req.id) return;
+          setDetailAppraisal(appraisal);
+        } catch {
+          // فرم ارزیابی نداره - نادیده بگیر
+        }
+
         const allDocs = await getAllDocuments({
           requestId: req.id,
           maxResultCount: 5000,
@@ -393,7 +442,15 @@ export default function RequestViewPage() {
         if (activeRequestIdRef.current !== req.id) return;
 
         setDetailDocs(docsWithFiles);
-        setDetailComments(detail.requestCommentOutputDtos ?? []);
+        setDetailComments(
+          (detail.requestCommentOutputDtos ?? []).map((comment) => ({
+            id: comment.id,
+            requestId: req.id,
+            userId: comment.userId ?? null,
+            description: comment.description ?? "", // تبدیل null به رشته خالی
+            creationTime: comment.creationTime ?? "", // تبدیل null به رشته خالی
+          })),
+        );
         setDetailCollaterals(detail.collatralOutputDtos ?? []);
       } catch (err) {
         if (activeRequestIdRef.current === req.id) {
@@ -412,7 +469,7 @@ export default function RequestViewPage() {
       setEditUploadedFiles([]);
       setEditComments([]);
       setEditCustomerId(null);
-      setEditCustomerCif("");
+      setEditCustomerNationalCode("");
       setEditCustomerInfo(null);
       setIsEditOpen(true);
 
@@ -437,18 +494,17 @@ export default function RequestViewPage() {
 
         // مشتری
         if (detail.customerId && detail.customerOutputDto) {
+          const nationalCode = detail.customerOutputDto.nationalCode || "";
           setEditCustomerId(detail.customerId);
-          setEditCustomerCif(
-            detail.customerOutputDto.cifNumber || String(detail.customerId),
-          );
+          setEditCustomerNationalCode(nationalCode);
           setEditCustomerInfo({
-            cif:
-              detail.customerOutputDto.cifNumber || String(detail.customerId),
+            cif: detail.customerOutputDto.cifNumber || "-",
             name: detail.customerOutputDto.name || "-",
+            nationalCode: nationalCode || "-",
           });
         } else {
           setEditCustomerId(null);
-          setEditCustomerCif("");
+          setEditCustomerNationalCode("");
           setEditCustomerInfo(null);
         }
 
@@ -519,7 +575,15 @@ export default function RequestViewPage() {
         );
 
         setEditUploadedFiles(existingFiles);
-        setEditComments(detail.requestCommentOutputDtos ?? []);
+        setEditComments(
+          (detail.requestCommentOutputDtos ?? []).map((comment) => ({
+            id: comment.id,
+            requestId: req.id,
+            userId: comment.userId ?? null,
+            description: comment.description ?? "", // تبدیل null به رشته خالی
+            creationTime: comment.creationTime ?? "", // تبدیل null به رشته خالی
+          })),
+        );
         setNewComment("");
         setEditDocTypeId(null);
         setEditSelectedFile(null);
@@ -814,25 +878,26 @@ export default function RequestViewPage() {
 
   // ─── Customer Search Handlers ──────────────────────────────────
   const handleEditFindCustomer = useCallback(async () => {
-    const cif = editCustomerCif.trim();
-    if (!cif) {
-      showToast("لطفاً شماره مشتری را وارد کنید", "error");
+    const nationalCode = editCustomerNationalCode.trim();
+    if (!nationalCode) {
+      showToast("لطفاً کد ملی را وارد کنید", "error");
       return;
     }
 
     setIsEditSearchingCustomer(true);
     try {
-      const customers = await findCustomer(cif);
+      const customers = await findCustomer({ nationalCode });
       if (customers.length === 0) {
         setEditCustomerId(null);
         setEditCustomerInfo(null);
-        showToast("مشتری با این شماره یافت نشد", "warning");
+        showToast("مشتری با این کد ملی یافت نشد", "warning");
       } else if (customers.length === 1) {
         const c = customers[0];
         setEditCustomerId(c.id);
         setEditCustomerInfo({
-          cif: c.cifNumber || cif,
+          cif: c.cifNumber || "-",
           name: c.name || "-",
+          nationalCode: c.nationalCode || nationalCode,
         });
         showToast("مشتری یافت شد", "success");
       } else {
@@ -845,21 +910,27 @@ export default function RequestViewPage() {
     } finally {
       setIsEditSearchingCustomer(false);
     }
-  }, [editCustomerCif, showToast]);
+  }, [editCustomerNationalCode, showToast]);
 
-  const handleEditSelectCustomer = useCallback((c: CustomerItem) => {
-    setEditCustomerId(c.id);
-    setEditCustomerCif(c.cifNumber || "");
-    setEditCustomerInfo({
-      cif: c.cifNumber || "",
-      name: c.name || "-",
-    });
-    setIsEditCustomerModalOpen(false);
-  }, []);
+  const handleEditSelectCustomer = useCallback(
+    (c: CustomerItem) => {
+      const nationalCode = c.nationalCode || editCustomerNationalCode;
+      setEditCustomerId(c.id);
+      setEditCustomerNationalCode(nationalCode);
+      setEditCustomerInfo({
+        cif: c.cifNumber || "-",
+        name: c.name || "-",
+        nationalCode,
+      });
+      setIsEditCustomerModalOpen(false);
+      showToast("مشتری انتخاب شد", "success");
+    },
+    [editCustomerNationalCode, showToast],
+  );
 
   const handleClearCustomer = useCallback(() => {
     setEditCustomerId(null);
-    setEditCustomerCif("");
+    setEditCustomerNationalCode("");
     setEditCustomerInfo(null);
   }, []);
 
@@ -1046,9 +1117,13 @@ export default function RequestViewPage() {
         id: "date",
         header: "تاریخ و زمان",
         cell: ({ row }) =>
-          row.original.creationTime
-            ? isoToPersian(row.original.creationTime)
-            : "-",
+          row.original.creationTime ? (
+            <span dir="ltr" className="inline-block whitespace-nowrap">
+              {isoToPersianDateTime(row.original.creationTime)}
+            </span>
+          ) : (
+            "-"
+          ),
       },
       {
         id: "desc",
@@ -1098,7 +1173,7 @@ export default function RequestViewPage() {
   // ─── Render ──────────────────────────────────────────────────
   return (
     <MainLayout.Main maxWidth="screen-xl">
-      <PageTitle title="مشاهده و پیگیری درخواست‌ها" />
+      <PageTitle title={departmentType.pageTitle} />
       <div className="rounded-lg bg-white p-4 shadow-sm">
         <DataTable<RequestItem>
           query={requestsQuery}
@@ -1149,7 +1224,27 @@ export default function RequestViewPage() {
               onDownloadFile={(file) =>
                 downloadFile(file.filePath, file.documentId)
               }
-            />
+            >
+              {detailAppraisal && (
+                <RequestDetailSection
+                  icon={<ClipboardList className="h-5 w-5" />}
+                  title="ارزیابی ملک توسط شعبه"
+                  tone="blue"
+                >
+                  <div className="flex items-center justify-between gap-4 rounded-xl border border-blue-100 bg-blue-50 p-4">
+                    <div className="text-sm text-blue-800">
+                      فرم ارزیابی ملک برای این درخواست تکمیل و ذخیره شده است.
+                    </div>
+                    <FormButton
+                      title="مشاهده فرم ارزیابی"
+                      variant="primary"
+                      size="sm"
+                      onClick={() => setIsAppraisalReadOnlyOpen(true)}
+                    />
+                  </div>
+                </RequestDetailSection>
+              )}
+            </RequestDetailsPanel>
           );
         }}
       />
@@ -1259,51 +1354,71 @@ export default function RequestViewPage() {
                   <FormInput
                     id="e-requester"
                     name="requesterName"
-                    label="درخواست کننده (شماره مشتری)"
-                    value={editCustomerCif}
+                    label="درخواست کننده (کد ملی)"
+                    value={editCustomerNationalCode}
                     onChange={(v) => {
-                      setEditCustomerCif(v);
+                      setEditCustomerNationalCode(v);
                       setEditCustomerId(null);
                       setEditCustomerInfo(null);
                     }}
-                    dir="ltr"
+                    dir="rtl"
                   />
                   <button
                     type="button"
                     onClick={handleEditFindCustomer}
                     disabled={
-                      !editCustomerCif.trim() || isEditSearchingCustomer
+                      !editCustomerNationalCode.trim() ||
+                      isEditSearchingCustomer
                     }
-                    title="استعلام مشتری"
+                    title="استعلام"
                     className="absolute bottom-2 left-2 flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl bg-blue-50 text-blue-600 transition-colors hover:bg-blue-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    <Search className="h-4 w-4" />
+                    {isEditSearchingCustomer ? (
+                      <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
+                    ) : (
+                      <Search className="h-4 w-4" />
+                    )}
                   </button>
                 </div>
 
                 {editCustomerInfo && (
-                  <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-xs md:col-span-2">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
-                      <UserRound className="h-4 w-4" />
+                  <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 md:col-span-2">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                      <CheckCircle2 className="h-5 w-5" />
                     </div>
-                    <div className="flex-1">
-                      <p className="font-bold text-slate-700">
+                    <div className="flex flex-1 flex-wrap items-center gap-3 text-sm">
+                      <span className="text-gray-500">نام مشتری:</span>
+                      <span className="font-medium text-gray-800">
                         {editCustomerInfo.name}
-                      </p>
-                      <p className="mt-1 text-slate-500" dir="ltr">
+                      </span>
+                      <span className="text-gray-300">|</span>
+                      <span className="text-gray-500">شماره مشتری:</span>
+                      <span className="font-medium text-gray-800" dir="ltr">
                         {editCustomerInfo.cif}
-                      </p>
+                      </span>
+                      <span className="text-gray-500">کد ملی:</span>
+                      <span className="font-medium text-gray-800" dir="ltr">
+                        {editCustomerInfo.nationalCode}
+                      </span>
                     </div>
                     <button
                       type="button"
                       onClick={handleClearCustomer}
-                      className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-500"
-                      title="حذف مشتری"
+                      className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                      title="حذف"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
                 )}
+
+                {!editCustomerInfo &&
+                  !isEditSearchingCustomer &&
+                  editCustomerNationalCode.trim() && (
+                    <div className="-mt-2 text-xs text-gray-400 md:col-span-2">
+                      برای استعلام، روی ذره‌بین کلیک کنید
+                    </div>
+                  )}
 
                 <div className="md:col-span-2">
                   <FormTextarea
@@ -1566,7 +1681,7 @@ export default function RequestViewPage() {
                           </p>
                           <span className="text-slate-400">
                             {c.creationTime
-                              ? isoToPersian(c.creationTime)
+                              ? isoToPersianDateTime(c.creationTime)
                               : "-"}
                           </span>
                         </div>
@@ -1634,7 +1749,8 @@ export default function RequestViewPage() {
         renderContent={() => (
           <div>
             <p className="text-sm text-gray-600 mb-4">
-              {editFoundCustomers.length} مشتری یافت شد:
+              {editFoundCustomers.length} مشتری با کد ملی "
+              {editCustomerNationalCode}" یافت شد.
             </p>
             <DataTable<CustomerItem>
               query={{
@@ -1653,6 +1769,15 @@ export default function RequestViewPage() {
                   header: "شماره مشتری",
                   cell: ({ row }) => row.original.cifNumber || "-",
                 },
+                {
+                  id: "nationalCode",
+                  header: "کد ملی",
+                  cell: ({ row }) =>
+                    row.original.nationalCode ||
+                    editCustomerNationalCode ||
+                    "-",
+                },
+
                 {
                   id: "name",
                   header: "نام مشتری",
@@ -1688,6 +1813,20 @@ export default function RequestViewPage() {
           />
         }
       />
+      <PropertyAppraisalReadOnlyModal
+        isOpen={isAppraisalReadOnlyOpen}
+        appraisal={detailAppraisal}
+        lookups={lookupsQuery.data ?? {}}
+        onClose={() => setIsAppraisalReadOnlyOpen(false)}
+      />
     </MainLayout.Main>
+  );
+}
+
+export default function BranchRequestViewPage() {
+  return (
+    <DepartmentRequestViewPage
+      departmentType={REQUEST_DEPARTMENT_TYPES.branch}
+    />
   );
 }

@@ -1,18 +1,11 @@
-import { useMemo, useRef, useState, useCallback, useEffect } from "react";
+import { useMemo, useRef, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import {
-  Download,
-  MessageSquareText,
-  Paperclip,
-  Trash2,
-  Upload,
-} from "lucide-react";
+import { ClipboardList, MessageSquareText } from "lucide-react";
 
 import { MainLayout } from "../../../baseComponents/MainLayout";
-import FormSelect from "../../../baseComponents/FormSelect";
-import FormTextarea from "../../../baseComponents/FormTextarea";
 import FormButton from "../../../baseComponents/FormButton";
+import FormTextarea from "../../../baseComponents/FormTextarea";
 import PageTitle from "../../../baseComponents/PageTitle";
 import DataTable from "../../../baseComponents/DataTable";
 import Modal from "../../../baseComponents/Modal";
@@ -28,107 +21,790 @@ import { getRequest } from "../../../services/RequestCrud/get";
 import { viewRequest } from "../../../services/RequestCrud/viewRequest";
 import { userAction } from "../../../services/RequestCrud/userAction";
 import { createRequestComment } from "../../../services/RequestCommentCrud/create";
-import { getAllDocuments } from "../../../services/DocumentCrud/getAll";
-import { getDocumentAllFiles } from "../../../services/FileService/GetDocumentAllFiles";
-import { downloadFile } from "../../../services/FileService/download";
-import { startUpload } from "../../../services/FileService/start";
-import { completeBatchUpload } from "../../../services/FileService/completeBatch";
-import { createDocument } from "../../../services/DocumentCrud/create";
-import { getAllDocumentTypes } from "../../../services/DocumentTypeCrud/getAll";
 import { getUserById } from "../../../services/Users/getUserById";
-import { uploadChunk } from "../../../services/FileService/uploadChunk";
+import { getPropertyAppraisalLookups } from "../../../services/PropertyAppraisalCrud/getLookups";
+import { createPropertyAppraisal } from "../../../services/PropertyAppraisalCrud/create";
+import { updatePropertyAppraisal } from "../../../services/PropertyAppraisalCrud/update";
+import { getPropertyAppraisalByRequestId } from "../../../services/PropertyAppraisalCrud/getByRequestId";
 
 import type { RequestItem } from "../../../services/RequestCrud/types";
-import type { DocumentItem } from "../../../services/DocumentCrud/types";
-import type { DocumentFile } from "../../../services/FileService/GetDocumentAllFiles";
+import type {
+  PropertyAppraisalInputDto,
+  PropertyAppraisalLookupsDto,
+  LookupValueDto,
+  PropertyAppraisalOutputDto,
+} from "../../../services/PropertyAppraisalCrud/types";
 import { isoToPersian } from "../../../utils/persianToISO";
-import { filterRequestItems } from "./requestShared";
+import { persianToISO } from "../../../utils/persianToISO";
+import {
+  REQUEST_DEPARTMENT_TYPES,
+  type RequestDepartmentTypeConfig,
+} from "../requestDepartmentTypes";
+import { generateAppraisalHtmlPDF } from "../../../utils/htmlPdfGenerator";
 
 // ─── Types ───────────────────────────────────────────────────────
 type TableFilter = { key: string; value: string };
+type SelectedRequest = RequestItem & {
+  requesterFullName?: string | null;
+};
 
-interface DetailDocWithFiles {
-  doc: DocumentItem;
-  files: DocumentFile[];
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
 }
 
-interface UploadedFile {
-  id: string;
-  documentTypeId: number | null;
-  documentTypeTitle: string;
-  fileName: string;
-  fileSize: number;
-  fileFormat: string;
-  fileAddress: string;
-  uploadProgress: number;
-  isUploading: boolean;
-  isCompleted: boolean;
-  userName: string;
-  userRole: string;
-  uploadDate: string;
-  uploadTime: string;
-  uploadId?: string;
-  totalChunks?: number;
+// ─── Styles ──────────────────────────────────────────────────────
+const inputClass =
+  "w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all";
+
+const labelClass = "mb-1 block text-xs font-medium text-gray-600";
+
+const sectionClass = "bg-gray-50 p-4 rounded-xl space-y-4";
+
+const sectionTitleClass =
+  "font-bold text-sm text-blue-700 border-r-4 border-blue-700 pr-2";
+
+// ─── Helper: Options ─────────────────────────────────────────────
+function toOptions(items?: LookupValueDto[] | null) {
+  return (items ?? []).map((item) => ({
+    value: item.code,
+    label: item.title,
+  }));
 }
 
-interface UserCacheData {
-  name: string;
-  role: string;
+// ─── Sub-Component: Checkbox ─────────────────────────────────────
+function CheckboxField({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+      />
+      <label className="text-sm text-gray-700">{label}</label>
+    </div>
+  );
 }
 
-const CHUNK_SIZE = 2 * 1024 * 1024;
+// ─── Sub-Component: Price Row ────────────────────────────────────
+function PriceRow({
+  title,
+  areaField,
+  unitPriceField,
+  totalPriceField,
+  form,
+  onChange,
+}: {
+  title: string;
+  areaField: keyof PropertyAppraisalInputDto;
+  unitPriceField: keyof PropertyAppraisalInputDto;
+  totalPriceField: keyof PropertyAppraisalInputDto;
+  form: PropertyAppraisalInputDto;
+  onChange: (
+    field: keyof PropertyAppraisalInputDto,
+    value: string | boolean | number,
+  ) => void;
+}) {
+  return (
+    <div className="border border-gray-200 rounded-lg p-3">
+      <p className="text-xs font-bold text-gray-700 mb-2">{title}</p>
+      <div className="grid grid-cols-3 gap-3">
+        <div>
+          <label className={labelClass}>مساحت</label>
+          <input
+            type="number"
+            className={inputClass}
+            value={String(form[areaField] ?? "")}
+            onChange={(e) => onChange(areaField, Number(e.target.value))}
+          />
+        </div>
+        <div>
+          <label className={labelClass}>بهای واحد</label>
+          <input
+            type="number"
+            className={inputClass}
+            value={String(form[unitPriceField] ?? "")}
+            onChange={(e) => onChange(unitPriceField, Number(e.target.value))}
+          />
+        </div>
+        <div>
+          <label className={labelClass}>مبلغ کل</label>
+          <input
+            type="number"
+            className={inputClass}
+            value={String(form[totalPriceField] ?? "")}
+            onChange={(e) => onChange(totalPriceField, Number(e.target.value))}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Sub-Component: Asset Review Form Modal ──────────────────────
+function AssetReviewModal({
+  isOpen,
+  form,
+  lookups,
+  isSaving,
+  isGeneratingPdf,
+  onChange,
+  onSave,
+  onGeneratePdf,
+  onClose,
+}: {
+  isOpen: boolean;
+  form: PropertyAppraisalInputDto;
+  lookups: PropertyAppraisalLookupsDto;
+  isSaving: boolean;
+  isGeneratingPdf: boolean;
+  onChange: (
+    field: keyof PropertyAppraisalInputDto,
+    value: string | boolean | number,
+  ) => void;
+  onSave: () => void;
+  onGeneratePdf: () => void;
+  onClose: () => void;
+}) {
+  const renderField = (
+    label: string,
+    field: keyof PropertyAppraisalInputDto,
+    type: "text" | "number" = "text",
+    span:
+      | "col-span-1"
+      | "md:col-span-2"
+      | "md:col-span-3"
+      | "md:col-span-4" = "col-span-1",
+  ) => (
+    <div className={span}>
+      <label className={labelClass}>{label}</label>
+      <input
+        type={type}
+        className={inputClass}
+        value={String(form[field] ?? "")}
+        onChange={(e) =>
+          onChange(
+            field,
+            type === "number" ? Number(e.target.value) : e.target.value,
+          )
+        }
+      />
+    </div>
+  );
+
+  const renderSelect = (
+    label: string,
+    field: keyof PropertyAppraisalInputDto,
+    options: { value: string; label: string }[],
+    span:
+      | "col-span-1"
+      | "md:col-span-2"
+      | "md:col-span-3"
+      | "md:col-span-4" = "col-span-1",
+  ) => (
+    <div className={span}>
+      <label className={labelClass}>{label}</label>
+      <select
+        className={inputClass}
+        value={String(form[field] ?? "")}
+        onChange={(e) => onChange(field, e.target.value)}
+      >
+        <option value="">انتخاب کنید...</option>
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+
+  const renderTextarea = (
+    label: string,
+    field: keyof PropertyAppraisalInputDto,
+    rows = 2,
+    span:
+      | "col-span-1"
+      | "md:col-span-2"
+      | "md:col-span-3"
+      | "md:col-span-4" = "md:col-span-2",
+  ) => (
+    <div className={span}>
+      <label className={labelClass}>{label}</label>
+      <textarea
+        className={inputClass}
+        rows={rows}
+        value={String(form[field] ?? "")}
+        onChange={(e) => onChange(field, e.target.value)}
+      />
+    </div>
+  );
+
+  const renderSelectBoolean = (
+    label: string,
+    field: keyof PropertyAppraisalInputDto,
+  ) => (
+    <div>
+      <label className={labelClass}>{label}</label>
+      <select
+        className={inputClass}
+        value={
+          form[field] === true ? "true" : form[field] === false ? "false" : ""
+        }
+        onChange={(e) =>
+          onChange(
+            field,
+            e.target.value === "true"
+              ? true
+              : e.target.value === "false"
+                ? false
+                : "",
+          )
+        }
+      >
+        <option value="">انتخاب کنید...</option>
+        <option value="true">دارد</option>
+        <option value="false">ندارد</option>
+      </select>
+    </div>
+  );
+
+  const renderCheckbox = (
+    label: string,
+    field: keyof PropertyAppraisalInputDto,
+  ) => (
+    <CheckboxField
+      label={label}
+      checked={Boolean(form[field])}
+      onChange={(checked) => onChange(field, checked)}
+    />
+  );
+
+  return (
+    <>
+      <style>{`@media print { .no-print { display: none !important; } #print-area { padding: 20px !important; } }`}</style>
+      <Modal
+        isOpen={isOpen}
+        isRTL
+        header="فرم ارزیابی ملک"
+        onClose={onClose}
+        className="min-w-[1100px]"
+        overlayLock={isSaving}
+        footerButtons={
+          <div className="flex gap-2 no-print">
+            <FormButton
+              title="دانلود گزارش PDF"
+              variant="secondary"
+              onClick={onGeneratePdf}
+              isLoading={isGeneratingPdf}
+              disabled={isGeneratingPdf}
+            />
+            <FormButton
+              title="ذخیره"
+              variant="primary"
+              onClick={onSave}
+              isLoading={isSaving}
+              disabled={isSaving}
+            />
+          </div>
+        }
+        renderContent={() => (
+          <div
+            id="print-area"
+            className="space-y-6 text-right max-h-[70vh] overflow-y-auto px-1"
+            dir="rtl"
+          >
+            {/* ── بخش ۱: مشخصات ملک و متقاضی ── */}
+            <div className={sectionClass}>
+              <h4 className={sectionTitleClass}>مشخصات ملک و متقاضی</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {renderField("نام متقاضی", "applicantName")}
+                {renderField("نوع تسهیلات", "loanType")}
+                {renderField("میزان تسهیلات", "loanAmount", "number")}
+                {renderField("نام مالک", "ownerName")}
+                {renderField(
+                  "نشانی ملک",
+                  "ownerAddress",
+                  "text",
+                  "md:col-span-2",
+                )}
+                {renderSelect(
+                  "متصرف ملک",
+                  "propertyOccupierCode",
+                  toOptions(lookups.propertyOccupiers),
+                )}
+                {renderTextarea(
+                  "توضیحات متصرف",
+                  "propertyOccupierDescription",
+                  2,
+                  "md:col-span-2",
+                )}
+              </div>
+            </div>
+
+            {/* ── بخش ۲: اطلاعات ثبتی ── */}
+            <div className={sectionClass}>
+              <h4 className={sectionTitleClass}>اطلاعات ثبتی و سند</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {renderField("شماره ملک", "propertyNumber")}
+                {renderField("مفروز و مجزی از", "seperatedFrom")}
+                {renderField("قطعه تفکیکی", "separationPiece")}
+                {renderField("شماره ثبت", "registrationNumber")}
+                {renderField("صفحه", "page")}
+                {renderField("شماره دفتر", "officeNumber")}
+                {renderField("بخش", "part")}
+                {renderField("شهر", "city")}
+              </div>
+
+              <div className="border-t pt-4 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {renderSelectBoolean(
+                    "پلاک فوق سند قطعی مالکیت",
+                    "hasDefinitiveOwnershipDocument",
+                  )}
+                  {renderField("شماره ورقه مالکیت", "titleDeedNumber")}
+                  {renderField("کدپستی", "postalCode")}
+                </div>
+
+                {form.hasDefinitiveOwnershipDocument === true && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-dashed pt-4">
+                    {renderSelect(
+                      "نوع سند",
+                      "definitiveOwnershipDocumentTypeCode",
+                      toOptions(lookups.definitiveOwnershipDocumentTypes),
+                    )}
+                    {renderField("تعداد جلد/برگه", "pageCount", "number")}
+                    {renderField("تعداد دانگ", "dong", "number")}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── بخش ۳: مشخصات ملک و کاربری ── */}
+            <div className={sectionClass}>
+              <h4 className={sectionTitleClass}>مشخصات ملک و کاربری</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {renderField("منطقه شهرداری", "municipalArea")}
+                {renderField("تلفن ملک", "ownerPhone")}
+                {renderField("نوع ملک", "propertyType")}
+                {renderField(
+                  "کاربری طبق پایان کار",
+                  "useAccordingToTheCompletionOfTheWork",
+                )}
+                {renderSelect(
+                  "نوع پایان کار",
+                  "typeOfWorkCompletionCode",
+                  toOptions(lookups.typeOfWorkCompletions),
+                )}
+                {renderField("نوع استفاده از ملک", "typeOfUseOfTheProperty")}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
+                {renderSelectBoolean(
+                  "مطابقت مساحت با سند",
+                  "hasMatchingTheAreaWithTheDocument",
+                )}
+                {form.hasMatchingTheAreaWithTheDocument === false &&
+                  renderTextarea(
+                    "توضیحات عدم مطابقت",
+                    "explanationInCaseOfDisagreement",
+                    3,
+                    "md:col-span-2",
+                  )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-4">
+                {renderSelect(
+                  "نوع ملک وقفی",
+                  "typeOfEndowmentPropertyCode",
+                  toOptions(lookups.typeOfEndowmentProperties),
+                )}
+                {renderField("سایر (وقفی)", "typeOfEndowmentPropertyIfOther")}
+                {renderSelect(
+                  "موضوع ارزیابی",
+                  "evaluationTopicCode",
+                  toOptions(lookups.evaluationTopics),
+                )}
+              </div>
+            </div>
+
+            {/* ── بخش ۴: جدول ارزیابی ── */}
+            <div className={sectionClass}>
+              <h4 className={sectionTitleClass}>جدول ارزیابی</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <PriceRow
+                  title="عرصه کل"
+                  areaField="landArea"
+                  unitPriceField="landUnitPrice"
+                  totalPriceField="landTotalPrice"
+                  form={form}
+                  onChange={onChange}
+                />
+                <PriceRow
+                  title="قدرالسهم"
+                  areaField="landShareArea"
+                  unitPriceField="landShareUnitPrice"
+                  totalPriceField="landShareTotalPrice"
+                  form={form}
+                  onChange={onChange}
+                />
+                <PriceRow
+                  title="زیرزمین"
+                  areaField="basementArea"
+                  unitPriceField="basementUnitPrice"
+                  totalPriceField="basementTotalPrice"
+                  form={form}
+                  onChange={onChange}
+                />
+                <PriceRow
+                  title="همکف"
+                  areaField="groundFloorArea"
+                  unitPriceField="groundFloorUnitPrice"
+                  totalPriceField="groundFloorTotalPrice"
+                  form={form}
+                  onChange={onChange}
+                />
+                <PriceRow
+                  title="نیم‌طبقه"
+                  areaField="mezzanineArea"
+                  unitPriceField="mezzanineUnitPrice"
+                  totalPriceField="mezzanineTotalPrice"
+                  form={form}
+                  onChange={onChange}
+                />
+                <PriceRow
+                  title="طبقه اول"
+                  areaField="floor1Area"
+                  unitPriceField="floor1UnitPrice"
+                  totalPriceField="floor1TotalPrice"
+                  form={form}
+                  onChange={onChange}
+                />
+                <PriceRow
+                  title="طبقه دوم"
+                  areaField="floor2Area"
+                  unitPriceField="floor2UnitPrice"
+                  totalPriceField="floor2TotalPrice"
+                  form={form}
+                  onChange={onChange}
+                />
+                <PriceRow
+                  title="طبقه سوم"
+                  areaField="floor3Area"
+                  unitPriceField="floor3UnitPrice"
+                  totalPriceField="floor3TotalPrice"
+                  form={form}
+                  onChange={onChange}
+                />
+                <PriceRow
+                  title="طبقه چهارم"
+                  areaField="floor4Area"
+                  unitPriceField="floor4UnitPrice"
+                  totalPriceField="floor4TotalPrice"
+                  form={form}
+                  onChange={onChange}
+                />
+                <PriceRow
+                  title="طبقه پنجم"
+                  areaField="floor5Area"
+                  unitPriceField="floor5UnitPrice"
+                  totalPriceField="floor5TotalPrice"
+                  form={form}
+                  onChange={onChange}
+                />
+                <PriceRow
+                  title="سایر طبقات"
+                  areaField="otherFloorsArea"
+                  unitPriceField="otherFloorsUnitPrice"
+                  totalPriceField="otherFloorsTotalPrice"
+                  form={form}
+                  onChange={onChange}
+                />
+                <PriceRow
+                  title="محوطه‌سازی"
+                  areaField="landscapingArea"
+                  unitPriceField="landscapingUnitPrice"
+                  totalPriceField="landscapingTotalPrice"
+                  form={form}
+                  onChange={onChange}
+                />
+                <PriceRow
+                  title="تأسیسات"
+                  areaField="facilitiesArea"
+                  unitPriceField="facilitiesUnitPrice"
+                  totalPriceField="facilitiesTotalPrice"
+                  form={form}
+                  onChange={onChange}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 border-t pt-4">
+                {renderField("جمع کل مساحت", "totalArea", "number")}
+                {renderField("بهای کل", "totalUnitPrice", "number")}
+                {renderField("جمع کل مبلغ", "totalPrice", "number")}
+                {renderField("سرقفلی", "goodwillAdjustment", "number")}
+                {renderField("مبلغ نهایی (عدد)", "finalPrice", "number")}
+                {renderField(
+                  "مبلغ نهایی (حروف)",
+                  "finalPriceInWords",
+                  "text",
+                  "md:col-span-2",
+                )}
+              </div>
+            </div>
+
+            {/* ── بخش ۵: توضیحات تکمیلی ملک ── */}
+            <div className={sectionClass}>
+              <h4 className={sectionTitleClass}>توضیحات تکمیلی ملک</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {renderField("تعداد طبقات", "totalFloors", "number")}
+                {renderField("تعداد واحدها به تفکیک کاربری", "usageBreakdown")}
+                {renderSelect(
+                  "نوع سازه",
+                  "structureTypeCode",
+                  toOptions(lookups.structureTypes),
+                )}
+                {renderField("سایر (نوع سازه)", "structureTypeOther")}
+                {renderField("نماسازی", "facadeType")}
+                {renderField("نحوه محاسبه قدمت بنا", "buildingAgeCalculation")}
+                {renderField("سیستم گرمایشی", "heatingSystem")}
+                {renderField("سیستم سرمایشی", "coolingSystem")}
+              </div>
+            </div>
+
+            {/* ── بخش ۶: انشعابات و مجوزها ── */}
+            <div className={sectionClass}>
+              <h4 className={sectionTitleClass}>انشعابات و مجوزها</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {renderCheckbox("آب", "hasWater")}
+                {renderCheckbox("برق", "hasElectricity")}
+                {renderCheckbox("گاز", "hasGas")}
+                {renderCheckbox("تلفن", "hasTelephone")}
+                {renderCheckbox("اصلاحی شهرداری", "hasMunicipalCorrection")}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {renderField("مشخصات برق (فاز/آمپر)", "electricityDetails")}
+                {renderTextarea("توضیحات خاص بر و کف", "certificateDetails", 2)}
+                {renderTextarea("توضیحات و سایر مشخصات", "otherDetails", 2)}
+              </div>
+            </div>
+
+            {/* ── بخش ۷: وضعیت مالکیت و کیفیت ── */}
+            <div className={sectionClass}>
+              <h4 className={sectionTitleClass}>
+                وضعیت مالکیت و کیفیت ساختمان
+              </h4>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {renderCheckbox("مالک در قید حیات است", "isOwnerAlive")}
+                {renderSelect(
+                  "وضعیت انحصار وراثت",
+                  "inheritanceStatusCode",
+                  toOptions(lookups.inheritanceStatuses),
+                )}
+                {renderSelect(
+                  "موقعیت شهری",
+                  "urbanLocationGradeCode",
+                  toOptions(lookups.urbanLocationGrades),
+                )}
+                {renderSelect(
+                  "آسیب‌پذیری بلایای طبیعی",
+                  "disasterVulnerabilityCode",
+                  toOptions(lookups.disasterVulnerabilities),
+                )}
+                {renderSelect(
+                  "کیفیت ساخت و مصالح",
+                  "constructionQualityCode",
+                  toOptions(lookups.constructionQualities),
+                )}
+              </div>
+            </div>
+
+            {/* ── بخش ۸: امکانات و مشاعات ── */}
+            <div className={sectionClass}>
+              <h4 className={sectionTitleClass}>امکانات و مشاعات</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {renderCheckbox("پارکینگ", "hasParking")}
+                {renderCheckbox("پارکینگ مشاعی", "hasSharedParking")}
+                {renderCheckbox("انباری", "hasStorage")}
+                {renderCheckbox("آسانسور", "hasElevator")}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {renderField("تعداد پارکینگ", "parkingCount", "number")}
+                {renderField("تعداد انباری", "storageCount", "number")}
+                {renderField("مساحت انباری", "storageArea", "number")}
+                {renderField("تعداد آسانسور", "elevatorCount", "number")}
+              </div>
+              {renderTextarea(
+                "امتیازات مشاعی/اختصاصی دیگر",
+                "otherPrivileges",
+                2,
+              )}
+            </div>
+
+            {/* ── بخش ۹: اسناد و تعهدات ── */}
+            <div className={sectionClass}>
+              <h4 className={sectionTitleClass}>اسناد و تعهدات</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {renderCheckbox("دارای گواهی", "hasCertificate")}
+                {renderCheckbox("در رهن یا بازداشت", "isMortgagedOrSeized")}
+              </div>
+              {form.hasCertificate === true && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {renderSelect(
+                    "نوع گواهی",
+                    "certificateTypeCode",
+                    toOptions(lookups.buildingCertificates),
+                  )}
+                  {renderField("شماره گواهی", "certificateNumber")}
+                  {renderField("تاریخ گواهی", "certificateDate")}
+                </div>
+              )}
+              {form.isMortgagedOrSeized === true &&
+                renderField("ذینفع رهن یا بازداشت", "mortgageBeneficiary")}
+            </div>
+
+            {/* ── بخش ۱۰: منافع و اجاره ── */}
+            <div className={sectionClass}>
+              <h4 className={sectionTitleClass}>منافع و اجاره</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {renderCheckbox(
+                  "منافع به غیر واگذار شده",
+                  "hasTransferredBenefits",
+                )}
+                {renderCheckbox("در اختیار مستاجر", "isOccupiedByTenant")}
+              </div>
+              {form.hasTransferredBenefits === true &&
+                renderTextarea(
+                  "توضیحات واگذاری منافع",
+                  "benefitsTransferDescription",
+                  2,
+                )}
+              {form.isOccupiedByTenant === true && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {renderField(
+                    "پیش‌پرداخت اجاره",
+                    "rentalAdvancePayment",
+                    "number",
+                  )}
+                  {renderField("اجاره ماهیانه", "monthlyRent", "number")}
+                  {renderSelect(
+                    "نوع اجاره‌نامه",
+                    "leaseTypeCode",
+                    toOptions(lookups.leaseTypes),
+                  )}
+                  {renderField("کد رهگیری اجاره", "leaseTrackingCode")}
+                  {renderField("شماره اجاره‌نامه", "leaseNumber")}
+                  {renderField("تاریخ اجاره‌نامه", "leaseDate")}
+                </div>
+              )}
+            </div>
+
+            {/* ── بخش ۱۱: مغازه و وضعیت فروش ── */}
+            <div className={sectionClass}>
+              <h4 className={sectionTitleClass}>مغازه و وضعیت فروش</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {renderCheckbox("دارای مغازه", "hasShop")}
+                {renderCheckbox("سهل‌البیع", "isReadilyMarketable")}
+                {renderCheckbox("تخلف مشهود", "hasVisibleViolation")}
+              </div>
+              {form.hasShop === true && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {renderField("تعداد مغازه", "shopCount", "number")}
+                  {renderField("متصرف مغازه", "shopOccupier")}
+                  {renderField("نوع کسب", "shopBusinessType")}
+                </div>
+              )}
+              {form.hasVisibleViolation === true &&
+                renderTextarea(
+                  "توضیحات تخلف",
+                  "visibleViolationDescription",
+                  2,
+                )}
+              {renderSelect(
+                "مبنای قیمت‌گذاری",
+                "valuationPriceBasisCode",
+                toOptions(lookups.valuationPriceBasises),
+              )}
+              {renderTextarea(
+                "توضیحات تکمیلی وثیقه",
+                "additionalCollateralDescription",
+                2,
+              )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {renderField("نام شعبه", "branchName")}
+                {renderField("کد شعبه", "branchCode")}
+              </div>
+            </div>
+          </div>
+        )}
+      />
+    </>
+  );
+}
 
 // ─── Main Component ──────────────────────────────────────────────
-export default function RequestAssetReviewPage() {
+interface RequestAssetReviewPageProps {
+  departmentType: RequestDepartmentTypeConfig;
+}
+
+export function DepartmentRequestAssetReviewPage({
+  departmentType,
+}: RequestAssetReviewPageProps) {
   const { showToast } = useToast();
   const { user } = useAuthStore();
-  const today = isoToPersian(new Date().toISOString());
-  const now = new Date().toLocaleTimeString("fa-IR");
-  const userName = user?.fullName || user?.username || "";
 
   // ─── State ─────────────────────────────────────────────────────
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
   const [filters, setFilters] = useState<TableFilter[]>([]);
-  const [selectedRequest, setSelectedRequest] = useState<any>(null);
+  const [selectedRequest, setSelectedRequest] =
+    useState<SelectedRequest | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [detailDocs, setDetailDocs] = useState<DetailDocWithFiles[]>([]);
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const activeRequestIdRef = useRef<number | null>(null);
 
-  // Upload states - با ref برای حفظ بین رندرها
-  const uploadedFilesRef = useRef<UploadedFile[]>([]);
-  const [_uploadedFilesVersion, setUploadedFilesVersion] = useState(0);
-  const [docTypeId, setDocTypeId] = useState<number | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const cancelRef = useRef<Set<string>>(new Set());
-  const uploadStateRef = useRef<Map<string, any>>(new Map());
+  // فرم ارزیابی
+  const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
+  const [assetForm, setAssetForm] = useState<PropertyAppraisalInputDto>({});
+  const [isSavingAppraisal, setIsSavingAppraisal] = useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [savedAppraisal, setSavedAppraisal] =
+    useState<PropertyAppraisalInputDto | null>(null);
 
-  const userCacheRef = useRef<Map<number, UserCacheData>>(new Map());
-
-  // helper برای آپدیت uploadedFiles
-  const updateUploadedFiles = useCallback(
-    (updater: (prev: UploadedFile[]) => UploadedFile[]) => {
-      uploadedFilesRef.current = updater(uploadedFilesRef.current);
-      setUploadedFilesVersion((v) => v + 1);
-    },
-    [],
+  const userCacheRef = useRef<Map<number, { name: string; role: string }>>(
+    new Map(),
   );
 
   // ─── Queries ───────────────────────────────────────────────────
   const requestsQuery = useQuery({
     queryKey: [
       "requests-asset-review",
+      departmentType.id,
       pagination.pageIndex,
       pagination.pageSize,
       filters,
     ],
     queryFn: async () => {
+      const apiFilters = Object.fromEntries(
+        filters.filter((f) => f.value.trim()).map((f) => [
+          f.key,
+          f.key === "creationTime"
+            ? persianToISO(f.value.trim()) || f.value.trim()
+            : f.value.trim(),
+        ]),
+      );
       const response = await getAllRequests({
-        skipCount: 0,
-        maxResultCount: 5000,
+        ...apiFilters,
+        currentDepartmentTypeName: departmentType.name,
+        skipCount: pagination.pageIndex * pagination.pageSize,
+        maxResultCount: pagination.pageSize,
         sorting: "creationTime desc",
       });
       return response;
@@ -137,320 +813,88 @@ export default function RequestAssetReviewPage() {
       const items = ((data?.items ?? []) as RequestItem[]).filter(
         (r) => r.requestStatusCode === 4 || r.requestStatusCode === 5,
       );
-      const filteredItems = filterRequestItems(items, filters);
-      const pageStart = pagination.pageIndex * pagination.pageSize;
-      const listResult = filteredItems.slice(
-        pageStart,
-        pageStart + pagination.pageSize,
-      );
-      const totalCount = filteredItems.length;
-
+      const filteredItems = items;
       return {
-        listResult,
-        total: totalCount,
-        totalPages: Math.max(1, Math.ceil(totalCount / pagination.pageSize)),
+        listResult: filteredItems,
+        total: data.totalCount ?? filteredItems.length,
+        totalPages: Math.max(
+          1,
+          Math.ceil(filteredItems.length / pagination.pageSize),
+        ),
       };
     },
-    placeholderData: (previousData) => previousData,
   });
+
+  const lookupsQuery = useQuery({
+    queryKey: ["property-appraisal-lookups"],
+    queryFn: getPropertyAppraisalLookups,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const lookups = useMemo(() => lookupsQuery.data ?? {}, [lookupsQuery.data]);
 
   const isStatusFive = selectedRequest?.requestStatusCode === 5;
 
-  const docTypesQuery = useQuery({
-    queryKey: ["doc-types-asset-review"],
-    queryFn: () => getAllDocumentTypes({ maxResultCount: 1000 }),
-    select: (d) => (d as any)?.items ?? [],
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const docTypeOpts = useMemo(
-    () =>
-      (docTypesQuery.data ?? []).map((i: any) => ({
-        id: i.id,
-        title: i.title ?? "",
-      })),
-    [docTypesQuery.data],
-  );
-
-  // ─── Fetch کاربران ────────────────────────────────────────────
-  useEffect(() => {
-    const idsToFetch = new Set<number>();
-
-    (selectedRequest?.requestHistoryOutputDtos || []).forEach((h: any) => {
-      if (h.reviewerUserId && !userCacheRef.current.has(h.reviewerUserId)) {
-        idsToFetch.add(h.reviewerUserId);
-      }
-    });
-
-    (selectedRequest?.requestCommentOutputDtos || []).forEach((c: any) => {
-      if (c.userId && !userCacheRef.current.has(c.userId)) {
-        idsToFetch.add(c.userId);
-      }
-    });
-
-    if (idsToFetch.size === 0) return;
-
-    let cancelled = false;
-
-    const fetchUsers = async () => {
-      const idsArray = Array.from(idsToFetch);
-      const results = await Promise.allSettled(
-        idsArray.map((id) => getUserById(id)),
-      );
-
-      if (cancelled) return;
-
-      const newCache = new Map(userCacheRef.current);
-
-      results.forEach((result, index) => {
-        const id = idsArray[index];
-        if (result.status === "fulfilled") {
-          const u = result.value;
-          newCache.set(id, {
-            name:
-              u?.fullName ||
-              `${u?.name || ""} ${u?.surname || ""}`.trim() ||
-              `کاربر ${id}`,
-            role: u?.roleNames?.join(", ") || "کاربر",
-          });
-        } else {
-          newCache.set(id, { name: `کاربر ${id}`, role: "-" });
-        }
-      });
-
-      userCacheRef.current = newCache;
-    };
-
-    fetchUsers();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    selectedRequest?.requestHistoryOutputDtos,
-    selectedRequest?.requestCommentOutputDtos,
-  ]);
-
   // ─── Helpers ───────────────────────────────────────────────────
-  const getUserCacheData = useCallback((userId: number): UserCacheData => {
+  const getUserCacheData = useCallback((userId: number) => {
     return (
       userCacheRef.current.get(userId) || { name: `کاربر ${userId}`, role: "-" }
     );
   }, []);
 
-  // ─── View Handler ──────────────────────────────────────────────
   const handleView = useCallback(
     async (req: RequestItem) => {
-      activeRequestIdRef.current = req.id;
       setSelectedRequest(null);
-      setDetailDocs([]);
-      uploadedFilesRef.current = [];
-      setUploadedFilesVersion((v) => v + 1);
       setComment("");
-      setDocTypeId(null);
-      setSelectedFile(null);
+      setSavedAppraisal(null);
+      setAssetForm({});
       setIsDetailOpen(true);
-
       try {
         await viewRequest(req.id);
-        if (activeRequestIdRef.current !== req.id) return;
-
         const detail = await getRequest(req.id);
-        if (activeRequestIdRef.current !== req.id) return;
-
         setSelectedRequest(detail);
 
-        const allDocs = await getAllDocuments({
-          requestId: req.id,
-          maxResultCount: 100,
-        });
-        if (activeRequestIdRef.current !== req.id) return;
-
-        const reqDocs = allDocs.items ?? [];
-
-        const docsWithFiles = await Promise.all(
-          reqDocs.map(async (doc: DocumentItem) => ({
-            doc,
-            files: await getDocumentAllFiles(doc.id),
-          })),
-        );
-        if (activeRequestIdRef.current !== req.id) return;
-
-        setDetailDocs(docsWithFiles);
-      } catch (err) {
-        if (activeRequestIdRef.current === req.id) {
-          console.error("Error in handleView:", err);
-          showToast("خطا در بارگذاری جزئیات", "error");
+        // لود فرم ارزیابی ذخیره شده
+        try {
+          const existingAppraisal = await getPropertyAppraisalByRequestId(
+            req.id,
+          );
+          if (existingAppraisal) {
+            setSavedAppraisal(existingAppraisal);
+            setAssetForm(existingAppraisal);
+          }
+        } catch {
+          console.log("No appraisal found for this request");
         }
+
+        const ids = new Set<number>();
+        detail.requestHistoryOutputDtos?.forEach(
+          (h) => h.reviewerUserId && ids.add(h.reviewerUserId),
+        );
+        detail.requestCommentOutputDtos?.forEach(
+          (c) => c.userId && ids.add(c.userId),
+        );
+
+        for (const id of ids) {
+          if (!userCacheRef.current.has(id)) {
+            const u = await getUserById(id);
+            userCacheRef.current.set(id, {
+              name: u?.fullName || `${u?.name} ${u?.surname}` || `کاربر ${id}`,
+              role: u?.roleNames?.[0] || "-",
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Error in handleView:", error);
+        showToast("خطا در بارگذاری اطلاعات", "error");
       }
     },
     [showToast],
   );
 
-  // ─── Upload Handlers ───────────────────────────────────────────
-  const handleFileSelect = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const f = e.target.files?.[0];
-      if (f) setSelectedFile(f);
-      e.target.value = "";
-    },
-    [],
-  );
-
-  const uploadChunksInBatches = useCallback(
-    async (
-      docId: string,
-      file: File,
-      uploadId: string,
-      totalChunks: number,
-      startIndex: number,
-    ) => {
-      for (let i = startIndex; i < totalChunks; i++) {
-        if (cancelRef.current.has(docId)) {
-          cancelRef.current.delete(docId);
-          throw new Error("آپلود لغو شد");
-        }
-
-        const start = i * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, file.size);
-        const chunk = file.slice(start, end);
-
-        await uploadChunk(uploadId, i, chunk, file.name, (chunkPercent) => {
-          const overall = Math.round(
-            ((i + chunkPercent / 100) / totalChunks) * 100,
-          );
-          updateUploadedFiles((prev) =>
-            prev.map((f) =>
-              f.id === docId ? { ...f, uploadProgress: overall } : f,
-            ),
-          );
-        });
-
-        updateUploadedFiles((prev) =>
-          prev.map((f) =>
-            f.id === docId
-              ? {
-                  ...f,
-                  uploadProgress: Math.round(((i + 1) / totalChunks) * 100),
-                }
-              : f,
-          ),
-        );
-      }
-    },
-    [updateUploadedFiles],
-  );
-
-  const handleStartUpload = useCallback(async () => {
-    if (!docTypeId || !selectedFile) {
-      showToast("لطفاً نوع مدرک و فایل را انتخاب کنید", "error");
-      return;
-    }
-
-    const file = selectedFile;
-    const docId = crypto.randomUUID();
-    const format = file.name.split(".").pop() || "";
-    const docType = (docTypesQuery.data ?? []).find(
-      (d: any) => d.id === docTypeId,
-    );
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-
-    const newFile: UploadedFile = {
-      id: docId,
-      documentTypeId: docTypeId,
-      documentTypeTitle: docType?.title ?? "",
-      fileName: file.name,
-      fileSize: file.size,
-      fileFormat: format,
-      fileAddress: "",
-      uploadProgress: 0,
-      isUploading: true,
-      isCompleted: false,
-      userName,
-      userRole: user?.roles || "",
-      uploadDate: today,
-      uploadTime: now,
-      totalChunks,
-    };
-
-    updateUploadedFiles((prev) => [newFile, ...prev]);
-    setSelectedFile(null);
-    setIsUploading(true);
-
-    try {
-      const startRes: any = await startUpload({
-        fileName: file.name,
-        fileSize: file.size,
-        chunkSize: CHUNK_SIZE,
-      });
-      const uploadId = startRes?.result?.uploadId || startRes?.uploadId;
-
-      uploadStateRef.current.set(docId, {
-        file,
-        uploadId,
-        totalChunks,
-        lastUploadedChunk: -1,
-      });
-
-      updateUploadedFiles((prev) =>
-        prev.map((f) => (f.id === docId ? { ...f, uploadId } : f)),
-      );
-
-      await uploadChunksInBatches(docId, file, uploadId, totalChunks, 0);
-
-      updateUploadedFiles((prev) =>
-        prev.map((f) =>
-          f.id === docId
-            ? {
-                ...f,
-                uploadProgress: 100,
-                isUploading: false,
-                isCompleted: true,
-                fileAddress: uploadId,
-              }
-            : f,
-        ),
-      );
-
-      uploadStateRef.current.delete(docId);
-      showToast("فایل با موفقیت آپلود شد", "success");
-    } catch (err: any) {
-      if (err.message !== "آپلود لغو شد") {
-        updateUploadedFiles((prev) =>
-          prev.map((f) => (f.id === docId ? { ...f, isUploading: false } : f)),
-        );
-        showToast(`خطا: ${err.message}`, "warning");
-      }
-    } finally {
-      setIsUploading(false);
-    }
-  }, [
-    docTypeId,
-    selectedFile,
-    docTypesQuery.data,
-    userName,
-    user?.roles,
-    today,
-    now,
-    uploadChunksInBatches,
-    updateUploadedFiles,
-    showToast,
-  ]);
-
-  const handleDeleteFile = useCallback(
-    (id: string) => {
-      cancelRef.current.add(id);
-      uploadStateRef.current.delete(id);
-      updateUploadedFiles((prev) => prev.filter((f) => f.id !== id));
-    },
-    [updateUploadedFiles],
-  );
-
-  // ─── Action Handlers ───────────────────────────────────────────
   const handleAction = useCallback(
     async (accepted: boolean) => {
       if (!selectedRequest) return;
-
       setIsSubmitting(true);
       try {
         if (comment.trim()) {
@@ -460,59 +904,114 @@ export default function RequestAssetReviewPage() {
             description: comment.trim(),
           });
         }
-
-        // Upload files if any - از ref بخون
-        const newFiles = uploadedFilesRef.current.filter((f) => f.isCompleted);
-        if (newFiles.length > 0) {
-          const filesByType = new Map<number, UploadedFile[]>();
-          newFiles.forEach((f) => {
-            if (f.documentTypeId) {
-              const arr = filesByType.get(f.documentTypeId) || [];
-              arr.push(f);
-              filesByType.set(f.documentTypeId, arr);
-            }
-          });
-
-          const batchItems: { uploadId: string; documentId: number }[] = [];
-
-          for (const [dtId, files] of filesByType) {
-            const docRes: any = await createDocument({
-              documentTypeId: dtId,
-              requestId: selectedRequest.id,
-            });
-            const docId = docRes?.result?.id || docRes?.id;
-
-            if (!docId) {
-              console.error("شناسه سند دریافت نشد");
-              continue;
-            }
-
-            files.forEach((f) => {
-              if (f.uploadId)
-                batchItems.push({ uploadId: f.uploadId, documentId: docId });
-            });
-          }
-
-          if (batchItems.length > 0) {
-            await completeBatchUpload({ items: batchItems });
-          }
-        }
-
         await userAction({ requestId: selectedRequest.id, accepted });
-
-        showToast(accepted ? "درخواست تأیید شد" : "سهل البیع نیست", "success");
+        showToast(
+          accepted ? "درخواست تأیید شد" : "عملیات با موفقیت انجام شد",
+          "success",
+        );
         setIsDetailOpen(false);
-        setSelectedRequest(null);
         requestsQuery.refetch();
-      } catch (err: any) {
-        console.error("Error in action:", err);
-        showToast(err?.message || "خطا در انجام عملیات", "error");
+      } catch (error: unknown) {
+        console.error("Error in action:", error);
+        showToast(getErrorMessage(error, "خطا در انجام عملیات"), "error");
       } finally {
         setIsSubmitting(false);
       }
     },
     [selectedRequest, comment, user, requestsQuery, showToast],
   );
+
+  const handleFormChange = useCallback(
+    (
+      field: keyof PropertyAppraisalInputDto,
+      value: string | boolean | number,
+    ) => {
+      setAssetForm((prev) => ({ ...prev, [field]: value }));
+    },
+    [],
+  );
+
+  const handleOpenAssetModal = useCallback(() => {
+    if (savedAppraisal) {
+      // اگه قبلاً ذخیره شده → لود برای ویرایش
+      setAssetForm(savedAppraisal);
+    } else {
+      // فرم جدید
+      setAssetForm({
+        applicantName:
+          selectedRequest?.requesterFullName ||
+          selectedRequest?.customerOutputDto?.name ||
+          "",
+        loanAmount: Number(selectedRequest?.amount) || 0,
+        loanType: selectedRequest?.requestTypeOutputDto?.title || "",
+        branchName: user?.branchName || "",
+        branchCode: user?.bid || "",
+        requestId: selectedRequest?.id,
+      });
+    }
+    setIsAssetModalOpen(true);
+  }, [selectedRequest, user, savedAppraisal]);
+
+  const handleSaveAppraisal = useCallback(async () => {
+    setIsSavingAppraisal(true);
+    try {
+      const cleanBody: PropertyAppraisalInputDto = { ...assetForm };
+
+      (Object.keys(cleanBody) as (keyof PropertyAppraisalInputDto)[]).forEach(
+        (key) => {
+          const value = cleanBody[key];
+          if (value === null || value === undefined || value === "") {
+            delete cleanBody[key];
+          }
+        },
+      );
+
+      if (selectedRequest?.id) {
+        cleanBody.requestId = selectedRequest.id;
+      }
+
+      let saved: PropertyAppraisalOutputDto;
+
+      if (savedAppraisal?.id) {
+        saved = await updatePropertyAppraisal({
+          ...cleanBody,
+          id: savedAppraisal.id,
+        });
+        showToast("ارزیابی ملک با موفقیت ویرایش شد", "success");
+      } else {
+        saved = await createPropertyAppraisal(cleanBody);
+        showToast("ارزیابی ملک با موفقیت ذخیره شد", "success");
+      }
+
+      // 👇 هر دو state رو آپدیت کن
+      setSavedAppraisal(saved);
+      setAssetForm(saved);
+      setIsAssetModalOpen(false);
+    } catch (error: unknown) {
+      console.error("Error saving appraisal:", error);
+      showToast(getErrorMessage(error, "خطا در ذخیره ارزیابی"), "error");
+    } finally {
+      setIsSavingAppraisal(false);
+    }
+  }, [assetForm, savedAppraisal, selectedRequest, showToast]);
+
+  const handleGeneratePdf = useCallback(async () => {
+    setIsGeneratingPdf(true);
+    try {
+      await generateAppraisalHtmlPDF(assetForm, lookups, {
+        requestCode: selectedRequest?.requestCode,
+        date: selectedRequest?.creationTime
+          ? isoToPersian(selectedRequest.creationTime)
+          : "",
+      });
+      showToast("گزارش PDF با موفقیت ایجاد شد", "success");
+    } catch (error: unknown) {
+      console.error("Error generating appraisal PDF:", error);
+      showToast(getErrorMessage(error, "خطا در ایجاد فایل PDF"), "error");
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  }, [assetForm, lookups, selectedRequest, showToast]);
 
   // ─── Columns ───────────────────────────────────────────────────
   const columns = useMemo<ColumnDef<RequestItem, unknown>[]>(
@@ -524,26 +1023,16 @@ export default function RequestAssetReviewPage() {
       },
       {
         id: "user",
-        header: "نام کاربر اقدام کننده",
+        header: "کاربر اقدام کننده",
         cell: ({ row }) => row.original.actorUserFullName || "-",
       },
       {
-        id: "role",
-        header: "نقش سازمانی",
-        cell: ({ row }) => row.original.actorUserRoleName || "-",
-      },
-      {
         id: "date",
-        header: "تاریخ و زمان",
+        header: "تاریخ",
         cell: ({ row }) =>
           row.original.creationTime
             ? isoToPersian(row.original.creationTime)
             : "-",
-      },
-      {
-        id: "desc",
-        header: "توضیحات",
-        cell: ({ row }) => row.original.description || "-",
       },
       {
         id: "detail",
@@ -556,19 +1045,10 @@ export default function RequestAssetReviewPage() {
     [handleView],
   );
 
-  const handleFiltersChange = useCallback((nf: TableFilter[]) => {
-    const lastFilter = nf.at(-1);
-    setFilters(lastFilter ? [lastFilter] : []);
-    setPagination((p) => ({ ...p, pageIndex: 0 }));
-  }, []);
-
-  // uploadedFiles برای JSX
-  const uploadedFiles = uploadedFilesRef.current;
-
   // ─── Render ──────────────────────────────────────────────────
   return (
     <MainLayout.Main maxWidth="screen-xl">
-      <PageTitle title="بررسی و بازنگری اطلاعات ملک توسط شعبه" />
+      <PageTitle title={`بررسی و بازنگری اطلاعات ملک توسط ${departmentType.name}`} />
       <div className="rounded-lg bg-white p-4 shadow-sm">
         <DataTable<RequestItem>
           query={requestsQuery}
@@ -576,191 +1056,116 @@ export default function RequestAssetReviewPage() {
           pagination={pagination}
           onPaginationChange={setPagination}
           filters={filters}
-          onFiltersChange={handleFiltersChange}
-          filterFields={[
-            {
-              field: "actorUserFullName",
-              label: "نام کاربر اقدام‌کننده",
-            },
-            {
-              field: "creationTime",
-              label: "تاریخ",
-              placeholder: "مثال: 1405-05-11",
-            },
-          ]}
-          searchMode="onEnter"
-          skeletonColumns={6}
-          emptyStateMessage="هیچ درخواستی برای بررسی یافت نشد"
+          onFiltersChange={(nf) => {
+            setFilters(nf.length ? [nf[nf.length - 1]] : []);
+            setPagination((p) => ({ ...p, pageIndex: 0 }));
+          }}
+          filterFields={[{ field: "actorUserFullName", label: "نام کاربر" }]}
+          emptyStateMessage="درخواستی یافت نشد"
         />
       </div>
 
-      {/* ─── مودال جزئیات ─── */}
       <Modal
         isOpen={isDetailOpen}
         isRTL
-        header="بررسی و بازنگری اطلاعات ملک"
+        header="جزئیات و بررسی ارزیابی"
         onClose={() => setIsDetailOpen(false)}
         overlayLock={isSubmitting}
         footerButtons={
-          isStatusFive ? (
+          <div className="flex gap-2">
             <FormButton
-              title="مختومه"
+              title={isStatusFive ? "مختومه" : "سهل البیع نیست"}
               variant="danger"
               onClick={() => handleAction(false)}
               isLoading={isSubmitting}
-              disabled={isSubmitting}
             />
-          ) : (
-            <div className="flex gap-2">
+            {!isStatusFive && (
               <FormButton
-                title="سهل البیع نیست"
-                variant="danger"
-                onClick={() => handleAction(false)}
-                isLoading={isSubmitting}
-                disabled={isSubmitting}
-              />
-              <FormButton
-                title="تأیید"
+                title="تأیید نهایی"
                 variant="success"
                 onClick={() => handleAction(true)}
                 isLoading={isSubmitting}
-                disabled={isSubmitting}
               />
-            </div>
-          )
+            )}
+          </div>
         }
         renderContent={() => {
-          if (!selectedRequest) return <p>در حال بارگذاری...</p>;
-
+          if (!selectedRequest)
+            return (
+              <div className="p-10 text-center text-gray-400">
+                در حال بارگذاری...
+              </div>
+            );
           return (
             <RequestDetailsPanel
               request={selectedRequest}
-              documents={detailDocs}
+              documents={[]}
               getUserData={getUserCacheData}
-              onDownloadFile={(file) =>
-                downloadFile(file.filePath, file.documentId)
-              }
             >
               {!isStatusFive && (
-                <>
-                  <RequestDetailSection
-                    icon={<Upload className="h-4.5 w-4.5" />}
-                    title="بارگذاری فایل ارزیابی ملک"
-                  >
-                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                      <div className="w-48">
-                        <FormSelect<number>
-                          id="asset-doc-type"
-                          name="asset-doc-type"
-                          label="نوع مدارک"
-                          value={docTypeId ?? ""}
-                          onChange={(v) => setDocTypeId(v ? Number(v) : null)}
-                          options={docTypeOpts}
-                        />
-                      </div>
-                      <button
-                        onClick={() => fileInputRef.current?.click()}
-                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-gray-300 hover:border-blue-400 hover:bg-blue-50 cursor-pointer text-sm"
-                      >
-                        <Upload className="w-4 h-4 text-blue-500" />
-                        <span className="truncate max-w-[120px]">
-                          {selectedFile ? selectedFile.name : "انتخاب فایل"}
-                        </span>
-                      </button>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        className="hidden"
-                        onChange={handleFileSelect}
-                      />
-                      <FormButton
-                        title="آپلود"
-                        variant="primary"
-                        size="sm"
-                        onClick={handleStartUpload}
-                        isLoading={isUploading}
-                        disabled={isUploading || !selectedFile || !docTypeId}
-                      />
+                <RequestDetailSection
+                  icon={<ClipboardList className="w-5 h-5" />}
+                  title="ارزیابی ملک توسط شعبه"
+                  tone="blue"
+                >
+                  <div className="flex items-center justify-between p-4 bg-blue-50 border border-blue-100 rounded-xl">
+                    <div className="text-sm text-blue-800">
+                      {savedAppraisal
+                        ? "فرم ارزیابی ذخیره شده است. می‌توانید آن را ویرایش کنید."
+                        : "لطفاً فرم ارزیابی ملک را با دقت تکمیل و ذخیره نمایید."}
                     </div>
-                  </RequestDetailSection>
-
-                  {uploadedFiles.length > 0 && (
-                    <RequestDetailSection
-                      icon={<Paperclip className="h-4.5 w-4.5" />}
-                      title="فایل‌های آپلود شده"
-                      count={`${uploadedFiles.length} فایل`}
-                    >
-                      <div className="overflow-x-auto rounded-xl border border-slate-200">
-                        <table className="w-full text-xs">
-                          <thead className="bg-slate-50">
-                            <tr>
-                              <th className="p-3 text-right">عنوان فایل</th>
-                              <th className="p-3 text-right">نوع فایل</th>
-                              <th className="p-3 text-right">حجم</th>
-                              <th className="p-3 text-right">بارگذار</th>
-                              <th className="p-3 text-right">نقش سازمانی</th>
-                              <th className="p-3 text-right">تاریخ</th>
-                              <th className="p-3 text-center">عملیات</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100">
-                            {uploadedFiles.map((f) => (
-                              <tr key={f.id} className="bg-white">
-                                <td className="p-3">{f.fileName}</td>
-                                <td className="p-3">{f.fileFormat}</td>
-                                <td className="p-3">
-                                  {(f.fileSize / 1024).toFixed(1)} KB
-                                </td>
-                                <td className="p-3">{f.userName}</td>
-                                <td className="p-3">{f.userRole}</td>
-                                <td className="p-3">{f.uploadDate}</td>
-                                <td className="p-3 text-center">
-                                  {f.isCompleted && (
-                                    <button
-                                      onClick={() =>
-                                        downloadFile(f.fileAddress, 0)
-                                      }
-                                      className="mx-1 text-blue-600"
-                                    >
-                                      <Download className="h-3.5 w-3.5" />
-                                    </button>
-                                  )}
-                                  <button
-                                    onClick={() => handleDeleteFile(f.id)}
-                                    className="mx-1 text-red-600"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </RequestDetailSection>
-                  )}
-                </>
+                    <FormButton
+                      title={
+                        savedAppraisal
+                          ? "ویرایش فرم ارزیابی"
+                          : "تکمیل فرم ارزیابی"
+                      }
+                      variant="primary"
+                      size="sm"
+                      onClick={handleOpenAssetModal}
+                    />
+                  </div>
+                </RequestDetailSection>
               )}
 
               <RequestDetailSection
-                icon={<MessageSquareText className="h-4.5 w-4.5" />}
-                title="افزودن توضیح"
+                icon={<MessageSquareText className="w-5 h-5" />}
+                title="توضیحات تکمیلی"
                 tone="amber"
               >
                 <FormTextarea
-                  id="asset-comment"
-                  name="asset-comment"
-                  label="توضیحات کارشناس"
+                  id="cmt"
+                  name="cmt"
+                  label="توضیحات کارشناس شعبه"
                   value={comment}
-                  onChange={(v) => setComment(v)}
+                  onChange={setComment}
                   rows={3}
-                  dir="rtl"
                 />
               </RequestDetailSection>
             </RequestDetailsPanel>
           );
         }}
       />
+
+      <AssetReviewModal
+        isOpen={isAssetModalOpen}
+        form={assetForm}
+        lookups={lookups}
+        isSaving={isSavingAppraisal}
+        isGeneratingPdf={isGeneratingPdf}
+        onChange={handleFormChange}
+        onSave={handleSaveAppraisal}
+        onGeneratePdf={handleGeneratePdf}
+        onClose={() => setIsAssetModalOpen(false)}
+      />
     </MainLayout.Main>
+  );
+}
+
+export default function RequestAssetReviewPage() {
+  return (
+    <DepartmentRequestAssetReviewPage
+      departmentType={REQUEST_DEPARTMENT_TYPES.branch}
+    />
   );
 }

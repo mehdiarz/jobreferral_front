@@ -39,13 +39,6 @@ type TableFilter = {
   value: string;
 };
 
-type ExpertiseZonesApiResponse = {
-  items?: ExpertiseZoneItem[];
-  result?: { items?: ExpertiseZoneItem[] };
-  listResult?: ExpertiseZoneItem[];
-  data?: ExpertiseZoneItem[];
-};
-
 type ExpertiseZonesQueryData = {
   listResult: ExpertiseZoneItem[];
   total: number;
@@ -69,57 +62,40 @@ export default function ExpertiseZonesPage() {
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
   const [filters, setFilters] = useState<TableFilter[]>([]);
 
+  const activeFilter = filters[0];
+
+  const filterKey = activeFilter?.key ?? "";
+  const filterValue = activeFilter?.value?.trim() ?? "";
+
   const expertiseZonesQuery = useQuery({
     queryKey: [
       "expertise-zones",
-      filters,
       pagination.pageIndex,
       pagination.pageSize,
+      filterKey,
+      filterValue,
     ],
-    queryFn: () => getAllExpertiseZones(),
-    select: (data): ExpertiseZonesQueryData => {
-      const apiData = data as ExpertiseZonesApiResponse;
-      const allItems: ExpertiseZoneItem[] =
-        apiData?.items ??
-        apiData?.result?.items ??
-        apiData?.listResult ??
-        apiData?.data ??
-        [];
 
-      const titleFilter =
-        filters
-          .find((f) => f.key === "title")
-          ?.value?.trim()
-          .toLocaleLowerCase("fa") ?? "";
-      const codeFilter =
-        filters
-          .find((f) => f.key === "code")
-          ?.value?.trim()
-          .toLocaleLowerCase("fa") ?? "";
+    queryFn: () => {
+      const skipCount = pagination.pageIndex * pagination.pageSize;
 
-      const filteredItems = allItems.filter((item) => {
-        const itemTitle = String(item.title ?? "")
-          .trim()
-          .toLocaleLowerCase("fa");
-        const itemCode = String(item.code ?? "")
-          .trim()
-          .toLocaleLowerCase("fa");
-        return (
-          (!titleFilter || itemTitle.includes(titleFilter)) &&
-          (!codeFilter || itemCode.includes(codeFilter))
-        );
+      return getAllExpertiseZones({
+        skipCount,
+        maxResultCount: pagination.pageSize,
+
+        ...(filterKey === "title" && filterValue ? { title: filterValue } : {}),
+
+        ...(filterKey === "code" && filterValue ? { code: filterValue } : {}),
       });
+    },
 
-      const total = filteredItems.length;
-      const totalPages = Math.max(1, Math.ceil(total / pagination.pageSize));
-      const startIndex = pagination.pageIndex * pagination.pageSize;
+    select: (data): ExpertiseZonesQueryData => {
+      const total = data.totalCount;
+
       return {
-        listResult: filteredItems.slice(
-          startIndex,
-          startIndex + pagination.pageSize,
-        ),
+        listResult: data.items,
         total,
-        totalPages,
+        totalPages: Math.max(1, Math.ceil(total / pagination.pageSize)),
       };
     },
   });

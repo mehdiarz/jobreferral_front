@@ -6,7 +6,7 @@ export interface UserActionBody {
 }
 
 export async function userAction(body: UserActionBody): Promise<void> {
-  await apiClient.request<any>("/services/app/RequestCrud/UserAction", {
+  await apiClient.request<void>("/services/app/RequestCrud/UserAction", {
     method: "POST",
     body: JSON.stringify(body),
   });

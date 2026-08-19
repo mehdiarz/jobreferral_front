@@ -1,8 +1,14 @@
 import { apiClient } from "../../libs/api";
 
-export async function deleteRequest(id: number): Promise<any> {
-  return apiClient.request<any>("/services/app/RequestCrud/Remove", {
+export interface DeleteRequestBody {
+  id: number;
+}
+
+export async function deleteRequest(id: number): Promise<void> {
+  await apiClient.request<void>("/services/app/RequestCrud/Remove", {
     method: "POST",
-    body: JSON.stringify({ id }),
+    body: JSON.stringify({
+      id,
+    } satisfies DeleteRequestBody),
   });
 }

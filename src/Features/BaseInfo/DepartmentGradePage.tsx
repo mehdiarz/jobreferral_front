@@ -38,15 +38,6 @@ type TableFilter = {
   value: string;
 };
 
-type DepartmentGradesApiResponse = {
-  items?: DepartmentGradeItem[];
-  result?: {
-    items?: DepartmentGradeItem[];
-  };
-  listResult?: DepartmentGradeItem[];
-  data?: DepartmentGradeItem[];
-};
-
 type DepartmentGradesQueryData = {
   listResult: DepartmentGradeItem[];
   total: number;
@@ -86,90 +77,69 @@ export default function DepartmentGradePage() {
 
   const [filters, setFilters] = useState<TableFilter[]>([]);
 
+  const titleFilter =
+    filters.find((filter) => filter.key === "title")?.value?.trim() ||
+    undefined;
+
+  const codeFilter =
+    filters.find((filter) => filter.key === "code")?.value?.trim() || undefined;
+
+  const descriptionFilter =
+    filters.find((filter) => filter.key === "description")?.value?.trim() ||
+    undefined;
+
+  const gradeFilterValue =
+    filters.find((filter) => filter.key === "grade")?.value?.trim() ||
+    undefined;
+
+  const gradeFilter = gradeFilterValue ? Number(gradeFilterValue) : undefined;
+
+  const statusFilterValue =
+    filters.find((filter) => filter.key === "isActive")?.value?.trim() ||
+    undefined;
+
+  const statusFilter =
+    statusFilterValue === "true"
+      ? true
+      : statusFilterValue === "false"
+        ? false
+        : undefined;
+
   const departmentGradesQuery = useQuery({
     queryKey: [
       "department-grades",
-      filters,
       pagination.pageIndex,
       pagination.pageSize,
+      titleFilter,
+      codeFilter,
+      gradeFilter,
+      descriptionFilter,
+      statusFilter,
     ],
-    queryFn: () => getAllDepartmentGrades(),
+
+    queryFn: () =>
+      getAllDepartmentGrades({
+        skipCount: pagination.pageIndex * pagination.pageSize,
+        maxResultCount: pagination.pageSize,
+
+        ...(titleFilter ? { title: titleFilter } : {}),
+        ...(codeFilter ? { code: codeFilter } : {}),
+        ...(typeof gradeFilter === "number" && !Number.isNaN(gradeFilter)
+          ? { grade: gradeFilter }
+          : {}),
+        ...(descriptionFilter ? { description: descriptionFilter } : {}),
+        ...(typeof statusFilter === "boolean"
+          ? { isActive: statusFilter }
+          : {}),
+      }),
+
     select: (data): DepartmentGradesQueryData => {
-      const apiData = data as DepartmentGradesApiResponse;
-
-      const allItems: DepartmentGradeItem[] =
-        apiData?.items ??
-        apiData?.result?.items ??
-        apiData?.listResult ??
-        apiData?.data ??
-        [];
-
-      // استخراج فیلترها
-      const titleFilter =
-        filters
-          .find((filter) => filter.key === "title")
-          ?.value?.trim()
-          .toLocaleLowerCase("fa") ?? "";
-
-      const codeFilter =
-        filters
-          .find((filter) => filter.key === "code")
-          ?.value?.trim()
-          .toLocaleLowerCase("fa") ?? "";
-
-      const gradeFilter =
-        filters.find((filter) => filter.key === "grade")?.value?.trim() ?? "";
-
-      const statusFilter =
-        filters.find((filter) => filter.key === "isActive")?.value?.trim() ??
-        "";
-
-      const filteredItems = allItems.filter((item) => {
-        const itemTitle = String(item.title ?? "")
-          .trim()
-          .toLocaleLowerCase("fa");
-
-        const itemCode = String(item.code ?? "")
-          .trim()
-          .toLocaleLowerCase("fa");
-
-        const itemGrade = String(item.grade ?? "").trim();
-
-        // تطابق عنوان
-        const titleMatches = !titleFilter || itemTitle.includes(titleFilter);
-
-        // تطابق کد
-        const codeMatches = !codeFilter || itemCode.includes(codeFilter);
-
-        // تطابق رتبه (مقایسه دقیق عددی)
-        const gradeMatches = !gradeFilter || itemGrade === gradeFilter;
-
-        // تطابق وضعیت
-        let statusMatches = true;
-        if (statusFilter === "true") {
-          statusMatches = item.isActive === true;
-        } else if (statusFilter === "false") {
-          statusMatches = item.isActive === false;
-        }
-
-        return titleMatches && codeMatches && gradeMatches && statusMatches;
-      });
-
-      const total = filteredItems.length;
-
-      const totalPages = Math.max(1, Math.ceil(total / pagination.pageSize));
-
-      const startIndex = pagination.pageIndex * pagination.pageSize;
-
-      const paginatedItems = filteredItems.slice(
-        startIndex,
-        startIndex + pagination.pageSize,
-      );
+      const total = data.totalCount;
 
       return {
-        listResult: paginatedItems,
+        listResult: data.items,
         total,
-        totalPages,
+        totalPages: Math.max(1, Math.ceil(total / pagination.pageSize)),
       };
     },
   });
@@ -367,8 +337,22 @@ export default function DepartmentGradePage() {
     ],
   );
 
-  const handleExportExcel = () => {
-    const rows = departmentGradesQuery.data?.listResult ?? [];
+  const handleExportExcel = async () => {
+    const result = await getAllDepartmentGrades({
+      skipCount: 0,
+      maxResultCount: 10000,
+
+      ...(titleFilter ? { title: titleFilter } : {}),
+      ...(codeFilter ? { code: codeFilter } : {}),
+      ...(typeof gradeFilter === "number" && !Number.isNaN(gradeFilter)
+        ? { grade: gradeFilter }
+        : {}),
+      ...(descriptionFilter ? { description: descriptionFilter } : {}),
+      ...(typeof statusFilter === "boolean" ? { isActive: statusFilter } : {}),
+    });
+
+    const rows = result.items;
+
     if (!rows.length) {
       alert("داده‌ای برای خروجی وجود ندارد");
       return;
@@ -397,14 +381,30 @@ export default function DepartmentGradePage() {
 
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
+
     link.href = url;
     link.download = "department-grades.csv";
     link.click();
+
     URL.revokeObjectURL(url);
   };
 
-  const handleExportPdf = () => {
-    const rows = departmentGradesQuery.data?.listResult ?? [];
+  const handleExportPdf = async () => {
+    const result = await getAllDepartmentGrades({
+      skipCount: 0,
+      maxResultCount: 10000,
+
+      ...(titleFilter ? { title: titleFilter } : {}),
+      ...(codeFilter ? { code: codeFilter } : {}),
+      ...(typeof gradeFilter === "number" && !Number.isNaN(gradeFilter)
+        ? { grade: gradeFilter }
+        : {}),
+      ...(descriptionFilter ? { description: descriptionFilter } : {}),
+      ...(typeof statusFilter === "boolean" ? { isActive: statusFilter } : {}),
+    });
+
+    const rows = result.items;
+
     if (!rows.length) {
       alert("داده‌ای برای خروجی وجود ندارد");
       return;
@@ -413,52 +413,81 @@ export default function DepartmentGradePage() {
     const tableRows = rows
       .map(
         (item) => `
-                <tr>
-                    <td>${item.title ?? ""}</td>
-                    <td>${item.code ?? ""}</td>
-                    <td>${item.grade ?? ""}</td>
-                    <td>${item.description ?? ""}</td>
-                    <td>${item.isActive ? "فعال" : "غیرفعال"}</td>
-                </tr>
-            `,
+        <tr>
+          <td>${item.title ?? ""}</td>
+          <td>${item.code ?? ""}</td>
+          <td>${item.grade ?? ""}</td>
+          <td>${item.description ?? ""}</td>
+          <td>${item.isActive ? "فعال" : "غیرفعال"}</td>
+        </tr>
+      `,
       )
       .join("");
 
     const printWindow = window.open("", "_blank");
+
     if (!printWindow) {
       alert("امکان باز کردن پنجره چاپ وجود ندارد");
       return;
     }
 
     printWindow.document.write(`
-        <html dir="rtl" lang="fa">
-            <head>
-                <title>PDF</title>
-                <style>
-                    body { font-family: Tahoma, Arial, sans-serif; direction: rtl; padding: 24px; }
-                    table { width: 100%; border-collapse: collapse; }
-                    th, td { border: 1px solid #ddd; padding: 8px; text-align: right; }
-                    th { background: #f3f4f6; }
-                </style>
-            </head>
-            <body>
-                <h2>لیست رتبه‌های دپارتمان</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>عنوان</th>
-                            <th>کد</th>
-                            <th>رتبه</th>
-                            <th>توضیحات</th>
-                            <th>وضعیت</th>
-                        </tr>
-                    </thead>
-                    <tbody>${tableRows}</tbody>
-                </table>
-                <script>window.onload = function () { window.print(); };</script>
-            </body>
-        </html>
-        `);
+    <html dir="rtl" lang="fa">
+      <head>
+        <title>رتبه‌های دپارتمان</title>
+        <style>
+          body {
+            font-family: Tahoma, Arial, sans-serif;
+            direction: rtl;
+            padding: 24px;
+          }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+
+          th,
+          td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: right;
+          }
+
+          th {
+            background: #f3f4f6;
+          }
+        </style>
+      </head>
+
+      <body>
+        <h2>لیست رتبه‌های دپارتمان</h2>
+
+        <table>
+          <thead>
+            <tr>
+              <th>عنوان</th>
+              <th>کد</th>
+              <th>رتبه</th>
+              <th>توضیحات</th>
+              <th>وضعیت</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+
+        <script>
+          window.onload = function () {
+            window.print();
+          };
+        </script>
+      </body>
+    </html>
+  `);
+
     printWindow.document.close();
   };
 

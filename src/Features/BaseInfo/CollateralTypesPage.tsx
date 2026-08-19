@@ -35,15 +35,6 @@ type TableFilter = {
   value: string;
 };
 
-type CollateralTypesApiResponse = {
-  items?: CollatralTypeItem[];
-  result?: {
-    items?: CollatralTypeItem[];
-  };
-  listResult?: CollatralTypeItem[];
-  data?: CollatralTypeItem[];
-};
-
 type CollateralTypesQueryData = {
   listResult: CollatralTypeItem[];
   total: number;
@@ -78,67 +69,44 @@ export default function CollateralTypesPage() {
 
   const [filters, setFilters] = useState<TableFilter[]>([]);
 
+  const titleFilter =
+    filters.find((filter) => filter.key === "title")?.value?.trim() ||
+    undefined;
+
+  const codeFilter =
+    filters.find((filter) => filter.key === "code")?.value?.trim() || undefined;
+
+  const descriptionFilter =
+    filters.find((filter) => filter.key === "description")?.value?.trim() ||
+    undefined;
+
   const collateralTypesQuery = useQuery({
     queryKey: [
       "collateral-types",
-      filters,
       pagination.pageIndex,
       pagination.pageSize,
+      titleFilter,
+      codeFilter,
+      descriptionFilter,
     ],
-    queryFn: () => getAllCollatralTypes(),
+
+    queryFn: () =>
+      getAllCollatralTypes({
+        skipCount: pagination.pageIndex * pagination.pageSize,
+        maxResultCount: pagination.pageSize,
+
+        ...(titleFilter ? { title: titleFilter } : {}),
+        ...(codeFilter ? { code: codeFilter } : {}),
+        ...(descriptionFilter ? { description: descriptionFilter } : {}),
+      }),
+
     select: (data): CollateralTypesQueryData => {
-      const apiData = data as CollateralTypesApiResponse;
-
-      const allItems: CollatralTypeItem[] =
-        apiData?.items ??
-        apiData?.result?.items ??
-        apiData?.listResult ??
-        apiData?.data ??
-        [];
-
-      const titleFilter =
-        filters
-          .find((filter) => filter.key === "title")
-          ?.value?.trim()
-          .toLocaleLowerCase("fa") ?? "";
-
-      const codeFilter =
-        filters
-          .find((filter) => filter.key === "code")
-          ?.value?.trim()
-          .toLocaleLowerCase("fa") ?? "";
-
-      const filteredItems = allItems.filter((item) => {
-        const itemTitle = String(item.title ?? "")
-          .trim()
-          .toLocaleLowerCase("fa");
-
-        const itemCode = String(item.code ?? "")
-          .trim()
-          .toLocaleLowerCase("fa");
-
-        const titleMatches = !titleFilter || itemTitle.includes(titleFilter);
-
-        const codeMatches = !codeFilter || itemCode.includes(codeFilter);
-
-        return titleMatches && codeMatches;
-      });
-
-      const total = filteredItems.length;
-
-      const totalPages = Math.max(1, Math.ceil(total / pagination.pageSize));
-
-      const startIndex = pagination.pageIndex * pagination.pageSize;
-
-      const paginatedItems = filteredItems.slice(
-        startIndex,
-        startIndex + pagination.pageSize,
-      );
+      const total = data.totalCount;
 
       return {
-        listResult: paginatedItems,
+        listResult: data.items,
         total,
-        totalPages,
+        totalPages: Math.max(1, Math.ceil(total / pagination.pageSize)),
       };
     },
   });
@@ -330,17 +298,30 @@ export default function CollateralTypesPage() {
     ],
   );
 
-  const handleExportExcel = () => {
-    const rows = collateralTypesQuery.data?.listResult ?? [];
+  const handleExportExcel = async () => {
+    const result = await getAllCollatralTypes({
+      skipCount: 0,
+      maxResultCount: 10000,
+
+      ...(titleFilter ? { title: titleFilter } : {}),
+      ...(codeFilter ? { code: codeFilter } : {}),
+      ...(descriptionFilter ? { description: descriptionFilter } : {}),
+    });
+
+    const rows = result.items;
 
     if (!rows.length) {
       alert("داده‌ای برای خروجی وجود ندارد");
       return;
     }
 
-    const headers = ["کد", "عنوان"];
+    const headers = ["کد", "عنوان", "توضیحات"];
 
-    const csvRows = rows.map((item) => [item.code ?? "", item.title ?? ""]);
+    const csvRows = rows.map((item) => [
+      item.code ?? "",
+      item.title ?? "",
+      item.description ?? "",
+    ]);
 
     const csvContent = [
       headers.join(","),
@@ -363,8 +344,17 @@ export default function CollateralTypesPage() {
     URL.revokeObjectURL(url);
   };
 
-  const handleExportPdf = () => {
-    const rows = collateralTypesQuery.data?.listResult ?? [];
+  const handleExportPdf = async () => {
+    const result = await getAllCollatralTypes({
+      skipCount: 0,
+      maxResultCount: 10000,
+
+      ...(titleFilter ? { title: titleFilter } : {}),
+      ...(codeFilter ? { code: codeFilter } : {}),
+      ...(descriptionFilter ? { description: descriptionFilter } : {}),
+    });
+
+    const rows = result.items;
 
     if (!rows.length) {
       alert("داده‌ای برای خروجی وجود ندارد");
@@ -374,11 +364,12 @@ export default function CollateralTypesPage() {
     const tableRows = rows
       .map(
         (item) => `
-            <tr>
-                <td>${item.code ?? ""}</td>
-                <td>${item.title ?? ""}</td>
-            </tr>
-        `,
+        <tr>
+          <td>${item.code ?? ""}</td>
+          <td>${item.title ?? ""}</td>
+          <td>${item.description ?? ""}</td>
+        </tr>
+      `,
       )
       .join("");
 
@@ -391,56 +382,58 @@ export default function CollateralTypesPage() {
 
     printWindow.document.write(`
     <html dir="rtl" lang="fa">
-        <head>
-            <title>PDF</title>
-            <style>
-                body {
-                    font-family: Tahoma, Arial, sans-serif;
-                    direction: rtl;
-                    padding: 24px;
-                }
+      <head>
+        <title>انواع وثیقه</title>
+        <style>
+          body {
+            font-family: Tahoma, Arial, sans-serif;
+            direction: rtl;
+            padding: 24px;
+          }
 
-                table {
-                    width: 100%;
-                    border-collapse: collapse;
-                }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+          }
 
-                th, td {
-                    border: 1px solid #ddd;
-                    padding: 8px;
-                    text-align: right;
-                }
+          th,
+          td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: right;
+          }
 
-                th {
-                    background: #f3f4f6;
-                }
-            </style>
-        </head>
+          th {
+            background: #f3f4f6;
+          }
+        </style>
+      </head>
 
-        <body>
-            <h2>لیست انواع وثیقه</h2>
+      <body>
+        <h2>لیست انواع وثیقه</h2>
 
-            <table>
-                <thead>
-                    <tr>
-                        <th>کد</th>
-                        <th>عنوان</th>
-                    </tr>
-                </thead>
+        <table>
+          <thead>
+            <tr>
+              <th>کد</th>
+              <th>عنوان</th>
+              <th>توضیحات</th>
+            </tr>
+          </thead>
 
-                <tbody>
-                    ${tableRows}
-                </tbody>
-            </table>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
 
-            <script>
-                window.onload = function () {
-                    window.print();
-                };
-            </script>
-        </body>
+        <script>
+          window.onload = function () {
+            window.print();
+          };
+        </script>
+      </body>
     </html>
-`);
+  `);
 
     printWindow.document.close();
   };
