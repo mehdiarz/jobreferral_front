@@ -4,15 +4,19 @@ export interface UpdateRoleBody {
   id: number;
   name: string;
   displayName: string;
-  normalizedName: string;
-  description: string;
-  grantedPermissions: string[];
+  normalizedName?: string | null;
+  roleCode?: string | null;
+  description?: string | null;
+  grantedPermissions?: string[] | null;
 }
 
 export interface AbpResponse {
   result?: unknown;
   success: boolean;
-  error?: { message?: string; details?: string };
+  error?: {
+    message?: string;
+    details?: string;
+  };
 }
 
 export async function updateRole(body: UpdateRoleBody): Promise<AbpResponse> {

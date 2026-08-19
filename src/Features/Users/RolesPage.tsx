@@ -49,6 +49,7 @@ export default function RolesPage() {
     name: string;
     displayName: string;
     normalizedName: string;
+    roleCode: string;
     description: string;
     grantedPermissions: string[];
   } | null>(null);
@@ -70,25 +71,34 @@ export default function RolesPage() {
     [t],
   );
 
+  const roleKeyword = useMemo(
+    () => filters.find((filter) => filter.key === "name")?.value.trim() ?? "",
+    [filters],
+  );
+
   const rolesQuery = useQuery({
-    queryKey: [...queryKeys.roles.all, filters],
-    queryFn: getAllRoles,
-    select: (data) => {
-      const nameFilter =
-        filters.find((f) => f.key === "name")?.value?.toLowerCase() ?? "";
-      const items = nameFilter
-        ? data.items.filter(
-            (r) =>
-              (r.name || "").toLowerCase().includes(nameFilter) ||
-              (r.displayName || "").toLowerCase().includes(nameFilter),
-          )
-        : data.items;
-      return {
-        listResult: items,
-        total: items.length,
-        totalPages: Math.max(1, Math.ceil(items.length / pagination.pageSize)),
-      };
-    },
+    queryKey: [
+      ...queryKeys.roles.all,
+      roleKeyword,
+      pagination.pageIndex,
+      pagination.pageSize,
+    ],
+
+    queryFn: () =>
+      getAllRoles({
+        keyword: roleKeyword || undefined,
+        sorting: "displayName asc",
+        skipCount: pagination.pageIndex * pagination.pageSize,
+        maxResultCount: pagination.pageSize,
+      }),
+
+    select: (data) => ({
+      listResult: data.items,
+      total: data.totalCount,
+      totalPages: Math.max(1, Math.ceil(data.totalCount / pagination.pageSize)),
+    }),
+
+    placeholderData: (previousData) => previousData,
   });
 
   const form = useForm({
@@ -96,6 +106,7 @@ export default function RolesPage() {
       name: "",
       displayName: "",
       normalizedName: "",
+      roleCode: "",
       description: "",
       grantedPermissions: [] as string[],
     },
@@ -103,8 +114,9 @@ export default function RolesPage() {
       createMutation.mutate({
         name: value.name,
         displayName: value.displayName,
-        normalizedName: value.normalizedName,
-        description: value.description,
+        normalizedName: value.normalizedName || null,
+        roleCode: value.roleCode.trim() || null,
+        description: value.description || null,
         grantedPermissions: value.grantedPermissions,
       });
     },
@@ -230,10 +242,12 @@ export default function RolesPage() {
 
   const openEditModal = useCallback((role: RoleItem) => {
     setEditingRole(role);
+
     setEditFormState({
-      name: role.name,
-      displayName: role.displayName,
-      normalizedName: role.normalizedName,
+      name: role.name ?? "",
+      displayName: role.displayName ?? "",
+      normalizedName: role.normalizedName ?? "",
+      roleCode: role.roleCode ?? "",
       description: role.description ?? "",
       grantedPermissions: role.grantedPermissions ?? [],
     });
@@ -265,12 +279,14 @@ export default function RolesPage() {
 
   const handleEditSubmit = useCallback(() => {
     if (!editingRole || !editFormState) return;
+
     updateMutation.mutate({
       id: editingRole.id,
       name: editFormState.name,
       displayName: editFormState.displayName,
-      normalizedName: editFormState.normalizedName,
-      description: editFormState.description,
+      normalizedName: editFormState.normalizedName || null,
+      roleCode: editFormState.roleCode.trim() || null,
+      description: editFormState.description || null,
       grantedPermissions: editFormState.grantedPermissions,
     });
   }, [editingRole, editFormState, updateMutation]);
@@ -290,6 +306,15 @@ export default function RolesPage() {
         header: () => "نام نرمال",
         cell: (c) => c.getValue(),
       }),
+      columnHelper.accessor("roleCode", {
+        header: () => "کد نقش",
+        cell: (c) => (
+          <span dir="ltr" className="inline-block whitespace-nowrap">
+            {c.getValue() ?? "—"}
+          </span>
+        ),
+      }),
+
       columnHelper.accessor("description", {
         header: () => "توضیحات",
         cell: (c) => c.getValue() ?? "—",
@@ -397,6 +422,21 @@ export default function RolesPage() {
                   )}
                 </form.Field>
               </FluidCol>
+              <FluidCol colSpan="col-span-12 md:col-span-4">
+                <form.Field name="roleCode">
+                  {(field) => (
+                    <FormInput
+                      id="role-roleCode"
+                      name="roleCode"
+                      value={field.state.value}
+                      onChange={field.handleChange}
+                      label="کد نقش"
+                      dir="ltr"
+                    />
+                  )}
+                </form.Field>
+              </FluidCol>
+
               <FluidCol colSpan="col-span-12">
                 <form.Field name="description">
                   {(field) => (
@@ -482,7 +522,7 @@ export default function RolesPage() {
             filters={filters}
             columns={columns}
             filterFields={[{ field: "name", label: "نام", placeholder: "" }]}
-            skeletonColumns={5}
+            skeletonColumns={7}
             emptyStateDescription="هنوز نقشی ثبت نشده است."
           />
         </FluidCol>
@@ -600,6 +640,26 @@ export default function RolesPage() {
                     dir="ltr"
                   />
                 </FluidCol>
+                <FluidCol colSpan="col-span-12 md:col-span-4">
+                  <FormInput
+                    id="edit-role-roleCode"
+                    name="roleCode"
+                    value={editFormState.roleCode}
+                    onChange={(value) =>
+                      setEditFormState((previous) =>
+                        previous
+                          ? {
+                              ...previous,
+                              roleCode: value,
+                            }
+                          : null,
+                      )
+                    }
+                    label="کد نقش"
+                    dir="ltr"
+                  />
+                </FluidCol>
+
                 <FluidCol colSpan="col-span-12">
                   <FormTextarea
                     id="edit-role-description"
