@@ -25,6 +25,7 @@ import { getAllDocuments } from "../../../services/DocumentCrud/getAll";
 import { getDocumentAllFiles } from "../../../services/FileService/GetDocumentAllFiles";
 import { downloadFile } from "../../../services/FileService/download";
 import { getUserById } from "../../../services/Users/getUserById";
+import { getAllRequestStatus } from "../../../services/RequestStatusCrud/getAll";
 
 import type { RequestItem } from "../../../services/RequestCrud/types";
 import type { DocumentItem } from "../../../services/DocumentCrud/types";
@@ -34,6 +35,11 @@ import {
   REQUEST_DEPARTMENT_TYPES,
   type RequestDepartmentTypeConfig,
 } from "../requestDepartmentTypes";
+import {
+  REQUEST_STATUS_TITLES,
+  resolveRequestStatusCode,
+  resolveRequestStatusTitle,
+} from "../requestStatuses";
 
 // ─── Types ───────────────────────────────────────────────────────
 type TableFilter = { key: string; value: string };
@@ -72,6 +78,27 @@ export function DepartmentRequestReviewPage({
   const userCacheRef = useRef<Map<number, UserCacheData>>(new Map());
 
   // ─── Queries ───────────────────────────────────────────────────
+  const statusQuery = useQuery({
+    queryKey: ["request-statuses"],
+    queryFn: () => getAllRequestStatus({ maxResultCount: 100 }),
+    staleTime: 10 * 60 * 1000,
+  });
+  const statuses = statusQuery.data?.items;
+  const reviewStatusCodes = useMemo(
+    () => ({
+      initial: resolveRequestStatusCode(statuses, REQUEST_STATUS_TITLES.initial),
+      review: resolveRequestStatusCode(
+        statuses,
+        REQUEST_STATUS_TITLES.branchReview,
+      ),
+      rejected: resolveRequestStatusCode(
+        statuses,
+        REQUEST_STATUS_TITLES.branchRejected,
+      ),
+    }),
+    [statuses],
+  );
+
   const requestsQuery = useQuery({
     queryKey: [
       "requests-pending-review",
@@ -102,9 +129,9 @@ export function DepartmentRequestReviewPage({
       // نمایش status 1 و 2
       const items = ((data?.items ?? []) as RequestItem[]).filter(
         (r) =>
-          r.requestStatusCode === 1 ||
-          r.requestStatusCode === 2 ||
-          r.requestStatusCode === 3,
+          r.requestStatusCode === reviewStatusCodes.initial ||
+          r.requestStatusCode === reviewStatusCodes.review ||
+          r.requestStatusCode === reviewStatusCodes.rejected,
       );
       const listResult = items;
       const totalCount = data.totalCount ?? items.length;
@@ -116,12 +143,16 @@ export function DepartmentRequestReviewPage({
       };
     },
     placeholderData: (previousData) => previousData,
+    enabled: statusQuery.isSuccess,
   });
 
   // ─── تشخیص status فعلی ────────────────────────────────────────
-  const isStatusOne = selectedRequest?.requestStatusCode === 1;
-  const isStatusTwo = selectedRequest?.requestStatusCode === 2;
-  const isStatusThree = selectedRequest?.requestStatusCode === 3;
+  const isStatusOne =
+    selectedRequest?.requestStatusCode === reviewStatusCodes.initial;
+  const isStatusTwo =
+    selectedRequest?.requestStatusCode === reviewStatusCodes.review;
+  const isStatusThree =
+    selectedRequest?.requestStatusCode === reviewStatusCodes.rejected;
 
   // ─── Fetch کاربران ────────────────────────────────────────────
   useEffect(() => {
@@ -296,7 +327,12 @@ export function DepartmentRequestReviewPage({
       {
         id: "status",
         header: "مرحله فرآیند",
-        cell: ({ row }) => row.original.requestStatusTitle || "-",
+        cell: ({ row }) =>
+          resolveRequestStatusTitle(
+            statuses,
+            row.original.requestStatusCode,
+            row.original.requestStatusTitle,
+          ),
       },
       {
         id: "user",
@@ -329,7 +365,7 @@ export function DepartmentRequestReviewPage({
         ),
       },
     ],
-    [handleView],
+    [handleView, statuses],
   );
 
   const handleFiltersChange = useCallback((nf: TableFilter[]) => {

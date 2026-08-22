@@ -391,6 +391,22 @@ const independentBranchRequestAssetReviewRoute = createRoute({
   },
 });
 
+const independentBranchRequestRequestReferralRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/independent/referral",
+  component: () => {
+    const Page = lazy(
+      () =>
+        import("../Features/Requests/IndependentBranch/RequestReferralPage"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
 const regionRequestViewRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/requests/region/view",
@@ -406,12 +422,216 @@ const regionRequestViewRoute = createRoute({
   },
 });
 
+const regionRequestAssetReviewRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/region/asset-review",
+  component: () => {
+    const Page = lazy(
+      () => import("../Features/Requests/Region/RequestAssetReviewPage.tsx"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
+const regionRequestReviewPageRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/region/review",
+  component: () => {
+    const Page = lazy(
+      () => import("../Features/Requests/Region/RegionRequestReviewPage.tsx"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
+const regionRequestReferralRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/region/referral",
+  component: () => {
+    const Page = lazy(
+      () => import("../Features/Requests/Region/RequestReferralPage.tsx"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
+const regionEngineeringExpertViewRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/region/engineering-expert-view",
+  component: () => {
+    const Page = lazy(
+      () =>
+        import("../Features/Requests/Region/RegionEngineeringExpertViewPage.tsx"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
+const regionEngineeringExpertReviewRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/region/engineering-expert-review",
+  component: () => {
+    const Page = lazy(
+      () =>
+        import("../Features/Requests/Region/RegionEngineeringExpertReviewPage.tsx"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
+const regionEngineeringRepresentativeReviewRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/region/engineering-representative-review",
+  component: () => {
+    const Page = lazy(
+      () =>
+        import("../Features/Requests/Region/RegionEngineeringRepresentativeReviewPage.tsx"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
+const regionManagerApprovalRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/region/manager-approval",
+  component: () => {
+    const Page = lazy(
+      () => import("../Features/Requests/Region/RegionManagerApprovalPage.tsx"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
+const regionDescriptionReferralRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/region/description",
+  component: () => {
+    const Page = lazy(
+      () =>
+        import("../Features/Requests/Region/RegionDescriptionReferralPage.tsx"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
 const mainOfficeRequestViewRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/requests/main-office/view",
   component: () => {
     const Page = lazy(
       () => import("../Features/Requests/MainOffice/RequestViewPage"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
+const mainOfficeRequestEngineeringManagementReviewRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/main-office/engineering-management-review",
+  component: () => {
+    const Page = lazy(
+      () =>
+        import("../Features/Requests/MainOffice/EngineeringManagementReviewPage"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
+const mainOfficeRequestRealEstateDepartmentHeadReviewRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/main-office/real-estate-department-review",
+  component: () => {
+    const Page = lazy(
+      () =>
+        import("../Features/Requests/MainOffice/RealEstateDepartmentHeadReviewPage.tsx"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
+const mainOfficeRequestRealEstateCircleHeadReviewRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/main-office/real-estate-unit-manager-review",
+  component: () => {
+    const Page = lazy(
+      () =>
+        import("../Features/Requests/MainOffice/RealEstateCircleHeadReviewPage.tsx"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
+const mainOfficeRequestRealEstateExpertReviewRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/main-office/real-estate-expert-review",
+  component: () => {
+    const Page = lazy(
+      () =>
+        import("../Features/Requests/MainOffice/RealEstateExpertReviewPage.tsx"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
+const mainOfficeRequestEngineeringManagementApprovalRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/main-office/engineering-management-approval",
+  component: () => {
+    const Page = lazy(
+      () =>
+        import("../Features/Requests/MainOffice/EngineeringManagementApprovalPage.tsx"),
     );
     return (
       <SuspenseLoading>
@@ -466,6 +686,21 @@ const requestAssetReviewRoute = createRoute({
   },
 });
 
+const requestReferralRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/branch/referral",
+  component: () => {
+    const Page = lazy(
+      () => import("../Features/Requests/Branch/RequestReferralPage"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
 const profileRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/profile",
@@ -506,11 +741,26 @@ const routeTree = rootRoute.addChildren([
     independentBranchRequestCreateRoute,
     independentBranchRequestReviewRoute,
     independentBranchRequestAssetReviewRoute,
+    independentBranchRequestRequestReferralRoute,
     regionRequestViewRoute,
+    regionRequestAssetReviewRoute,
+    regionRequestReviewPageRoute,
+    regionRequestReferralRoute,
+    regionEngineeringExpertViewRoute,
+    regionEngineeringExpertReviewRoute,
+    regionEngineeringRepresentativeReviewRoute,
+    regionManagerApprovalRoute,
+    regionDescriptionReferralRoute,
     mainOfficeRequestViewRoute,
+    mainOfficeRequestEngineeringManagementReviewRoute,
+    mainOfficeRequestRealEstateDepartmentHeadReviewRoute,
+    mainOfficeRequestRealEstateCircleHeadReviewRoute,
+    mainOfficeRequestRealEstateExpertReviewRoute,
+    mainOfficeRequestEngineeringManagementApprovalRoute,
     requestCreateRoute,
     requestReviewRoute,
     requestAssetReviewRoute,
+    requestReferralRoute,
   ]),
 ]);
 

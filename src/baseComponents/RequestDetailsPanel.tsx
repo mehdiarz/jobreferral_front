@@ -142,7 +142,13 @@ function formatFileSize(fileSize: string) {
 export default function RequestDetailsPanel({
   request,
   documents = [],
-  comments = request.requestCommentOutputDtos ?? [],
+  comments = (request.requestCommentOutputDtos ?? []).map((comment) => ({
+    id: comment.id,
+    requestId: request.id,
+    userId: comment.userId ?? null,
+    description: comment.description ?? "",
+    creationTime: comment.creationTime ?? "",
+  })),
   collaterals = request.collatralOutputDtos ?? [],
   getUserData = (userId) => ({ name: `کاربر ${userId}`, role: "-" }),
   getPersonTypeTitle,
@@ -216,8 +222,8 @@ export default function RequestDetailsPanel({
           />
           <DetailItem
             icon={<Building2 className="h-4 w-4" />}
-            label="دپارتمان"
-            value={request.departmentOutputDto?.title || "-"}
+            label="حدود صلاحیت ارجاع"
+            value={request.authorityDepartmentTypeOutputDto?.name || "-"}
           />
           <DetailItem
             icon={<UserRound className="h-4 w-4" />}
@@ -322,6 +328,48 @@ export default function RequestDetailsPanel({
           </div>
         </RequestDetailSection>
       )}
+
+      {request.judicialExpertOutputDtos &&
+        request.judicialExpertOutputDtos.length > 0 && (
+          <RequestDetailSection
+            icon={<UsersRound className="h-4.5 w-4.5" />}
+            title="کارشناسان ارجاع شده"
+            count={`${request.judicialExpertOutputDtos.length} نفر`}
+            tone="green"
+          >
+            <div className="space-y-3">
+              {request.judicialExpertOutputDtos.map((expert, index) => (
+                <div
+                  key={expert.id}
+                  className="flex items-center gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-3.5"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 font-bold text-emerald-700">
+                    {index + 1}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-slate-800">
+                      {[expert.firstName, expert.lastName]
+                        .filter(Boolean)
+                        .join(" ") || "-"}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      کد کارشناس: {expert.code || "-"} | شماره پروانه:{" "}
+                      {expert.licenseNumber || "-"}
+                    </p>
+                  </div>
+                  {expert.phoneNumber && (
+                    <span
+                      className="rounded-full bg-white px-2.5 py-1 text-[11px] text-slate-500 shadow-sm"
+                      dir="ltr"
+                    >
+                      {expert.phoneNumber}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </RequestDetailSection>
+        )}
 
       {files.length > 0 && (
         <RequestDetailSection

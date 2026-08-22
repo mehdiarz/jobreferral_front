@@ -49,6 +49,29 @@ export interface RequestHistoryOutputDto {
   creationTime?: string | null;
 }
 
+export interface JudicialExpertOutputDto {
+  firstName?: string | null;
+  lastName?: string | null;
+  code?: string | null;
+  rank?: number | null;
+  licenseIssueDate?: string | null;
+  licenseExpireDate?: string | null;
+  expertiseZoneId?: number | null;
+  regionId?: number | null;
+  licenseNumber?: string | null;
+  phoneNumber?: string | null;
+  mobileNumber?: string | null;
+  email?: string | null;
+  lastModificationTime?: string | null;
+  creationTime?: string | null;
+  isDeleted?: boolean;
+  isActive?: boolean;
+  branchCodes?: string[] | null;
+  region?: unknown | null;
+  branches?: unknown[] | null;
+  id: number;
+}
+
 export interface RequestItem {
   id: number;
 
@@ -94,6 +117,7 @@ export interface RequestItem {
   requestCommentOutputDtos?: RequestCommentOutputDto[] | null;
   collatralOutputDtos?: CollatralOutputDto[] | null;
   requestHistoryOutputDtos?: RequestHistoryOutputDto[] | null;
+  judicialExpertOutputDtos?: JudicialExpertOutputDto[] | null;
 }
 
 export interface CreateRequestBody {

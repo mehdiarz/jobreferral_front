@@ -14,7 +14,10 @@ import { createColumnHelper } from "@tanstack/react-table";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useToast } from "../../libs/toastContext";
 import { queryKeys } from "../../libs/api";
-import { getRoles } from "../../services/Roles/getRoles";
+import {
+  getRoles,
+  type GetRolesItem,
+} from "../../services/Roles/getRoles";
 import { createUser } from "../../services/Users/createUser";
 import { getAllUsers } from "../../services/Users/getAllUsers";
 import { deleteUser } from "../../services/Users/deleteUser";
@@ -41,12 +44,12 @@ export default function CreateUserPage() {
     roleNames: string[];
   } | null>(null);
 
-  const rolesQuery = useQuery({
+  const rolesQuery = useQuery<GetRolesItem[]>({
     queryKey: [...queryKeys.roles.all, "getRoles"],
-    queryFn: getRoles,
+    queryFn: () => getRoles(),
   });
 
-  const rolesList = rolesQuery.data ?? [];
+  const rolesList: GetRolesItem[] = rolesQuery.data ?? [];
 
   const usersQuery = useQuery({
     queryKey: [...queryKeys.users.all, filters, pagination.pageSize],

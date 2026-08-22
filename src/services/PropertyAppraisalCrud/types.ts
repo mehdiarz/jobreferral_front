@@ -175,6 +175,7 @@ export interface PropertyAppraisalInputDto {
   branchName?: string | null;
   branchCode?: string | null;
   requestId?: number;
+  creatorDepartmentId?: number | null;
 }
 
 // ─── Output DTO (Get/GetAll) ─────────────────────────────────────

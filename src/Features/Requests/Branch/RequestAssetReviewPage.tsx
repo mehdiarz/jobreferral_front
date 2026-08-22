@@ -9,6 +9,7 @@ import FormTextarea from "../../../baseComponents/FormTextarea";
 import PageTitle from "../../../baseComponents/PageTitle";
 import DataTable from "../../../baseComponents/DataTable";
 import Modal from "../../../baseComponents/Modal";
+import PropertyAppraisalFormModal from "../../../baseComponents/PropertyAppraisalFormModal";
 import RequestDetailsPanel, {
   RequestDetailSection,
   ViewDetailsButton,
@@ -34,13 +35,24 @@ import type {
   LookupValueDto,
   PropertyAppraisalOutputDto,
 } from "../../../services/PropertyAppraisalCrud/types";
-import { isoToPersian } from "../../../utils/persianToISO";
+import {
+  isoToPersian,
+  isoToPersianDateTime,
+} from "../../../utils/persianToISO";
 import { persianToISO } from "../../../utils/persianToISO";
 import {
   REQUEST_DEPARTMENT_TYPES,
   type RequestDepartmentTypeConfig,
 } from "../requestDepartmentTypes";
 import { generateAppraisalHtmlPDF } from "../../../utils/htmlPdfGenerator";
+
+import { getAllRequestStatus } from "../../../services/RequestStatusCrud/getAll";
+import {
+  REQUEST_STATUS_TITLES,
+  resolveRequestStatusCode,
+  resolveRequestStatusTitle,
+} from "../requestStatuses";
+import PropertyAppraisalReadOnlyModal from "../../../baseComponents/PropertyAppraisalReadOnlyModal";
 
 // ─── Types ───────────────────────────────────────────────────────
 type TableFilter = { key: string; value: string };
@@ -150,7 +162,7 @@ function PriceRow({
 }
 
 // ─── Sub-Component: Asset Review Form Modal ──────────────────────
-function AssetReviewModal({
+export function LegacyAssetReviewModal({
   isOpen,
   form,
   lookups,
@@ -775,11 +787,44 @@ export function DepartmentRequestAssetReviewPage({
   const [assetForm, setAssetForm] = useState<PropertyAppraisalInputDto>({});
   const [isSavingAppraisal, setIsSavingAppraisal] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-  const [savedAppraisal, setSavedAppraisal] =
-    useState<PropertyAppraisalInputDto | null>(null);
+  const [regionAppraisal, setRegionAppraisal] =
+    useState<PropertyAppraisalOutputDto | null>(null);
+
+  const [otherAppraisals, setOtherAppraisals] = useState<
+    PropertyAppraisalOutputDto[]
+  >([]);
+
+  const [isAppraisalReadOnlyOpen, setIsAppraisalReadOnlyOpen] = useState(false);
+
+  const [selectedReadonlyAppraisal, setSelectedReadonlyAppraisal] =
+    useState<PropertyAppraisalOutputDto | null>(null);
 
   const userCacheRef = useRef<Map<number, { name: string; role: string }>>(
     new Map(),
+  );
+
+  // Query برای دریافت status ها از سرویس
+  const statusQuery = useQuery({
+    queryKey: ["request-statuses"],
+    queryFn: () => getAllRequestStatus({ maxResultCount: 100 }),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const statuses = statusQuery.data?.items;
+
+  // استخراج status code های مورد نیاز به صورت dynamic
+  const assetReviewStatusCodes = useMemo(
+    () => ({
+      propertyReview: resolveRequestStatusCode(
+        statuses,
+        REQUEST_STATUS_TITLES.propertyReview,
+      ),
+      propertyRejected: resolveRequestStatusCode(
+        statuses,
+        REQUEST_STATUS_TITLES.propertyRejected,
+      ),
+    }),
+    [statuses],
   );
 
   // ─── Queries ───────────────────────────────────────────────────
@@ -790,15 +835,19 @@ export function DepartmentRequestAssetReviewPage({
       pagination.pageIndex,
       pagination.pageSize,
       filters,
+      assetReviewStatusCodes.propertyReview,
+      assetReviewStatusCodes.propertyRejected,
     ],
     queryFn: async () => {
       const apiFilters = Object.fromEntries(
-        filters.filter((f) => f.value.trim()).map((f) => [
-          f.key,
-          f.key === "creationTime"
-            ? persianToISO(f.value.trim()) || f.value.trim()
-            : f.value.trim(),
-        ]),
+        filters
+          .filter((f) => f.value.trim())
+          .map((f) => [
+            f.key,
+            f.key === "creationTime"
+              ? persianToISO(f.value.trim()) || f.value.trim()
+              : f.value.trim(),
+          ]),
       );
       const response = await getAllRequests({
         ...apiFilters,
@@ -811,7 +860,9 @@ export function DepartmentRequestAssetReviewPage({
     },
     select: (data) => {
       const items = ((data?.items ?? []) as RequestItem[]).filter(
-        (r) => r.requestStatusCode === 4 || r.requestStatusCode === 5,
+        (r) =>
+          r.requestStatusCode === assetReviewStatusCodes.propertyReview ||
+          r.requestStatusCode === assetReviewStatusCodes.propertyRejected,
       );
       const filteredItems = items;
       return {
@@ -823,6 +874,7 @@ export function DepartmentRequestAssetReviewPage({
         ),
       };
     },
+    enabled: statusQuery.isSuccess,
   });
 
   const lookupsQuery = useQuery({
@@ -833,8 +885,9 @@ export function DepartmentRequestAssetReviewPage({
 
   const lookups = useMemo(() => lookupsQuery.data ?? {}, [lookupsQuery.data]);
 
-  const isStatusFive = selectedRequest?.requestStatusCode === 5;
-
+  const isStatusFive =
+    selectedRequest?.requestStatusCode ===
+    assetReviewStatusCodes.propertyRejected;
   // ─── Helpers ───────────────────────────────────────────────────
   const getUserCacheData = useCallback((userId: number) => {
     return (
@@ -846,41 +899,76 @@ export function DepartmentRequestAssetReviewPage({
     async (req: RequestItem) => {
       setSelectedRequest(null);
       setComment("");
-      setSavedAppraisal(null);
+
+      // پاک‌سازی اطلاعات درخواست قبلی
+      setRegionAppraisal(null);
+      setOtherAppraisals([]);
+      setSelectedReadonlyAppraisal(null);
+      setIsAppraisalReadOnlyOpen(false);
+
       setAssetForm({});
+      setIsAssetModalOpen(false);
       setIsDetailOpen(true);
+
       try {
         await viewRequest(req.id);
+
         const detail = await getRequest(req.id);
         setSelectedRequest(detail);
 
-        // لود فرم ارزیابی ذخیره شده
         try {
-          const existingAppraisal = await getPropertyAppraisalByRequestId(
+          const existingAppraisals = await getPropertyAppraisalByRequestId(
             req.id,
           );
-          if (existingAppraisal) {
-            setSavedAppraisal(existingAppraisal);
-            setAssetForm(existingAppraisal);
+
+          const appraisals = existingAppraisals ?? [];
+
+          const currentDepartmentAppraisal =
+            appraisals.find(
+              (appraisal) =>
+                appraisal.creatorDepartmentId === departmentType.id,
+            ) ?? null;
+
+          const appraisalsFromOtherDepartments = appraisals.filter(
+            (appraisal) => appraisal.creatorDepartmentId !== departmentType.id,
+          );
+
+          setRegionAppraisal(currentDepartmentAppraisal);
+          setOtherAppraisals(appraisalsFromOtherDepartments);
+
+          if (currentDepartmentAppraisal) {
+            setAssetForm(currentDepartmentAppraisal);
           }
-        } catch {
-          console.log("No appraisal found for this request");
+        } catch (error) {
+          console.error("Error loading property appraisals:", error);
+
+          setRegionAppraisal(null);
+          setOtherAppraisals([]);
+          setSelectedReadonlyAppraisal(null);
         }
 
         const ids = new Set<number>();
+
         detail.requestHistoryOutputDtos?.forEach(
-          (h) => h.reviewerUserId && ids.add(h.reviewerUserId),
+          (history) =>
+            history.reviewerUserId && ids.add(history.reviewerUserId),
         );
+
         detail.requestCommentOutputDtos?.forEach(
-          (c) => c.userId && ids.add(c.userId),
+          (requestComment) =>
+            requestComment.userId && ids.add(requestComment.userId),
         );
 
         for (const id of ids) {
           if (!userCacheRef.current.has(id)) {
-            const u = await getUserById(id);
+            const userData = await getUserById(id);
+
             userCacheRef.current.set(id, {
-              name: u?.fullName || `${u?.name} ${u?.surname}` || `کاربر ${id}`,
-              role: u?.roleNames?.[0] || "-",
+              name:
+                userData?.fullName ||
+                `${userData?.name ?? ""} ${userData?.surname ?? ""}`.trim() ||
+                `کاربر ${id}`,
+              role: userData?.roleNames?.[0] || "-",
             });
           }
         }
@@ -889,7 +977,7 @@ export function DepartmentRequestAssetReviewPage({
         showToast("خطا در بارگذاری اطلاعات", "error");
       }
     },
-    [showToast],
+    [departmentType.id, showToast],
   );
 
   const handleAction = useCallback(
@@ -932,11 +1020,9 @@ export function DepartmentRequestAssetReviewPage({
   );
 
   const handleOpenAssetModal = useCallback(() => {
-    if (savedAppraisal) {
-      // اگه قبلاً ذخیره شده → لود برای ویرایش
-      setAssetForm(savedAppraisal);
+    if (regionAppraisal) {
+      setAssetForm(regionAppraisal);
     } else {
-      // فرم جدید
       setAssetForm({
         applicantName:
           selectedRequest?.requesterFullName ||
@@ -947,44 +1033,69 @@ export function DepartmentRequestAssetReviewPage({
         branchName: user?.branchName || "",
         branchCode: user?.bid || "",
         requestId: selectedRequest?.id,
+        creatorDepartmentId: departmentType.id,
       });
     }
+
     setIsAssetModalOpen(true);
-  }, [selectedRequest, user, savedAppraisal]);
+  }, [departmentType.id, regionAppraisal, selectedRequest, user]);
 
   const handleSaveAppraisal = useCallback(async () => {
+    if (!selectedRequest?.id) {
+      showToast("درخواست انتخاب نشده است", "error");
+      return;
+    }
+
     setIsSavingAppraisal(true);
+
     try {
       const cleanBody: PropertyAppraisalInputDto = { ...assetForm };
 
       (Object.keys(cleanBody) as (keyof PropertyAppraisalInputDto)[]).forEach(
         (key) => {
           const value = cleanBody[key];
+
           if (value === null || value === undefined || value === "") {
             delete cleanBody[key];
           }
         },
       );
 
-      if (selectedRequest?.id) {
-        cleanBody.requestId = selectedRequest.id;
-      }
+      cleanBody.requestId = selectedRequest.id;
+      cleanBody.creatorDepartmentId = departmentType.id;
+
+      // دریافت آخرین وضعیت فرم‌ها برای جلوگیری از update روی فرم اشتباه
+      const latestAppraisals = await getPropertyAppraisalByRequestId(
+        selectedRequest.id,
+      );
+
+      const latestRegionAppraisal =
+        (latestAppraisals ?? []).find(
+          (appraisal) => appraisal.creatorDepartmentId === departmentType.id,
+        ) ?? null;
 
       let saved: PropertyAppraisalOutputDto;
 
-      if (savedAppraisal?.id) {
+      if (latestRegionAppraisal?.id) {
+        // فقط فرم متعلق به همین واحد قابل ویرایش است
+        if (latestRegionAppraisal.creatorDepartmentId !== departmentType.id) {
+          showToast("امکان ویرایش فرم ارزیابی واحد دیگر وجود ندارد", "error");
+          return;
+        }
+
         saved = await updatePropertyAppraisal({
           ...cleanBody,
-          id: savedAppraisal.id,
+          id: latestRegionAppraisal.id,
         });
+
         showToast("ارزیابی ملک با موفقیت ویرایش شد", "success");
       } else {
         saved = await createPropertyAppraisal(cleanBody);
+
         showToast("ارزیابی ملک با موفقیت ذخیره شد", "success");
       }
 
-      // 👇 هر دو state رو آپدیت کن
-      setSavedAppraisal(saved);
+      setRegionAppraisal(saved);
       setAssetForm(saved);
       setIsAssetModalOpen(false);
     } catch (error: unknown) {
@@ -993,7 +1104,7 @@ export function DepartmentRequestAssetReviewPage({
     } finally {
       setIsSavingAppraisal(false);
     }
-  }, [assetForm, savedAppraisal, selectedRequest, showToast]);
+  }, [assetForm, departmentType.id, selectedRequest, showToast]);
 
   const handleGeneratePdf = useCallback(async () => {
     setIsGeneratingPdf(true);
@@ -1019,7 +1130,12 @@ export function DepartmentRequestAssetReviewPage({
       {
         id: "status",
         header: "مرحله فرآیند",
-        cell: ({ row }) => row.original.requestStatusTitle || "-",
+        cell: ({ row }) =>
+          resolveRequestStatusTitle(
+            statuses,
+            row.original.requestStatusCode,
+            row.original.requestStatusTitle,
+          ),
       },
       {
         id: "user",
@@ -1027,12 +1143,22 @@ export function DepartmentRequestAssetReviewPage({
         cell: ({ row }) => row.original.actorUserFullName || "-",
       },
       {
+        id: "role",
+        header: "نقش سازمانی",
+        cell: ({ row }) => row.original.actorUserRoleName || "-",
+      },
+      {
         id: "date",
-        header: "تاریخ",
+        header: "تاریخ و زمان",
         cell: ({ row }) =>
           row.original.creationTime
-            ? isoToPersian(row.original.creationTime)
+            ? isoToPersianDateTime(row.original.creationTime)
             : "-",
+      },
+      {
+        id: "title",
+        header: "عنوان",
+        cell: ({ row }) => row.original.title || "-",
       },
       {
         id: "detail",
@@ -1042,13 +1168,15 @@ export function DepartmentRequestAssetReviewPage({
         ),
       },
     ],
-    [handleView],
+    [handleView, statuses],
   );
 
   // ─── Render ──────────────────────────────────────────────────
   return (
     <MainLayout.Main maxWidth="screen-xl">
-      <PageTitle title={`بررسی و بازنگری اطلاعات ملک توسط ${departmentType.name}`} />
+      <PageTitle
+        title={`بررسی و بازنگری اطلاعات ملک توسط ${departmentType.name}`}
+      />
       <div className="rounded-lg bg-white p-4 shadow-sm">
         <DataTable<RequestItem>
           query={requestsQuery}
@@ -1060,7 +1188,16 @@ export function DepartmentRequestAssetReviewPage({
             setFilters(nf.length ? [nf[nf.length - 1]] : []);
             setPagination((p) => ({ ...p, pageIndex: 0 }));
           }}
-          filterFields={[{ field: "actorUserFullName", label: "نام کاربر" }]}
+          filterFields={[
+            { field: "requestStatusTitle", label: "مرحله فرآیند" },
+            { field: "actorUserFullName", label: "نام کاربر اقدام کننده" },
+            {
+              field: "creationTime",
+              label: "تاریخ",
+              placeholder: "مثال: 1405-05-11",
+            },
+          ]}
+          searchMode="onEnter"
           emptyStateMessage="درخواستی یافت نشد"
         />
       </div>
@@ -1103,29 +1240,76 @@ export function DepartmentRequestAssetReviewPage({
               getUserData={getUserCacheData}
             >
               {!isStatusFive && (
-                <RequestDetailSection
-                  icon={<ClipboardList className="w-5 h-5" />}
-                  title="ارزیابی ملک توسط شعبه"
-                  tone="blue"
-                >
-                  <div className="flex items-center justify-between p-4 bg-blue-50 border border-blue-100 rounded-xl">
-                    <div className="text-sm text-blue-800">
-                      {savedAppraisal
-                        ? "فرم ارزیابی ذخیره شده است. می‌توانید آن را ویرایش کنید."
-                        : "لطفاً فرم ارزیابی ملک را با دقت تکمیل و ذخیره نمایید."}
+                <>
+                  <RequestDetailSection
+                    icon={<ClipboardList className="w-5 h-5" />}
+                    title={`ارزیابی ملک توسط ${departmentType.name}`}
+                    tone="blue"
+                  >
+                    <div className="flex items-center justify-between gap-4 rounded-xl border border-blue-100 bg-blue-50 p-4">
+                      <div className="text-sm text-blue-800">
+                        {regionAppraisal
+                          ? `فرم ارزیابی توسط ${departmentType.name} ثبت شده است و قابل ویرایش است.`
+                          : "فرم ارزیابی توسط این واحد ثبت نشده است."}
+                      </div>
+
+                      <FormButton
+                        title={
+                          regionAppraisal
+                            ? "ویرایش فرم ارزیابی"
+                            : "ایجاد فرم ارزیابی"
+                        }
+                        variant="primary"
+                        size="sm"
+                        onClick={handleOpenAssetModal}
+                      />
                     </div>
-                    <FormButton
-                      title={
-                        savedAppraisal
-                          ? "ویرایش فرم ارزیابی"
-                          : "تکمیل فرم ارزیابی"
-                      }
-                      variant="primary"
-                      size="sm"
-                      onClick={handleOpenAssetModal}
-                    />
-                  </div>
-                </RequestDetailSection>
+                  </RequestDetailSection>
+
+                  {otherAppraisals.length > 0 && (
+                    <RequestDetailSection
+                      icon={<ClipboardList className="w-5 h-5" />}
+                      title="فرم‌های ارزیابی سایر واحدها"
+                      tone="amber"
+                    >
+                      <div className="space-y-3">
+                        {otherAppraisals.map((appraisal, index) => (
+                          <div
+                            key={
+                              appraisal.id ??
+                              `${appraisal.creatorDepartmentId}-${index}`
+                            }
+                            className="flex items-center justify-between gap-4 rounded-xl border border-amber-100 bg-amber-50 p-4"
+                          >
+                            <div className="min-w-0">
+                              <div className="text-sm font-medium text-amber-800">
+                                فرم ارزیابی ملک
+                                {otherAppraisals.length > 1
+                                  ? ` شماره ${index + 1}`
+                                  : ""}
+                              </div>
+
+                              <div className="mt-1 text-xs text-amber-700">
+                                این فرم توسط واحد دیگری ثبت شده و فقط قابل
+                                مشاهده است.
+                              </div>
+                            </div>
+
+                            <FormButton
+                              title="مشاهده فرم"
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedReadonlyAppraisal(appraisal);
+                                setIsAppraisalReadOnlyOpen(true);
+                              }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </RequestDetailSection>
+                  )}
+                </>
               )}
 
               <RequestDetailSection
@@ -1147,7 +1331,7 @@ export function DepartmentRequestAssetReviewPage({
         }}
       />
 
-      <AssetReviewModal
+      <PropertyAppraisalFormModal
         isOpen={isAssetModalOpen}
         form={assetForm}
         lookups={lookups}
@@ -1157,6 +1341,16 @@ export function DepartmentRequestAssetReviewPage({
         onSave={handleSaveAppraisal}
         onGeneratePdf={handleGeneratePdf}
         onClose={() => setIsAssetModalOpen(false)}
+      />
+
+      <PropertyAppraisalReadOnlyModal
+        isOpen={isAppraisalReadOnlyOpen}
+        appraisal={selectedReadonlyAppraisal}
+        lookups={lookups}
+        onClose={() => {
+          setIsAppraisalReadOnlyOpen(false);
+          setSelectedReadonlyAppraisal(null);
+        }}
       />
     </MainLayout.Main>
   );
