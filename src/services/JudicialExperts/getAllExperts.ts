@@ -1,63 +1,44 @@
 import { apiClient } from "../../libs/api";
+import type {
+  ExpertItem,
+  GetAllExpertsParams,
+  GetAllExpertsResponse,
+} from "./types";
 
-export interface ExpertItem {
-  id: number;
-  firstName: string | null;
-  lastName: string | null;
-  code: string | null;
-  rank: number;
-  licenseNumber: string | null;
-  phoneNumber: string | null;
-  mobileNumber: string | null;
-  email: string | null;
-  licenseIssueDate: string | null;
-  licenseExpireDate: string | null;
-  expertiseZoneId: number;
-  regionId: number;
-  creationTime: string;
-  lastModificationTime: string | null;
-  isDeleted: boolean;
-}
-
-export interface GetAllExpertsParams {
-  firstName?: string;
-  lastName?: string;
-  code?: string;
-  expertiseZoneTitle?: string;
-  licenseNumber?: string;
-  sorting?: string;
-  skipCount?: number;
-  maxResultCount?: number;
-}
-
-export async function getAllExperts(params?: GetAllExpertsParams): Promise<{
-  items: unknown[];
-  totalCount: number;
-}> {
+export async function getAllExperts(
+  params?: GetAllExpertsParams,
+): Promise<GetAllExpertsResponse> {
   const searchParams = new URLSearchParams();
 
-  if (params?.firstName?.trim()) {
-    searchParams.set("FirstName", params.firstName.trim());
+  const firstName = params?.firstName?.trim();
+  const lastName = params?.lastName?.trim();
+  const code = params?.code?.trim();
+  const expertiseZoneTitle = params?.expertiseZoneTitle?.trim();
+  const licenseNumber = params?.licenseNumber?.trim();
+  const sorting = params?.sorting?.trim();
+
+  if (firstName) {
+    searchParams.set("FirstName", firstName);
   }
 
-  if (params?.lastName?.trim()) {
-    searchParams.set("LastName", params.lastName.trim());
+  if (lastName) {
+    searchParams.set("LastName", lastName);
   }
 
-  if (params?.code?.trim()) {
-    searchParams.set("Code", params.code.trim());
+  if (code) {
+    searchParams.set("Code", code);
   }
 
-  if (params?.expertiseZoneTitle?.trim()) {
-    searchParams.set("ExpertiseZoneTitle", params.expertiseZoneTitle.trim());
+  if (expertiseZoneTitle) {
+    searchParams.set("ExpertiseZoneTitle", expertiseZoneTitle);
   }
 
-  if (params?.licenseNumber?.trim()) {
-    searchParams.set("LicenseNumber", params.licenseNumber.trim());
+  if (licenseNumber) {
+    searchParams.set("LicenseNumber", licenseNumber);
   }
 
-  if (params?.sorting?.trim()) {
-    searchParams.set("Sorting", params.sorting.trim());
+  if (sorting) {
+    searchParams.set("Sorting", sorting);
   }
 
   if (typeof params?.skipCount === "number") {
@@ -74,7 +55,14 @@ export async function getAllExperts(params?: GetAllExpertsParams): Promise<{
     ? `/services/app/JudicialExpertCrud/GetAll?${query}`
     : "/services/app/JudicialExpertCrud/GetAll";
 
-  const res = await apiClient.request<any>(url, {
+  const res = await apiClient.request<{
+    result?: {
+      items?: ExpertItem[];
+      totalCount?: number;
+    };
+    items?: ExpertItem[];
+    totalCount?: number;
+  }>(url, {
     method: "GET",
   });
 

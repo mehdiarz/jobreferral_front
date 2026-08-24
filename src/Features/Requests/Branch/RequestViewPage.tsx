@@ -245,15 +245,9 @@ export function DepartmentRequestViewPage({
   const deletedFileIdsRef = useRef<number[]>([]);
 
   const [, setUserCacheVersion] = useState(0);
-  const [regionAppraisal, setRegionAppraisal] =
+  const [detailAppraisal, setDetailAppraisal] =
     useState<PropertyAppraisalOutputDto | null>(null);
-
-  const [otherAppraisals, setOtherAppraisals] = useState<
-    PropertyAppraisalOutputDto[]
-  >([]);
-
-  const [selectedReadonlyAppraisal, setSelectedReadonlyAppraisal] =
-    useState<PropertyAppraisalOutputDto | null>(null);
+  const [isAppraisalReadOnlyOpen, setIsAppraisalReadOnlyOpen] = useState(false);
 
   // ─── Queries ───────────────────────────────────────────────────
   // 1. بهینه‌سازی شده: Server-Side Pagination با SkipCount و MaxResultCount
@@ -412,64 +406,80 @@ export function DepartmentRequestViewPage({
 
   // ─── بهینه‌سازی شده: View Handler با درخواست‌های موازی ───
   const handleView = useCallback(
-    async (request: RequestItem) => {
-      setSelectedRequest(request);
-      setIsDetailOpen(true);
-
-      // جلوگیری از نمایش اطلاعات درخواست قبلی تا پایان دریافت اطلاعات جدید
+    async (req: RequestItem) => {
+      activeRequestIdRef.current = req.id;
+      setSelectedRequest(null);
       setDetailDocs([]);
       setDetailComments([]);
       setDetailCollaterals([]);
-
-      // Appraisal states
-      setRegionAppraisal(null);
-      setOtherAppraisals([]);
-      setSelectedReadonlyAppraisal(null);
+      setDetailAppraisal(null);
+      setIsAppraisalReadOnlyOpen(false);
+      setIsDetailOpen(true);
 
       try {
-        const [documents, comments, collaterals, appraisals] =
-          await Promise.all([
-            // این سه API را دقیقاً با APIهای فعلی خودتان جایگزین/نگه دارید
-            getDocumentsByRequestId(request.id),
-            getRequestCommentsByRequestId(request.id),
-            getCollatralsByRequestId(request.id),
+        await viewRequest(req.id);
+        if (activeRequestIdRef.current !== req.id) return;
 
-            // خروجی این API اکنون آرایه است
-            getPropertyAppraisalByRequestId(request.id),
-          ]);
+        const detail = await getRequest(req.id);
+        if (activeRequestIdRef.current !== req.id) return;
 
-        setDetailDocs(documents);
-        setDetailComments(comments);
-        setDetailCollaterals(collaterals);
+        setSelectedRequest(detail);
 
-        const currentDepartmentAppraisal =
-          appraisals.find(
-            (appraisal) => appraisal.departmentTypeId === departmentType.id,
-          ) ?? null;
+        // 👇 لود فرم ارزیابی اگه وجود داره
+        try {
+          const appraisals = await getPropertyAppraisalByRequestId(req.id);
+          if (activeRequestIdRef.current !== req.id) return;
 
-        const submittedByOtherDepartments = appraisals.filter(
-          (appraisal) => appraisal.departmentTypeId !== departmentType.id,
+          // The API returns all appraisal forms for the request. Only show
+          // the form created by the department whose request list is open.
+          const departmentAppraisal =
+            appraisals.find(
+              (appraisal) =>
+                Number(appraisal.creatorDepartmentId) ===
+                Number(departmentType.id),
+            ) ?? null;
+
+          setDetailAppraisal(departmentAppraisal);
+        } catch {
+          // فرم ارزیابی نداره - نادیده بگیر
+        }
+
+        const allDocs = await getAllDocuments({
+          requestId: req.id,
+          maxResultCount: 5000,
+        });
+        if (activeRequestIdRef.current !== req.id) return;
+
+        const reqDocs = allDocs.items ?? [];
+
+        const docsWithFiles = await Promise.all(
+          reqDocs.map(async (doc: DocumentItem) => ({
+            doc,
+            files: await getDocumentAllFiles(doc.id),
+          })),
         );
+        if (activeRequestIdRef.current !== req.id) return;
 
-        setRegionAppraisal(currentDepartmentAppraisal);
-        setOtherAppraisals(submittedByOtherDepartments);
-      } catch (error: unknown) {
-        console.error("Error loading request details:", error);
-
-        // در صورت خطا هم stateهای appraisal خالی بمانند
-        setRegionAppraisal(null);
-        setOtherAppraisals([]);
-        setSelectedReadonlyAppraisal(null);
-
-        showToast(
-          getErrorMessage(error, "خطا در دریافت جزئیات درخواست"),
-          "error",
+        setDetailDocs(docsWithFiles);
+        setDetailComments(
+          (detail.requestCommentOutputDtos ?? []).map((comment) => ({
+            id: comment.id,
+            requestId: req.id,
+            userId: comment.userId ?? null,
+            description: comment.description ?? "", // تبدیل null به رشته خالی
+            creationTime: comment.creationTime ?? "", // تبدیل null به رشته خالی
+          })),
         );
+        setDetailCollaterals(detail.collatralOutputDtos ?? []);
+      } catch (err) {
+        if (activeRequestIdRef.current === req.id) {
+          console.error("Error in handleView:", err);
+          showToast("خطا در بارگذاری جزئیات", "error");
+        }
       }
     },
     [departmentType.id, showToast],
   );
-
   // ─── بهینه‌سازی شده: Edit Handler با درخواست‌های موازی ───
   const handleEdit = useCallback(
     async (req: RequestItem) => {
@@ -778,7 +788,6 @@ export function DepartmentRequestViewPage({
       uploadTime: now,
       totalChunks,
     };
-
     setEditUploadedFiles((prev) => [newFile, ...prev]);
     setEditSelectedFile(null);
     setIsEditUploading(true);
@@ -1245,60 +1254,22 @@ export function DepartmentRequestViewPage({
                 downloadFile(file.filePath, file.documentId)
               }
             >
-              {regionAppraisal && (
+              {detailAppraisal && (
                 <RequestDetailSection
                   icon={<ClipboardList className="h-5 w-5" />}
-                  title="ارزیابی ملک دپارتمان فعلی"
+                  title="ارزیابی ملک توسط شعبه"
                   tone="blue"
                 >
                   <div className="flex items-center justify-between gap-4 rounded-xl border border-blue-100 bg-blue-50 p-4">
                     <div className="text-sm text-blue-800">
-                      فرم ارزیابی ملک توسط این دپارتمان تکمیل و ذخیره شده است.
+                      فرم ارزیابی ملک برای این درخواست تکمیل و ذخیره شده است.
                     </div>
-
                     <FormButton
                       title="مشاهده فرم ارزیابی"
                       variant="primary"
                       size="sm"
-                      onClick={() =>
-                        setSelectedReadonlyAppraisal(regionAppraisal)
-                      }
+                      onClick={() => setIsAppraisalReadOnlyOpen(true)}
                     />
-                  </div>
-                </RequestDetailSection>
-              )}
-
-              {otherAppraisals.length > 0 && (
-                <RequestDetailSection
-                  icon={<ClipboardList className="h-5 w-5" />}
-                  title="ارزیابی‌های سایر دپارتمان‌ها"
-                  tone="amber"
-                >
-                  <div className="space-y-3">
-                    {otherAppraisals.map((appraisal) => (
-                      <div
-                        key={appraisal.id}
-                        className="flex items-center justify-between gap-4 rounded-xl border border-amber-200 bg-amber-50 p-4"
-                      >
-                        <div>
-                          <p className="text-sm font-medium text-amber-900">
-                            {appraisal.departmentTypeTitle || "دپارتمان دیگر"}
-                          </p>
-                          <p className="mt-1 text-xs text-amber-700">
-                            فرم ارزیابی ملک برای این درخواست ثبت شده است.
-                          </p>
-                        </div>
-
-                        <FormButton
-                          title="مشاهده فرم"
-                          variant="secondary"
-                          size="sm"
-                          onClick={() =>
-                            setSelectedReadonlyAppraisal(appraisal)
-                          }
-                        />
-                      </div>
-                    ))}
                   </div>
                 </RequestDetailSection>
               )}
@@ -1872,10 +1843,10 @@ export function DepartmentRequestViewPage({
         }
       />
       <PropertyAppraisalReadOnlyModal
-        isOpen={!!selectedReadonlyAppraisal}
-        appraisal={selectedReadonlyAppraisal}
+        isOpen={isAppraisalReadOnlyOpen}
+        appraisal={detailAppraisal}
         lookups={lookupsQuery.data ?? {}}
-        onClose={() => setSelectedReadonlyAppraisal(null)}
+        onClose={() => setIsAppraisalReadOnlyOpen(false)}
       />
     </MainLayout.Main>
   );

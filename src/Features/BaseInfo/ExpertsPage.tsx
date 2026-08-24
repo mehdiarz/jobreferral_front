@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Pencil, Trash2, Loader2, FileDown } from "lucide-react";
+import { Pencil, Trash2, Loader2, FileDown, Check } from "lucide-react";
 
 import { MainLayout } from "../../baseComponents/MainLayout";
 import FormInput from "../../baseComponents/FormInput";
@@ -18,8 +18,17 @@ import { updateExpert } from "../../services/JudicialExperts/updateExpert";
 import { deleteExpert } from "../../services/JudicialExperts/deleteExpert";
 import { getAllExpertiseZones } from "../../services/ExpertiseZoneCrud/getAll";
 import { getAllRegions } from "../../services/RegionCrud/getAll";
-import type { CreateExpertBody } from "../../services/JudicialExperts/createExpert";
+import { getAllBranches } from "../../services/BranchCrud/getAll";
+import type { CreateExpertBody } from "../../services/JudicialExperts/types";
 import { persianToISO, isoToPersian } from "../../utils/persianToISO";
+import { getExpert } from "../../services/JudicialExperts/get.ts";
+import {
+  isValidIranianMobile,
+  isValidIranianNationalCode,
+  normalizeIranianMobile,
+  onlyDigits,
+  toEnglishDigits,
+} from "../../utils/iranValidators.ts";
 
 type ApiResponse = {
   items?: unknown[];
@@ -29,7 +38,7 @@ type ApiResponse = {
   success?: boolean;
   error?: unknown;
 };
-type SelectOption = { id: string; title: string };
+type SelectOption = { id: string; title: string; code?: string };
 type TableFilter = { key: string; value: string };
 type ZoneItem = {
   id?: number | string;
@@ -39,9 +48,16 @@ type ZoneItem = {
 };
 type RegionItem = {
   id?: number | string;
+  code?: number | string | null;
   title?: string;
   name?: string;
   caption?: string;
+};
+type BranchItem = {
+  id?: number | string;
+  branchCode?: number | string | null;
+  branchName?: string | null;
+  regionCode?: number | string | null;
 };
 
 type Expert = {
@@ -67,6 +83,7 @@ type Expert = {
   phoneNumber?: string;
   mobileNumber?: string;
   email?: string;
+  regions?: unknown[] | null;
 };
 
 type ExpertForm = {
@@ -75,7 +92,6 @@ type ExpertForm = {
   code: string;
   rank: string;
   expertiseZoneId: string;
-  regionId: string;
   licenseNumber: string;
   licenseIssueDate: string;
   licenseExpirationDate: string;
@@ -83,6 +99,16 @@ type ExpertForm = {
   phoneNumber: string;
   mobileNumber: string;
   email: string;
+  regions: RegionBranchSelection[];
+};
+
+type RegionBranchSelection = {
+  regionId: string;
+  regionCode: string;
+  branchIds: string[];
+  branchCodes: string[];
+  allBranches: boolean;
+  branchTitles?: string[];
 };
 
 const emptyForm: ExpertForm = {
@@ -91,7 +117,6 @@ const emptyForm: ExpertForm = {
   code: "",
   rank: "",
   expertiseZoneId: "",
-  regionId: "",
   licenseNumber: "",
   licenseIssueDate: "",
   licenseExpirationDate: "",
@@ -99,6 +124,7 @@ const emptyForm: ExpertForm = {
   phoneNumber: "",
   mobileNumber: "",
   email: "",
+  regions: [],
 };
 
 const safeText = (value: unknown): string => {
@@ -150,6 +176,66 @@ const getStatusTitle = (e: Expert): string => {
   if (e.status) return safeText(e.status);
   return "فعال";
 };
+const getExpertRegionSelection = (expert: Expert): RegionBranchSelection[] => {
+  const regions = Array.isArray(expert.regions) ? expert.regions : [];
+  return regions.flatMap((region) => {
+    if (!region || typeof region !== "object") return [];
+
+    const value = region as Record<string, unknown>;
+    const regionId = safeOptionId(value.regionId);
+    if (!regionId) return [];
+
+    // ✅ branchCodes
+    const rawBranchCodes = value.branchCodes ?? value.branchIds ?? [];
+    const branchCodes = Array.isArray(rawBranchCodes)
+      ? rawBranchCodes.map((code) => safeOptionId(code)).filter(Boolean)
+      : [];
+
+    // ✅ branches برای گرفتن id و title
+    const rawBranches = value.branches ?? [];
+    const branchItems = Array.isArray(rawBranches) ? rawBranches : [];
+
+    const branchIds = branchItems
+      .map((branch) =>
+        typeof branch === "object" && branch !== null
+          ? safeOptionId(
+              (branch as Record<string, unknown>).id ??
+                (branch as Record<string, unknown>).branchId ??
+                (branch as Record<string, unknown>).branchCode,
+            )
+          : "",
+      )
+      .filter(Boolean);
+
+    const branchTitles = branchItems
+      .map((branch) =>
+        typeof branch === "object" && branch !== null
+          ? safeText(
+              (branch as Record<string, unknown>).branchName ??
+                (branch as Record<string, unknown>).title ??
+                (branch as Record<string, unknown>).name,
+            )
+          : "",
+      )
+      .filter(Boolean);
+
+    return [
+      {
+        regionId,
+        regionCode: safeOptionId(
+          value.regionCode ??
+            (value.region as Record<string, unknown>)?.code ??
+            value.regionId,
+        ),
+        branchIds: branchIds.length > 0 ? branchIds : branchCodes,
+        branchCodes: branchCodes.length > 0 ? branchCodes : branchIds,
+        allBranches: branchCodes.length === 0 && branchIds.length === 0,
+        branchTitles,
+      },
+    ];
+  });
+};
+
 const makePayload = (form: ExpertForm): CreateExpertBody => {
   const p: Record<string, unknown> = {
     firstName: form.firstName,
@@ -157,11 +243,14 @@ const makePayload = (form: ExpertForm): CreateExpertBody => {
     code: form.code,
     rank: Number(form.rank ?? 0),
     expertiseZoneId: Number(form.expertiseZoneId ?? 0),
-    regionId: Number(form.regionId ?? 0),
     licenseNumber: form.licenseNumber,
     phoneNumber: form.phoneNumber,
     mobileNumber: form.mobileNumber,
     email: form.email,
+    regions: form.regions.map((region) => ({
+      regionId: Number(region.regionId),
+      branchCodes: region.allBranches ? [] : region.branchCodes.map(Number),
+    })),
     isActive: form.status === "active", // 👈 اضافه کن
   };
   console.log(form.licenseIssueDate, form.licenseExpirationDate);
@@ -187,6 +276,12 @@ export default function ExpertsPage() {
   const [itemToDelete, setItemToDelete] = useState<Expert | null>(null);
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
   const [filters, setFilters] = useState<TableFilter[]>([]);
+  const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
+  const [branchModalRegionId, setBranchModalRegionId] = useState("");
+  const [branchModalBranchIds, setBranchModalBranchIds] = useState<string[]>(
+    [],
+  );
+  const [branchModalAllBranches, setBranchModalAllBranches] = useState(false);
 
   const zonesQuery = useQuery({
     queryKey: ["expertise-zones"],
@@ -231,6 +326,40 @@ export default function ExpertsPage() {
       }))
       .filter((o) => o.id && o.title);
   }, [regionsQuery.data]);
+
+  const branchModalRegion = useMemo(
+    () =>
+      (getArrayData(regionsQuery.data) as RegionItem[]).find(
+        (region) => safeOptionId(region.id) === branchModalRegionId,
+      ) ?? null,
+    [regionsQuery.data, branchModalRegionId],
+  );
+  const branchModalRegionCode = safeOptionId(
+    branchModalRegion?.code ?? branchModalRegion?.id,
+  );
+  const branchesQuery = useQuery({
+    queryKey: ["branches-by-region", branchModalRegionCode],
+    queryFn: () =>
+      getAllBranches({
+        regionCode: Number(branchModalRegionCode),
+        skipCount: 0,
+        maxResultCount: 10000,
+      }),
+    enabled: Boolean(branchModalRegionCode && isBranchModalOpen),
+  });
+  const branchOptions: SelectOption[] = useMemo(
+    () =>
+      (branchesQuery.data?.items ?? [])
+        .map((branch: BranchItem) => ({
+          id: safeOptionId(branch.id),
+          code: safeOptionId(branch.branchCode ?? branch.id), // ✅ اضافه کن
+          title: safeText(
+            branch.branchName ?? branch.branchCode ?? branch.id ?? "",
+          ),
+        }))
+        .filter((option) => option.id && option.title),
+    [branchesQuery.data],
+  );
 
   const statusOptions: SelectOption[] = [
     { id: "active", title: "فعال" },
@@ -302,7 +431,7 @@ export default function ExpertsPage() {
       closeFormModal();
       queryClient.invalidateQueries({ queryKey: ["experts"] });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       console.error("❌ Update error:", error);
       showToast(error?.message || "خطا", "error");
     },
@@ -321,34 +450,57 @@ export default function ExpertsPage() {
     setFormMode("create");
     setFormData(emptyForm);
     setEditingId(null);
+    setIsBranchModalOpen(false);
     setIsFormModalOpen(true);
   }, []);
-  const handleOpenEditModal = useCallback((expert: Expert) => {
-    setFormMode("edit");
-    setEditingId(Number(expert.id));
-    let idate = safeText(expert.licenseIssueDate);
-    try {
-      if (idate?.includes("-")) idate = isoToPersian(idate);
-    } catch {}
-    setFormData({
-      firstName: safeText(expert.firstName),
-      lastName: safeText(expert.lastName),
-      code: getExpertCode(expert),
-      rank: safeText(expert.rank),
-      expertiseZoneId: safeOptionId(expert.expertiseZoneId),
-      regionId: safeOptionId(expert.regionId),
-      status: expert.isActive ? "active" : "inactive",
-      licenseNumber: safeText(expert.licenseNumber),
-      licenseIssueDate: idate,
-      licenseExpirationDate: getLicenseExpirationDate(expert),
-      phoneNumber: safeText(expert.phoneNumber),
-      mobileNumber: safeText(expert.mobileNumber),
-      email: safeText(expert.email),
-    });
-    setIsFormModalOpen(true);
-  }, []);
+  const handleOpenEditModal = useCallback(
+    async (expert: Expert) => {
+      setFormMode("edit");
+      const id = Number(expert.id);
+      setEditingId(id);
+      setIsFormModalOpen(true);
+
+      try {
+        const expertDetail = await getExpert(id);
+        console.log("📥 Expert detail:", expertDetail);
+
+        const regionSelections = getExpertRegionSelection(
+          expertDetail as Expert,
+        );
+        let idate = safeText(expertDetail.licenseIssueDate);
+        try {
+          if (idate?.includes("-")) idate = isoToPersian(idate);
+        } catch {
+          idate = safeText(expertDetail.licenseIssueDate);
+        }
+
+        setFormData({
+          firstName: safeText(expertDetail.firstName),
+          lastName: safeText(expertDetail.lastName),
+          code: getExpertCode(expertDetail as Expert),
+          rank: safeText(expertDetail.rank),
+          expertiseZoneId: safeOptionId(expertDetail.expertiseZoneId),
+          regions: regionSelections,
+          status: expertDetail.isActive ? "active" : "inactive",
+          licenseNumber: safeText(expertDetail.licenseNumber),
+          licenseIssueDate: idate,
+          licenseExpirationDate: getLicenseExpirationDate(
+            expertDetail as Expert,
+          ),
+          phoneNumber: safeText(expertDetail.phoneNumber),
+          mobileNumber: safeText(expertDetail.mobileNumber),
+          email: safeText(expertDetail.email),
+        });
+      } catch (error) {
+        console.error("❌ Error fetching expert:", error);
+        showToast("خطا در دریافت اطلاعات کارشناس", "error");
+      }
+    },
+    [showToast],
+  );
   const closeFormModal = useCallback(() => {
     setIsFormModalOpen(false);
+    setIsBranchModalOpen(false);
     setFormData(emptyForm);
     setEditingId(null);
   }, []);
@@ -358,22 +510,107 @@ export default function ExpertsPage() {
   );
 
   const handleSubmitForm = () => {
+    /*
+     * ۱. نرمال‌سازی مقادیر ورودی
+     */
+    const firstName = formData.firstName?.trim() ?? "";
+    const lastName = formData.lastName?.trim() ?? "";
+    const code = onlyDigits(formData.code ?? "");
+    const mobileNumber = normalizeIranianMobile(formData.mobileNumber ?? "");
+    const expertiseZoneId = formData.expertiseZoneId ?? "";
+    const licenseNumber = formData.licenseNumber?.trim() ?? "";
+
+    /*
+     * ۲. نرمال‌سازی و بررسی رتبه
+     *
+     * اگر رتبه خالی باشد، مقدار پیش‌فرض ۱ در نظر گرفته می‌شود.
+     */
+    const normalizedRankText = toEnglishDigits(
+      String(formData.rank ?? "").trim(),
+    );
+
+    const rank = normalizedRankText === "" ? 1 : Number(normalizedRankText);
+
+    /*
+     * ۳. بررسی فیلدهای اجباری عمومی
+     */
     if (
-      !formData.firstName ||
-      !formData.lastName ||
-      !formData.code ||
-      !formData.expertiseZoneId ||
-      !formData.licenseNumber
+      !firstName ||
+      !lastName ||
+      !code ||
+      !mobileNumber ||
+      !expertiseZoneId ||
+      !licenseNumber ||
+      !Array.isArray(formData.regions) ||
+      formData.regions.length === 0
     ) {
-      showToast("لطفاً فیلدهای اجباری را تکمیل کنید", "error");
+      showToast("لطفاً همه فیلدهای اجباری را تکمیل کنید", "error");
       return;
     }
+
+    /*
+     * ۴. اعتبارسنجی کد ملی
+     */
+    if (!isValidIranianNationalCode(code)) {
+      showToast("کد ملی واردشده معتبر نیست", "error");
+      return;
+    }
+
+    /*
+     * ۵. اعتبارسنجی شماره موبایل
+     */
+    if (!isValidIranianMobile(mobileNumber)) {
+      showToast(
+        "شماره موبایل واردشده معتبر نیست؛ مثال صحیح: 09121234567",
+        "error",
+      );
+      return;
+    }
+
+    /*
+     * ۶. اعتبارسنجی رتبه
+     */
+    if (!Number.isInteger(rank) || rank < 1 || rank > 10) {
+      showToast("رتبه باید یک عدد صحیح بین ۱ تا ۱۰ باشد", "error");
+      return;
+    }
+
+    /*
+     * ۷. ساخت نسخه نرمال‌شده فرم
+     */
+    const normalizedFormData = {
+      ...formData,
+      firstName,
+      lastName,
+      code,
+      mobileNumber,
+      expertiseZoneId,
+      licenseNumber,
+      rank: String(rank),
+    };
+
+    /*
+     * ۸. ساخت payload
+     */
+    const payload = makePayload(normalizedFormData);
+
+    /*
+     * ۹. ارسال درخواست ایجاد یا ویرایش
+     */
     if (formMode === "create") {
-      createMutation.mutate(makePayload(formData));
-    } else if (editingId !== null) {
-      const payload = { id: editingId, ...makePayload(formData) };
-      console.log("📤 Update payload:", payload);
-      updateMutation.mutate(payload);
+      createMutation.mutate(payload);
+      return;
+    }
+
+    if (formMode === "edit" && editingId !== null) {
+      const updatePayload = {
+        id: editingId,
+        ...payload,
+      };
+
+      console.log("📤 Update payload:", updatePayload);
+
+      updateMutation.mutate(updatePayload);
     }
   };
 
@@ -658,6 +895,8 @@ export default function ExpertsPage() {
               onChange={(v) => setFormData((p) => ({ ...p, rank: v }))}
               dir="ltr"
               type="number"
+              min={1}
+              max={10}
             />
             <FormSelect<string>
               id="modal-expertiseZoneId"
@@ -717,6 +956,7 @@ export default function ExpertsPage() {
               onChange={(v) => setFormData((p) => ({ ...p, mobileNumber: v }))}
               dir="ltr"
               maxLength={11}
+              required
             />
             <FormInput
               id="modal-phoneNumber"
@@ -738,10 +978,275 @@ export default function ExpertsPage() {
               id="modal-regionId"
               name="regionId"
               label="منطقه"
-              value={formData.regionId}
-              onChange={(v) => setFormData((p) => ({ ...p, regionId: v }))}
+              value=""
+              onChange={(regionId) => {
+                if (!regionId) return;
+                const existing = formData.regions.find(
+                  (region) => region.regionId === regionId,
+                );
+                setBranchModalRegionId(regionId);
+                setBranchModalBranchIds(existing?.branchIds ?? []);
+                setBranchModalAllBranches(existing?.allBranches ?? false);
+                setIsBranchModalOpen(true);
+              }}
               options={regionOptions}
+              required
             />
+            <div className="hidden">
+              <p className="mb-2 text-sm font-medium text-gray-700">
+                شعبه‌های منطقه
+              </p>
+              {!branchModalRegionId ? (
+                <p className="text-xs text-gray-500">
+                  ابتدا منطقه را انتخاب کنید.
+                </p>
+              ) : branchesQuery.isLoading ? (
+                <p className="text-xs text-gray-500">
+                  در حال بارگذاری شعبه‌ها...
+                </p>
+              ) : branchesQuery.isError ? (
+                <p className="text-xs text-red-500">
+                  خطا در دریافت شعبه‌های منطقه.
+                </p>
+              ) : branchOptions.length === 0 ? (
+                <p className="text-xs text-gray-500">
+                  برای این منطقه شعبه‌ای پیدا نشد.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {branchOptions.map((branch) => {
+                    const checked = branchModalBranchIds.includes(branch.id);
+                    return (
+                      <label
+                        key={branch.id}
+                        className={`flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm ${
+                          checked
+                            ? "border-blue-400 bg-blue-50 text-blue-800"
+                            : "border-gray-200"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() =>
+                            setBranchModalBranchIds((previous) =>
+                              checked
+                                ? previous.filter((id) => id !== branch.id)
+                                : [...previous, branch.id],
+                            )
+                          }
+                        />
+                        {checked && <Check className="h-4 w-4" />}
+                        <span>{branch.title}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="md:col-span-2 rounded-md border border-gray-200 p-3">
+              <p className="mb-2 text-sm font-medium text-gray-700">
+                مناطق و شعبه‌های انتخاب‌شده
+              </p>
+              {formData.regions.length === 0 ? (
+                <p className="text-xs text-gray-500">
+                  هنوز منطقه‌ای انتخاب نشده است.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {formData.regions.map((selection) => {
+                    const region = regionOptions.find(
+                      (option) => option.id === selection.regionId,
+                    );
+                    return (
+                      <div
+                        key={selection.regionId}
+                        className="flex items-center justify-between gap-3 rounded-md border border-blue-100 bg-blue-50 p-2 text-sm"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-blue-900">
+                            {region?.title || selection.regionId}
+                          </span>
+                          <span className="text-blue-300">|</span>
+                          <span className="text-xs text-blue-700">
+                            {selection.allBranches
+                              ? "همه شعبه‌ها"
+                              : `${selection.branchTitles?.join("، ") || selection.branchIds.join("، ")} (${selection.branchIds.length} شعبه)`}
+                          </span>
+                        </div>
+                        <div className="flex gap-1">
+                          <button
+                            type="button"
+                            className="rounded px-2 py-1 text-xs text-blue-700 hover:bg-blue-100"
+                            onClick={() => {
+                              setBranchModalRegionId(selection.regionId);
+                              setBranchModalBranchIds(selection.branchIds);
+                              setBranchModalAllBranches(selection.allBranches);
+                              setIsBranchModalOpen(true);
+                            }}
+                          >
+                            ویرایش
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                            onClick={() =>
+                              setFormData((previous) => ({
+                                ...previous,
+                                regions: previous.regions.filter(
+                                  (item) =>
+                                    item.regionId !== selection.regionId,
+                                ),
+                              }))
+                            }
+                          >
+                            حذف
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      />
+
+      <Modal
+        isOpen={isBranchModalOpen}
+        isRTL
+        header={`شعبه‌های ${branchModalRegion?.title || "منطقه"}`}
+        onClose={() => setIsBranchModalOpen(false)}
+        overlayLock={branchesQuery.isLoading}
+        footerButtons={
+          <div className="flex gap-2">
+            <FormButton
+              title="تأیید انتخاب"
+              variant="success"
+              onClick={() => {
+                if (
+                  !branchModalAllBranches &&
+                  branchModalBranchIds.length === 0 &&
+                  branchOptions.length > 0
+                ) {
+                  showToast(
+                    "حداقل یک شعبه را انتخاب کنید یا گزینه همه شعبه‌ها را بزنید",
+                    "error",
+                  );
+                  return;
+                }
+
+                const branchTitles = branchOptions
+                  .filter((branch) => branchModalBranchIds.includes(branch.id))
+                  .map((branch) => branch.title);
+
+                const branchCodes = branchOptions // ✅ اضافه کن
+                  .filter((branch) => branchModalBranchIds.includes(branch.id))
+                  .map((branch) => branch.code || branch.id);
+
+                setFormData((previous) => {
+                  const nextSelection: RegionBranchSelection = {
+                    regionId: branchModalRegionId,
+                    regionCode: branchModalRegionCode,
+                    branchIds:
+                      branchModalAllBranches || branchOptions.length === 0
+                        ? []
+                        : branchModalBranchIds,
+                    // ✅ اضافه کن
+                    branchCodes:
+                      branchModalAllBranches || branchOptions.length === 0
+                        ? []
+                        : branchCodes,
+                    allBranches:
+                      branchModalAllBranches || branchOptions.length === 0,
+                    branchTitles,
+                  };
+                  const exists = previous.regions.some(
+                    (region) => region.regionId === branchModalRegionId,
+                  );
+                  return {
+                    ...previous,
+                    regions: exists
+                      ? previous.regions.map((region) =>
+                          region.regionId === branchModalRegionId
+                            ? nextSelection
+                            : region,
+                        )
+                      : [...previous.regions, nextSelection],
+                  };
+                });
+                setIsBranchModalOpen(false);
+              }}
+            />
+            <FormButton
+              title="انصراف"
+              variant="secondary"
+              onClick={() => setIsBranchModalOpen(false)}
+            />
+          </div>
+        }
+        renderContent={() => (
+          <div className="space-y-4">
+            <label className="flex cursor-pointer items-center gap-2 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm">
+              <input
+                type="checkbox"
+                checked={branchModalAllBranches}
+                onChange={(event) => {
+                  const checked = event.target.checked;
+                  setBranchModalAllBranches(checked);
+                  if (checked) setBranchModalBranchIds([]);
+                }}
+              />
+              <span className="font-medium text-blue-900">
+                انتخاب همه شعبه‌ها
+              </span>
+            </label>
+
+            {branchesQuery.isLoading ? (
+              <p className="text-sm text-gray-500">
+                در حال بارگذاری شعبه‌ها...
+              </p>
+            ) : branchesQuery.isError ? (
+              <p className="text-sm text-red-500">
+                خطا در دریافت شعبه‌های منطقه.
+              </p>
+            ) : branchOptions.length === 0 ? (
+              <p className="text-sm text-gray-500">
+                برای این منطقه شعبه‌ای پیدا نشد.
+              </p>
+            ) : (
+              <div className="grid max-h-[50vh] grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
+                {branchOptions.map((branch) => {
+                  const checked = branchModalBranchIds.includes(branch.id);
+                  return (
+                    <label
+                      key={branch.id}
+                      className={`flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm ${
+                        checked
+                          ? "border-blue-400 bg-blue-50 text-blue-800"
+                          : "border-gray-200"
+                      } ${branchModalAllBranches ? "opacity-50" : ""}`}
+                    >
+                      <input
+                        type="checkbox"
+                        disabled={branchModalAllBranches}
+                        checked={checked}
+                        onChange={() =>
+                          setBranchModalBranchIds((previous) =>
+                            checked
+                              ? previous.filter((id) => id !== branch.id)
+                              : [...previous, branch.id],
+                          )
+                        }
+                      />
+                      {checked && <Check className="h-4 w-4" />}
+                      <span>{branch.title}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       />

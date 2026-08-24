@@ -44,7 +44,7 @@ import {
   REQUEST_DEPARTMENT_TYPES,
   type RequestDepartmentTypeConfig,
 } from "../requestDepartmentTypes";
-import { generateAppraisalHtmlPDF } from "../../../utils/htmlPdfGenerator";
+import { generateAppraisalPdf } from "../../../utils/htmlPdfGenerator";
 
 import { getAllRequestStatus } from "../../../services/RequestStatusCrud/getAll";
 import {
@@ -1109,12 +1109,23 @@ export function DepartmentRequestAssetReviewPage({
   const handleGeneratePdf = useCallback(async () => {
     setIsGeneratingPdf(true);
     try {
-      await generateAppraisalHtmlPDF(assetForm, lookups, {
+      // استفاده از تابع جدید برای پر کردن PDF
+      const pdfUrl = await generateAppraisalPdf(assetForm, lookups, {
         requestCode: selectedRequest?.requestCode,
         date: selectedRequest?.creationTime
           ? isoToPersian(selectedRequest.creationTime)
           : "",
       });
+
+      // باز کردن PDF در تب جدید
+      window.open(pdfUrl, "_blank");
+
+      // یا برای دانلود خودکار:
+      // const link = document.createElement('a');
+      // link.href = pdfUrl;
+      // link.download = `appraisal-${selectedRequest?.requestCode || 'report'}.pdf`;
+      // link.click();
+
       showToast("گزارش PDF با موفقیت ایجاد شد", "success");
     } catch (error: unknown) {
       console.error("Error generating appraisal PDF:", error);
@@ -1123,7 +1134,6 @@ export function DepartmentRequestAssetReviewPage({
       setIsGeneratingPdf(false);
     }
   }, [assetForm, lookups, selectedRequest, showToast]);
-
   // ─── Columns ───────────────────────────────────────────────────
   const columns = useMemo<ColumnDef<RequestItem, unknown>[]>(
     () => [

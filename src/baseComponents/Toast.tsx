@@ -63,34 +63,38 @@ const Toast = ({ id, message, type, duration = 5000, detail, onClose }: ToastPro
     }
 
     return (
-        <div
-            className={`rounded-lg transition-all duration-300 ease-in-out transform my-2 backdrop-blur-md shadow-lg ${
-                isVisible ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0'
-            } ${getTypeStyles()}`}
-        >
-            <div className="flex items-center p-4 gap-3">
-                {getIcon()}
+      <div
+        className={`rounded-lg transition-all duration-300 ease-in-out transform my-2 backdrop-blur-md shadow-lg ${
+          isVisible ? "translate-y-0 opacity-100" : "-translate-y-2 opacity-0"
+        } ${getTypeStyles()}`}
+      >
+        <div className="flex items-center p-4 gap-3">
+          {getIcon()}
 
-                <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold truncate">{message}</p>
-                    {detail && (
-                        <p className="text-xs text-gray-500 mt-0.5 opacity-90">{detail}</p>
-                    )}
-                </div>
+          <div className="flex-1 min-w-0">
+            <p className="whitespace-normal break-words text-sm font-bold leading-6">
+              {message}
+            </p>
+            {detail && (
+              <p className="text-xs text-gray-500 mt-0.5 opacity-90">
+                {detail}
+              </p>
+            )}
+          </div>
 
-                <button
-                    onClick={() => {
-                        setIsVisible(false)
-                        setTimeout(() => onClose(id), 300)
-                    }}
-                    className="inline-flex text-gray-600 hover:text-gray-400 transition duration-150 cursor-pointer opacity-70"
-                    aria-label="close toast"
-                >
-                    <X className="h-5 w-5" />
-                </button>
-            </div>
+          <button
+            onClick={() => {
+              setIsVisible(false);
+              setTimeout(() => onClose(id), 300);
+            }}
+            className="inline-flex text-gray-600 hover:text-gray-400 transition duration-150 cursor-pointer opacity-70"
+            aria-label="close toast"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
-    )
+      </div>
+    );
 }
 
 export default Toast
