@@ -63,7 +63,6 @@ type CollateralForm = {
 };
 
 type RequestForm = {
-  loanNumber: string;
   requestTypeId: number | null;
   title: string;
   requestCode: string;
@@ -101,7 +100,6 @@ const emptyCollateral: CollateralForm = {
   nationalCode: "",
 };
 const emptyRequest: RequestForm = {
-  loanNumber: "",
   requestTypeId: null,
   title: "",
   requestCode: "",
@@ -491,10 +489,6 @@ export function DepartmentRequestCreatePage({
 
   // ─── Submit ───
   const handleSubmit = async () => {
-    if (!requestForm.loanNumber.trim()) {
-      showToast("شماره پرونده الزامی است", "error");
-      return;
-    }
     if (!requestForm.requestTypeId) {
       showToast("نوع درخواست الزامی است", "error");
       return;
@@ -516,6 +510,10 @@ export function DepartmentRequestCreatePage({
       showToast("لطفاً ابتدا مشتری را استعلام و انتخاب کنید", "error");
       return;
     }
+    if (!requestForm.requestCode.trim()) {
+      showToast("شماره مصوبه/ابلاغیه الزامی است", "error");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -528,7 +526,6 @@ export function DepartmentRequestCreatePage({
         customerId,
         title: requestForm.title.trim(),
         requestCode: requestForm.requestCode || "",
-        loanNumber: requestForm.loanNumber.trim(),
         amount,
         description: requestForm.description || "",
         personalTypeId: requestForm.personalTypeId,
@@ -872,19 +869,6 @@ export function DepartmentRequestCreatePage({
         >
           <FluidGrid className="gap-4">
             <FluidCol colSpan="col-span-12 md:col-span-4">
-              <FormInput
-                id="loanNumber"
-                name="loanNumber"
-                label="شماره پرونده"
-                value={requestForm.loanNumber}
-                onChange={(v) =>
-                  setRequestForm((p) => ({ ...p, loanNumber: v }))
-                }
-                dir="ltr"
-                required
-              />
-            </FluidCol>
-            <FluidCol colSpan="col-span-12 md:col-span-4">
               <FormSelect<number>
                 id="requestTypeId"
                 name="requestTypeId"
@@ -921,6 +905,7 @@ export function DepartmentRequestCreatePage({
                   setRequestForm((p) => ({ ...p, requestCode: v }))
                 }
                 dir="ltr"
+                required
               />
             </FluidCol>
             <FluidCol colSpan="col-span-12 md:col-span-4">
@@ -977,7 +962,7 @@ export function DepartmentRequestCreatePage({
                 <FormInput
                   id="requesterName"
                   name="requesterName"
-                  label="درخواست کننده (کد ملی)"
+                  label="درخواست کننده (کد ملی/شناسه ملی)"
                   value={requestForm.requesterName}
                   onChange={(v) => {
                     setRequestForm((p) => ({ ...p, requesterName: v }));
@@ -1239,8 +1224,8 @@ export function DepartmentRequestCreatePage({
 
         {/* توضیحات کارشناس */}
         <FormSection
-          title="توضیحات کارشناس"
-          description="یادداشت کارشناسی مرتبط با این درخواست را ثبت کنید."
+          title="یادداشت کارشناس"
+          description="نکات کارشناسی، موارد نیازمند بررسی یا توضیحات داخلی خود درباره این درخواست را ثبت کنید. این یادداشت به‌عنوان نظر کارشناس در روند بررسی درخواست نمایش داده می‌شود."
           icon={<MessageSquareText className="h-5 w-5" />}
         >
           <FluidGrid className="gap-4">
@@ -1248,7 +1233,7 @@ export function DepartmentRequestCreatePage({
               <FormTextarea
                 id="expertComment"
                 name="expertComment"
-                label="توضیحات کارشناس"
+                label="یادداشت / نظر کارشناس"
                 value={expertComment}
                 onChange={(v) => setExpertComment(v)}
                 rows={3}
@@ -1260,8 +1245,8 @@ export function DepartmentRequestCreatePage({
 
         {/* توضیحات و ثبت */}
         <FormSection
-          title="توضیحات نهایی و ثبت"
-          description="پس از بررسی اطلاعات، درخواست را ثبت نهایی کنید."
+          title="شرح نهایی درخواست"
+          description="موضوع، دلیل و جزئیات اصلی درخواست را وارد کنید. این متن به‌عنوان شرح رسمی درخواست ثبت و در اطلاعات پرونده نگهداری می‌شود."
           icon={<Building2 className="h-5 w-5" />}
         >
           <FluidGrid className="gap-4">
@@ -1269,7 +1254,7 @@ export function DepartmentRequestCreatePage({
               <FormTextarea
                 id="description"
                 name="description"
-                label="توضیحات"
+                label="شرح درخواست"
                 value={requestForm.description}
                 onChange={(v) =>
                   setRequestForm((p) => ({ ...p, description: v }))

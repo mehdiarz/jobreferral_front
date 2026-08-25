@@ -1,10 +1,13 @@
+// src/Features/Requests/Branch/RequestFeeCalculationPage.tsx
+
 import { useMemo, useRef, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { ClipboardList, MessageSquareText } from "lucide-react";
+import { Calculator, ClipboardList, MessageSquareText } from "lucide-react";
 
 import { MainLayout } from "../../../baseComponents/MainLayout";
 import FormButton from "../../../baseComponents/FormButton";
+import FormInput from "../../../baseComponents/FormInput";
 import FormTextarea from "../../../baseComponents/FormTextarea";
 import PageTitle from "../../../baseComponents/PageTitle";
 import DataTable from "../../../baseComponents/DataTable";
@@ -13,6 +16,7 @@ import RequestDetailsPanel, {
   RequestDetailSection,
   ViewDetailsButton,
 } from "../../../baseComponents/RequestDetailsPanel";
+import PropertyAppraisalReadOnlyModal from "../../../baseComponents/PropertyAppraisalReadOnlyModal";
 import { useToast } from "../../../libs/toastContext";
 import { useAuthStore } from "../../../libs/store";
 
@@ -24,17 +28,20 @@ import { createRequestComment } from "../../../services/RequestCommentCrud/creat
 import { getUserById } from "../../../services/Users/getUserById";
 import { getPropertyAppraisalLookups } from "../../../services/PropertyAppraisalCrud/getLookups";
 import { getPropertyAppraisalByRequestId } from "../../../services/PropertyAppraisalCrud/getByRequestId";
-import { generateAppraisalPdf } from "../../../utils/htmlPdfGenerator";
+import { calculateBankFee } from "../../../services/FeeCalculationCrud/feeCalculation";
+import { calculateJudicialFee } from "../../../services/FeeCalculationCrud/feeCalculation";
 
 import type { RequestItem } from "../../../services/RequestCrud/types";
 import type {
   PropertyAppraisalOutputDto,
   PropertyAppraisalLookupsDto,
 } from "../../../services/PropertyAppraisalCrud/types";
-import {
-  isoToPersian,
-  isoToPersianDateTime,
-} from "../../../utils/persianToISO";
+import type {
+  CalculateBankFeeInput,
+  CalculateJudicialFeeInput,
+  FeeCalculationResultDto,
+} from "../../../services/FeeCalculationCrud/types";
+import { isoToPersianDateTime } from "../../../utils/persianToISO";
 import { persianToISO } from "../../../utils/persianToISO";
 import {
   REQUEST_DEPARTMENT_TYPES,
@@ -57,39 +64,30 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-// ─── Read-Only Property Appraisal Modal ─────────────────────────
-import PropertyAppraisalReadOnlyModal from "../../../baseComponents/PropertyAppraisalReadOnlyModal";
+function formatNumber(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+function parseValue(str: string): number {
+  return Number(String(str || "").replace(/,/g, ""));
+}
+
+function formatWithCommas(num: number): string {
+  return num.toLocaleString("en-US");
+}
 
 // ─── Main Component ──────────────────────────────────────────────
-interface EngineeringManagementApprovalPageProps {
+interface RequestFeeCalculationPageProps {
   departmentType: RequestDepartmentTypeConfig;
 }
-const getDepartmentName = (id: number | null | undefined): string => {
-  switch (Number(id)) {
-    case REQUEST_DEPARTMENT_TYPES.branch.id:
-      return REQUEST_DEPARTMENT_TYPES.branch.name;
 
-    case REQUEST_DEPARTMENT_TYPES.independentBranch.id:
-      return REQUEST_DEPARTMENT_TYPES.independentBranch.name;
-
-    case REQUEST_DEPARTMENT_TYPES.region.id:
-      return REQUEST_DEPARTMENT_TYPES.region.name;
-
-    case REQUEST_DEPARTMENT_TYPES.mainOffice.id:
-      return REQUEST_DEPARTMENT_TYPES.mainOffice.name;
-
-    default:
-      return "نامشخص";
-  }
-};
-
-export function DepartmentEngineeringManagementApprovalPage({
+export function DepartmentRequestFeeCalculationPage({
   departmentType,
-}: EngineeringManagementApprovalPageProps) {
+}: RequestFeeCalculationPageProps) {
   const { showToast } = useToast();
   const { user } = useAuthStore();
 
-  // ─── State ─────────────────────────────────────────────────────
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
   const [filters, setFilters] = useState<TableFilter[]>([]);
   const [selectedRequest, setSelectedRequest] =
@@ -98,28 +96,31 @@ export function DepartmentEngineeringManagementApprovalPage({
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // فرم ارزیابی - فقط نمایش readonly
   const [isAppraisalReadOnlyOpen, setIsAppraisalReadOnlyOpen] = useState(false);
-
-  // فرم ارزیابی ثبت‌شده توسط ستاد؛ فقط قابل مشاهده
-  const [mainOfficeAppraisal, setMainOfficeAppraisal] =
+  const [detailAppraisal, setDetailAppraisal] =
     useState<PropertyAppraisalOutputDto | null>(null);
 
-  // فرم‌های ارزیابی ثبت‌شده توسط سایر واحدها؛ فقط قابل مشاهده
-  const [externalAppraisals, setExternalAppraisals] = useState<
-    PropertyAppraisalOutputDto[]
-  >([]);
+  // Bank fee modal
+  const [isBankModalOpen, setIsBankModalOpen] = useState(false);
+  const [bankFa, setBankFa] = useState("");
+  const [bankPv, setBankPv] = useState("");
+  const [bankResult, setBankResult] = useState<FeeCalculationResultDto | null>(
+    null,
+  );
+  const [isCalculatingBank, setIsCalculatingBank] = useState(false);
 
-  // فرمی که کاربر برای مشاهده انتخاب کرده است
-  const [selectedReadonlyAppraisal, setSelectedReadonlyAppraisal] =
-    useState<PropertyAppraisalOutputDto | null>(null);
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  // Judicial fee modal
+  const [isJudicialModalOpen, setIsJudicialModalOpen] = useState(false);
+  const [judicialFa, setJudicialFa] = useState("");
+  const [judicialPv, setJudicialPv] = useState("");
+  const [judicialResult, setJudicialResult] =
+    useState<FeeCalculationResultDto | null>(null);
+  const [isCalculatingJudicial, setIsCalculatingJudicial] = useState(false);
 
   const userCacheRef = useRef<Map<number, { name: string; role: string }>>(
     new Map(),
   );
 
-  // Query برای دریافت status ها
   const statusQuery = useQuery({
     queryKey: ["request-statuses"],
     queryFn: () => getAllRequestStatus({ maxResultCount: 100 }),
@@ -128,7 +129,6 @@ export function DepartmentEngineeringManagementApprovalPage({
 
   const statuses = statusQuery.data?.items;
 
-  // Query برای lookup ها (برای نمایش فرم readonly)
   const lookupsQuery = useQuery({
     queryKey: ["property-appraisal-lookups"],
     queryFn: getPropertyAppraisalLookups,
@@ -140,10 +140,9 @@ export function DepartmentEngineeringManagementApprovalPage({
     [lookupsQuery.data],
   );
 
-  // ─── Queries ───────────────────────────────────────────────────
   const requestsQuery = useQuery({
     queryKey: [
-      "requests-engineering-management-approval",
+      "requests-fee-calculation",
       departmentType.id,
       pagination.pageIndex,
       pagination.pageSize,
@@ -172,8 +171,7 @@ export function DepartmentEngineeringManagementApprovalPage({
     select: (data) => {
       const items = ((data?.items ?? []) as RequestItem[]).filter(
         (r) =>
-          r.requestStatusCode ===
-          REQUEST_STATUS_CODES.engineeringManagementApproval,
+          r.requestStatusCode === REQUEST_STATUS_CODES.expertFeeCalculation,
       );
       return {
         listResult: items,
@@ -187,7 +185,6 @@ export function DepartmentEngineeringManagementApprovalPage({
     enabled: statusQuery.isSuccess,
   });
 
-  // ─── Helpers ───────────────────────────────────────────────────
   const getUserCacheData = useCallback((userId: number) => {
     return (
       userCacheRef.current.get(userId) || { name: `کاربر ${userId}`, role: "-" }
@@ -196,79 +193,42 @@ export function DepartmentEngineeringManagementApprovalPage({
 
   const handleView = useCallback(
     async (req: RequestItem) => {
-      setMainOfficeAppraisal(null);
-      setExternalAppraisals([]);
-      setSelectedReadonlyAppraisal(null);
+      setSelectedRequest(null);
+      setComment("");
+      setDetailAppraisal(null);
       setIsAppraisalReadOnlyOpen(false);
       setIsDetailOpen(true);
-
       try {
         await viewRequest(req.id);
-
         const detail = await getRequest(req.id);
         setSelectedRequest(detail);
 
         try {
-          /*
-           * خروجی سرویس اکنون آرایه است:
-           * [
-           *   { id: 8, creatorDepartmentId: 3, ... },
-           *   { id: 9, creatorDepartmentId: 4, ... }
-           * ]
-           *
-           * در این صفحه تمام فرم‌ها صرفاً قابل مشاهده هستند.
-           */
-          const existingAppraisals = await getPropertyAppraisalByRequestId(
+          const existingAppraisal = await getPropertyAppraisalByRequestId(
             req.id,
           );
-
-          const mainOfficeDepartmentId = REQUEST_DEPARTMENT_TYPES.mainOffice.id;
-
-          const mainOfficeForm =
-            existingAppraisals.find(
-              (appraisal) =>
-                Number(appraisal.creatorDepartmentId) ===
-                Number(mainOfficeDepartmentId),
-            ) ?? null;
-
-          const externalForms = existingAppraisals.filter(
-            (appraisal) =>
-              Number(appraisal.creatorDepartmentId) !==
-              Number(mainOfficeDepartmentId),
-          );
-
-          setMainOfficeAppraisal(mainOfficeForm);
-          setExternalAppraisals(externalForms);
-        } catch (error) {
-          console.error("Error loading property appraisals:", error);
-          setMainOfficeAppraisal(null);
-          setExternalAppraisals([]);
-          setSelectedReadonlyAppraisal(null);
+          if (existingAppraisal && Array.isArray(existingAppraisal)) {
+            setDetailAppraisal(existingAppraisal[0] ?? null);
+          } else if (existingAppraisal) {
+            setDetailAppraisal(existingAppraisal as PropertyAppraisalOutputDto);
+          }
+        } catch {
+          console.log("No appraisal found for this request");
         }
 
         const ids = new Set<number>();
-
-        detail.requestHistoryOutputDtos?.forEach((history) => {
-          if (history.reviewerUserId) {
-            ids.add(history.reviewerUserId);
-          }
-        });
-
-        detail.requestCommentOutputDtos?.forEach((requestComment) => {
-          if (requestComment.userId) {
-            ids.add(requestComment.userId);
-          }
-        });
+        detail.requestHistoryOutputDtos?.forEach(
+          (h) => h.reviewerUserId && ids.add(h.reviewerUserId),
+        );
+        detail.requestCommentOutputDtos?.forEach(
+          (c) => c.userId && ids.add(c.userId),
+        );
 
         for (const id of ids) {
           if (!userCacheRef.current.has(id)) {
             const u = await getUserById(id);
-
             userCacheRef.current.set(id, {
-              name:
-                u?.fullName ||
-                `${u?.name ?? ""} ${u?.surname ?? ""}`.trim() ||
-                `کاربر ${id}`,
+              name: u?.fullName || `${u?.name} ${u?.surname}` || `کاربر ${id}`,
               role: u?.roleNames?.[0] || "-",
             });
           }
@@ -307,7 +267,56 @@ export function DepartmentEngineeringManagementApprovalPage({
     [selectedRequest, comment, user, requestsQuery, showToast],
   );
 
-  // ─── Columns ───────────────────────────────────────────────────
+  const handleCalculateBank = useCallback(async () => {
+    const fa = parseValue(bankFa);
+    const pv = parseValue(bankPv);
+    if (!fa || !pv) {
+      showToast("لطفاً هر دو مقدار را وارد کنید", "error");
+      return;
+    }
+
+    setIsCalculatingBank(true);
+    try {
+      const body: CalculateBankFeeInput = {
+        facilityAmount: fa,
+        propertyValue: pv,
+      };
+      const result = await calculateBankFee(body);
+      setBankResult(result);
+      showToast("محاسبه با موفقیت انجام شد", "success");
+    } catch (error: unknown) {
+      console.error("Error calculating bank fee:", error);
+      showToast(getErrorMessage(error, "خطا در محاسبه"), "error");
+    } finally {
+      setIsCalculatingBank(false);
+    }
+  }, [bankFa, bankPv, selectedRequest, showToast]);
+
+  const handleCalculateJudicial = useCallback(async () => {
+    const fa = parseValue(judicialFa);
+    const pv = parseValue(judicialPv);
+    if (!fa || !pv) {
+      showToast("لطفاً هر دو مقدار را وارد کنید", "error");
+      return;
+    }
+
+    setIsCalculatingJudicial(true);
+    try {
+      const body: CalculateJudicialFeeInput = {
+        facilityAmount: fa,
+        propertyValue: pv,
+      };
+      const result = await calculateJudicialFee(body);
+      setJudicialResult(result);
+      showToast("محاسبه با موفقیت انجام شد", "success");
+    } catch (error: unknown) {
+      console.error("Error calculating judicial fee:", error);
+      showToast(getErrorMessage(error, "خطا در محاسبه"), "error");
+    } finally {
+      setIsCalculatingJudicial(false);
+    }
+  }, [judicialFa, judicialPv, selectedRequest, showToast]);
+
   const columns = useMemo<ColumnDef<RequestItem, unknown>[]>(
     () => [
       {
@@ -358,34 +367,11 @@ export function DepartmentEngineeringManagementApprovalPage({
     [handleView, statuses],
   );
 
-  const handleGeneratePdf = useCallback(async () => {
-    if (!selectedReadonlyAppraisal) return;
-    setIsGeneratingPdf(true);
-    try {
-      const pdfUrl = await generateAppraisalPdf(
-        selectedReadonlyAppraisal,
-        lookups,
-        {
-          requestCode: selectedRequest?.requestCode,
-          date: selectedRequest?.creationTime
-            ? isoToPersian(selectedRequest.creationTime)
-            : "",
-        },
-      );
-      window.open(pdfUrl, "_blank");
-      showToast("گزارش PDF با موفقیت ایجاد شد", "success");
-    } catch (error: unknown) {
-      console.error("Error generating appraisal PDF:", error);
-      showToast(getErrorMessage(error, "خطا در ایجاد فایل PDF"), "error");
-    } finally {
-      setIsGeneratingPdf(false);
-    }
-  }, [selectedReadonlyAppraisal, lookups, selectedRequest, showToast]);
-
-  // ─── Render ──────────────────────────────────────────────────
   return (
     <MainLayout.Main maxWidth="screen-xl">
-      <PageTitle title={`بررسی و امضا توسط ${departmentType.name}`} />
+      <PageTitle
+        title={`محاسبه کارمزد کارشناس رسمی دادگستری - ${departmentType.name}`}
+      />
       <div className="rounded-lg bg-white p-4 shadow-sm">
         <DataTable<RequestItem>
           query={requestsQuery}
@@ -414,7 +400,7 @@ export function DepartmentEngineeringManagementApprovalPage({
       <Modal
         isOpen={isDetailOpen}
         isRTL
-        header="بررسی و امضا توسط مدیریت مهندسی و پشتیبانی"
+        header={`محاسبه کارمزد کارشناس رسمی دادگستری - ${departmentType.name}`}
         onClose={() => setIsDetailOpen(false)}
         overlayLock={isSubmitting}
         footerButtons={
@@ -426,7 +412,7 @@ export function DepartmentEngineeringManagementApprovalPage({
               isLoading={isSubmitting}
             />
             <FormButton
-              title="تأیید و امضا"
+              title="تأیید"
               variant="success"
               onClick={() => handleAction(true)}
               isLoading={isSubmitting}
@@ -446,75 +432,55 @@ export function DepartmentEngineeringManagementApprovalPage({
               documents={[]}
               getUserData={getUserCacheData}
             >
+              {/* محاسبه کارمزد */}
               <RequestDetailSection
-                icon={<ClipboardList className="w-5 h-5" />}
-                title="فرم‌های ارزیابی ملک"
+                icon={<Calculator className="w-5 h-5" />}
+                title="محاسبه کارمزد"
                 tone="blue"
               >
-                <div className="space-y-3">
-                  {/* فرم ارزیابی ستاد */}
-                  {mainOfficeAppraisal && (
-                    <div className="flex items-center justify-between gap-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
-                      <div className="text-sm text-blue-800">
-                        فرم ارزیابی توسط واحد{" "}
-                        <span className="font-semibold">
-                          {REQUEST_DEPARTMENT_TYPES.mainOffice.name}
-                        </span>{" "}
-                        ثبت شده است و فقط قابل مشاهده است.
-                      </div>
-
-                      <FormButton
-                        title={`مشاهده فرم ارزیابی ${REQUEST_DEPARTMENT_TYPES.mainOffice.name}`}
-                        variant="primary"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedReadonlyAppraisal(mainOfficeAppraisal);
-                          setIsAppraisalReadOnlyOpen(true);
-                        }}
-                      />
-                    </div>
-                  )}
-
-                  {/* فرم‌های سایر واحدها */}
-                  {externalAppraisals.map((appraisal, index) => {
-                    const departmentName = getDepartmentName(
-                      appraisal.creatorDepartmentId,
-                    );
-
-                    return (
-                      <div
-                        key={appraisal.id ?? index}
-                        className="flex items-center justify-between gap-4 rounded-xl border border-blue-200 bg-blue-50 p-4"
-                      >
-                        <div className="text-sm text-blue-800">
-                          فرم ارزیابی توسط واحد{" "}
-                          <span className="font-semibold">
-                            {departmentName}
-                          </span>{" "}
-                          ثبت شده است و فقط قابل مشاهده است.
-                        </div>
-
-                        <FormButton
-                          title={`مشاهده فرم ارزیابی ${departmentName}`}
-                          variant="primary"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedReadonlyAppraisal(appraisal);
-                            setIsAppraisalReadOnlyOpen(true);
-                          }}
-                        />
-                      </div>
-                    );
-                  })}
-
-                  {/* هیچ فرمی ثبت نشده است */}
-                  {!mainOfficeAppraisal && externalAppraisals.length === 0 && (
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                      هنوز هیچ فرم ارزیابی ملکی توسط واحدها ثبت نشده است.
-                    </div>
-                  )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setIsBankModalOpen(true)}
+                    className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-center hover:bg-blue-100 transition-colors cursor-pointer"
+                  >
+                    <p className="font-bold text-blue-700">کارمزد بانک</p>
+                    <p className="text-xs text-blue-500 mt-1">
+                      کلیک برای محاسبه
+                    </p>
+                  </button>
+                  <button
+                    onClick={() => setIsJudicialModalOpen(true)}
+                    className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center hover:bg-emerald-100 transition-colors cursor-pointer"
+                  >
+                    <p className="font-bold text-emerald-700">
+                      کارمزد کارشناس دادگستری
+                    </p>
+                    <p className="text-xs text-emerald-500 mt-1">
+                      کلیک برای محاسبه
+                    </p>
+                  </button>
                 </div>
               </RequestDetailSection>
+
+              {detailAppraisal && (
+                <RequestDetailSection
+                  icon={<ClipboardList className="w-5 h-5" />}
+                  title="فرم ارزیابی ملک"
+                  tone="blue"
+                >
+                  <div className="flex items-center justify-between p-4 bg-blue-50 border border-blue-100 rounded-xl">
+                    <div className="text-sm text-blue-800">
+                      فرم ارزیابی ملک برای این درخواست موجود است.
+                    </div>
+                    <FormButton
+                      title="مشاهده فرم ارزیابی"
+                      variant="primary"
+                      size="sm"
+                      onClick={() => setIsAppraisalReadOnlyOpen(true)}
+                    />
+                  </div>
+                </RequestDetailSection>
+              )}
 
               <RequestDetailSection
                 icon={<MessageSquareText className="w-5 h-5" />}
@@ -535,25 +501,125 @@ export function DepartmentEngineeringManagementApprovalPage({
         }}
       />
 
+      {/* مودال کارمزد بانک */}
+      <Modal
+        isOpen={isBankModalOpen}
+        isRTL
+        header="محاسبه کارمزد بانک"
+        onClose={() => setIsBankModalOpen(false)}
+        overlayLock={isCalculatingBank}
+        footerButtons={
+          <div className="flex gap-2">
+            <FormButton
+              title="محاسبه"
+              variant="primary"
+              onClick={handleCalculateBank}
+              isLoading={isCalculatingBank}
+              disabled={isCalculatingBank}
+            />
+          </div>
+        }
+        renderContent={() => (
+          <div className="space-y-4">
+            <FormInput
+              id="bank-fa"
+              name="bank-fa"
+              label="مبلغ تسهیلات (ریال)"
+              value={bankFa}
+              onChange={(v) => setBankFa(formatNumber(v))}
+              dir="ltr"
+            />
+            <FormInput
+              id="bank-pv"
+              name="bank-pv"
+              label="ارزش ملک (ریال)"
+              value={bankPv}
+              onChange={(v) => setBankPv(formatNumber(v))}
+              dir="ltr"
+            />
+            {bankResult && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                <p className="font-bold text-emerald-700">
+                  کارمزد بانک: {formatWithCommas(bankResult.bankFee ?? 0)} ریال
+                </p>
+                <p className="text-sm text-slate-600 mt-1">
+                  {bankResult.isBoard
+                    ? "کارشناسی به صورت هیئتی می باشد"
+                    : "کارشناسی به صورت تک نفره می باشد"}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      />
+
+      {/* مودال کارمزد کارشناس دادگستری */}
+      <Modal
+        isOpen={isJudicialModalOpen}
+        isRTL
+        header="محاسبه حق‌الزحمه کارشناس رسمی دادگستری"
+        onClose={() => setIsJudicialModalOpen(false)}
+        overlayLock={isCalculatingJudicial}
+        footerButtons={
+          <div className="flex gap-2">
+            <FormButton
+              title="محاسبه"
+              variant="primary"
+              onClick={handleCalculateJudicial}
+              isLoading={isCalculatingJudicial}
+              disabled={isCalculatingJudicial}
+            />
+          </div>
+        }
+        renderContent={() => (
+          <div className="space-y-4">
+            <FormInput
+              id="judicial-fa"
+              name="judicial-fa"
+              label="مبلغ تسهیلات (ریال)"
+              value={judicialFa}
+              onChange={(v) => setJudicialFa(formatNumber(v))}
+              dir="ltr"
+            />
+            <FormInput
+              id="judicial-pv"
+              name="judicial-pv"
+              label="ارزش ملک (ریال)"
+              value={judicialPv}
+              onChange={(v) => setJudicialPv(formatNumber(v))}
+              dir="ltr"
+            />
+            {judicialResult && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                <p className="font-bold text-emerald-700">
+                  حق‌الزحمه کارشناس:{" "}
+                  {formatWithCommas(judicialResult.judicialFee ?? 0)} ریال
+                </p>
+                <p className="text-sm text-slate-600 mt-1">
+                  {judicialResult.isBoard
+                    ? "کارشناسی به صورت هیئتی می باشد"
+                    : "کارشناسی به صورت تک نفره می باشد"}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      />
+
       <PropertyAppraisalReadOnlyModal
         isOpen={isAppraisalReadOnlyOpen}
-        appraisal={selectedReadonlyAppraisal}
+        appraisal={detailAppraisal}
         lookups={lookups}
-        isGeneratingPdf={isGeneratingPdf}
-        onGeneratePdf={handleGeneratePdf}
-        onClose={() => {
-          setIsAppraisalReadOnlyOpen(false);
-          setSelectedReadonlyAppraisal(null);
-        }}
+        onClose={() => setIsAppraisalReadOnlyOpen(false)}
       />
     </MainLayout.Main>
   );
 }
 
-export default function EngineeringManagementApprovalPage() {
+export default function RequestFeeCalculationPage() {
   return (
-    <DepartmentEngineeringManagementApprovalPage
-      departmentType={REQUEST_DEPARTMENT_TYPES.mainOffice}
+    <DepartmentRequestFeeCalculationPage
+      departmentType={REQUEST_DEPARTMENT_TYPES.branch}
     />
   );
 }

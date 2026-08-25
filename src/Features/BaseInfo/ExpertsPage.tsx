@@ -67,9 +67,13 @@ type Expert = {
   code?: string;
   nationalCode?: string;
   rank?: number;
-  expertiseZoneId?: number | string;
+  expertiseZoneIds?: number[] | string[] | null;
+  expertiseZones?: Array<{
+    id?: number | string;
+    title?: string;
+    name?: string;
+  }> | null;
   expertiseZoneTitle?: string;
-  expertiseZone?: { title?: string; name?: string };
   regionId?: number | string;
   regionTitle?: string;
   region?: { title?: string; name?: string };
@@ -91,7 +95,7 @@ type ExpertForm = {
   lastName: string;
   code: string;
   rank: string;
-  expertiseZoneId: string;
+  expertiseZoneIds: string[];
   licenseNumber: string;
   licenseIssueDate: string;
   licenseExpirationDate: string;
@@ -116,7 +120,7 @@ const emptyForm: ExpertForm = {
   lastName: "",
   code: "",
   rank: "",
-  expertiseZoneId: "",
+  expertiseZoneIds: [],
   licenseNumber: "",
   licenseIssueDate: "",
   licenseExpirationDate: "",
@@ -149,16 +153,29 @@ const getExpertCode = (e: Expert): string => safeText(e.code || e.nationalCode);
 const getExpertFullName = (e: Expert): string =>
   `${safeText(e.firstName)} ${safeText(e.lastName)}`.trim();
 const getExpertiseZoneTitle = (e: Expert, opts?: SelectOption[]): string => {
-  const d = safeText(
-    e.expertiseZoneTitle || e.expertiseZone?.title || e.expertiseZone?.name,
-  );
-  if (d) return d;
-  if (opts && e.expertiseZoneId) {
-    const z = opts.find((x) => x.id === String(e.expertiseZoneId));
-    if (z) return z.title;
+  // ۱. اگر شیء expertiseZones در خروجی بک‌اند بود
+  if (Array.isArray(e.expertiseZones) && e.expertiseZones.length > 0) {
+    return e.expertiseZones
+      .map((z) => safeText(z.title || z.name))
+      .filter(Boolean)
+      .join("، ");
   }
-  return "-";
+
+  // ۲. اگر آرایه شناسه‌ها وجود داشت با گزینه‌ها تطبیق داده شود
+  if (
+    Array.isArray(e.expertiseZoneIds) &&
+    e.expertiseZoneIds.length > 0 &&
+    opts
+  ) {
+    const titles = e.expertiseZoneIds
+      .map((id) => opts.find((opt) => opt.id === String(id))?.title)
+      .filter(Boolean);
+    if (titles.length > 0) return titles.join("، ");
+  }
+
+  return safeText(e.expertiseZoneTitle) || "-";
 };
+
 const getLicenseExpirationDate = (e: Expert): string => {
   const rd = e.licenseExpirationDate || e.licenseExpireDate || e.expirationDate;
   if (!rd) return "-";
@@ -237,12 +254,16 @@ const getExpertRegionSelection = (expert: Expert): RegionBranchSelection[] => {
 };
 
 const makePayload = (form: ExpertForm): CreateExpertBody => {
+  const expertiseZoneIds = form.expertiseZoneIds
+    .map((id) => Number(id))
+    .filter((id) => Number.isFinite(id));
+
   const p: Record<string, unknown> = {
     firstName: form.firstName,
     lastName: form.lastName,
     code: form.code,
     rank: Number(form.rank ?? 0),
-    expertiseZoneId: Number(form.expertiseZoneId ?? 0),
+    expertiseZoneIds,
     licenseNumber: form.licenseNumber,
     phoneNumber: form.phoneNumber,
     mobileNumber: form.mobileNumber,
@@ -282,6 +303,10 @@ export default function ExpertsPage() {
     [],
   );
   const [branchModalAllBranches, setBranchModalAllBranches] = useState(false);
+  const [isZoneModalOpen, setIsZoneModalOpen] = useState(false);
+  const [zoneModalSelectedIds, setZoneModalSelectedIds] = useState<string[]>(
+    [],
+  );
 
   const zonesQuery = useQuery({
     queryKey: ["expertise-zones"],
@@ -360,6 +385,12 @@ export default function ExpertsPage() {
         .filter((option) => option.id && option.title),
     [branchesQuery.data],
   );
+
+  const selectedZoneTitles = useMemo(() => {
+    return zoneOptions
+      .filter((zone) => formData.expertiseZoneIds.includes(zone.id))
+      .map((zone) => zone.title);
+  }, [zoneOptions, formData.expertiseZoneIds]);
 
   const statusOptions: SelectOption[] = [
     { id: "active", title: "فعال" },
@@ -450,46 +481,85 @@ export default function ExpertsPage() {
     setFormMode("create");
     setFormData(emptyForm);
     setEditingId(null);
+
+    setZoneModalSelectedIds([]);
+    setIsZoneModalOpen(false);
+
+    setBranchModalRegionId("");
+    setBranchModalBranchIds([]);
+    setBranchModalAllBranches(false);
     setIsBranchModalOpen(false);
+
     setIsFormModalOpen(true);
   }, []);
   const handleOpenEditModal = useCallback(
     async (expert: Expert) => {
       setFormMode("edit");
+
       const id = Number(expert.id);
       setEditingId(id);
       setIsFormModalOpen(true);
 
       try {
         const expertDetail = await getExpert(id);
+
         console.log("📥 Expert detail:", expertDetail);
 
-        const regionSelections = getExpertRegionSelection(
-          expertDetail as Expert,
-        );
-        let idate = safeText(expertDetail.licenseIssueDate);
+        // ✅ ابتدا به unknown و سپس به Expert تبدیل می‌کنیم
+        const detail = expertDetail as unknown as Expert;
+
+        // ✅ برای دسترسی داینامیک به فیلدهای احتمالی API
+        const detailRecord = expertDetail as unknown as Record<string, unknown>;
+
+        const regionSelections = getExpertRegionSelection(detail);
+
+        let issueDate = safeText(detail.licenseIssueDate);
+
         try {
-          if (idate?.includes("-")) idate = isoToPersian(idate);
+          if (issueDate.includes("-")) {
+            issueDate = isoToPersian(issueDate);
+          }
         } catch {
-          idate = safeText(expertDetail.licenseIssueDate);
+          issueDate = safeText(detail.licenseIssueDate);
         }
 
+        const rawZoneIds = detailRecord.expertiseZoneIds;
+        const rawZones = detailRecord.expertiseZones;
+
+        const zoneIds: string[] =
+          Array.isArray(rawZoneIds) && rawZoneIds.length > 0
+            ? rawZoneIds.map((zoneId) => safeOptionId(zoneId)).filter(Boolean)
+            : Array.isArray(rawZones)
+              ? rawZones
+                  .map((zone) => {
+                    if (!zone || typeof zone !== "object") {
+                      return "";
+                    }
+
+                    const zoneRecord = zone as Record<string, unknown>;
+
+                    return safeOptionId(
+                      zoneRecord.id ?? zoneRecord.expertiseZoneId,
+                    );
+                  })
+                  .filter(Boolean)
+              : [];
+        setZoneModalSelectedIds(zoneIds);
+
         setFormData({
-          firstName: safeText(expertDetail.firstName),
-          lastName: safeText(expertDetail.lastName),
-          code: getExpertCode(expertDetail as Expert),
-          rank: safeText(expertDetail.rank),
-          expertiseZoneId: safeOptionId(expertDetail.expertiseZoneId),
+          firstName: safeText(detail.firstName),
+          lastName: safeText(detail.lastName),
+          code: getExpertCode(detail),
+          rank: safeText(detail.rank),
+          expertiseZoneIds: zoneIds,
           regions: regionSelections,
-          status: expertDetail.isActive ? "active" : "inactive",
-          licenseNumber: safeText(expertDetail.licenseNumber),
-          licenseIssueDate: idate,
-          licenseExpirationDate: getLicenseExpirationDate(
-            expertDetail as Expert,
-          ),
-          phoneNumber: safeText(expertDetail.phoneNumber),
-          mobileNumber: safeText(expertDetail.mobileNumber),
-          email: safeText(expertDetail.email),
+          status: detail.isActive ? "active" : "inactive",
+          licenseNumber: safeText(detail.licenseNumber),
+          licenseIssueDate: issueDate,
+          licenseExpirationDate: getLicenseExpirationDate(detail),
+          phoneNumber: safeText(detail.phoneNumber),
+          mobileNumber: safeText(detail.mobileNumber),
+          email: safeText(detail.email),
         });
       } catch (error) {
         console.error("❌ Error fetching expert:", error);
@@ -498,9 +568,17 @@ export default function ExpertsPage() {
     },
     [showToast],
   );
+
   const closeFormModal = useCallback(() => {
     setIsFormModalOpen(false);
     setIsBranchModalOpen(false);
+    setIsZoneModalOpen(false);
+
+    setZoneModalSelectedIds([]);
+    setBranchModalRegionId("");
+    setBranchModalBranchIds([]);
+    setBranchModalAllBranches(false);
+
     setFormData(emptyForm);
     setEditingId(null);
   }, []);
@@ -510,36 +588,28 @@ export default function ExpertsPage() {
   );
 
   const handleSubmitForm = () => {
-    /*
-     * ۱. نرمال‌سازی مقادیر ورودی
-     */
-    const firstName = formData.firstName?.trim() ?? "";
-    const lastName = formData.lastName?.trim() ?? "";
-    const code = onlyDigits(formData.code ?? "");
-    const mobileNumber = normalizeIranianMobile(formData.mobileNumber ?? "");
-    const expertiseZoneId = formData.expertiseZoneId ?? "";
-    const licenseNumber = formData.licenseNumber?.trim() ?? "";
+    const firstName = formData.firstName.trim();
+    const lastName = formData.lastName.trim();
+    const code = onlyDigits(formData.code);
+    const mobileNumber = normalizeIranianMobile(formData.mobileNumber);
+    const licenseNumber = formData.licenseNumber.trim();
 
-    /*
-     * ۲. نرمال‌سازی و بررسی رتبه
-     *
-     * اگر رتبه خالی باشد، مقدار پیش‌فرض ۱ در نظر گرفته می‌شود.
-     */
+    const expertiseZoneIds = (formData.expertiseZoneIds ?? [])
+      .map(String)
+      .filter(Boolean);
+
     const normalizedRankText = toEnglishDigits(
       String(formData.rank ?? "").trim(),
     );
 
     const rank = normalizedRankText === "" ? 1 : Number(normalizedRankText);
 
-    /*
-     * ۳. بررسی فیلدهای اجباری عمومی
-     */
     if (
       !firstName ||
       !lastName ||
       !code ||
       !mobileNumber ||
-      !expertiseZoneId ||
+      expertiseZoneIds.length === 0 ||
       !licenseNumber ||
       !Array.isArray(formData.regions) ||
       formData.regions.length === 0
@@ -548,17 +618,11 @@ export default function ExpertsPage() {
       return;
     }
 
-    /*
-     * ۴. اعتبارسنجی کد ملی
-     */
     if (!isValidIranianNationalCode(code)) {
       showToast("کد ملی واردشده معتبر نیست", "error");
       return;
     }
 
-    /*
-     * ۵. اعتبارسنجی شماره موبایل
-     */
     if (!isValidIranianMobile(mobileNumber)) {
       showToast(
         "شماره موبایل واردشده معتبر نیست؛ مثال صحیح: 09121234567",
@@ -567,36 +631,24 @@ export default function ExpertsPage() {
       return;
     }
 
-    /*
-     * ۶. اعتبارسنجی رتبه
-     */
     if (!Number.isInteger(rank) || rank < 1 || rank > 10) {
       showToast("رتبه باید یک عدد صحیح بین ۱ تا ۱۰ باشد", "error");
       return;
     }
 
-    /*
-     * ۷. ساخت نسخه نرمال‌شده فرم
-     */
-    const normalizedFormData = {
+    const normalizedFormData: ExpertForm = {
       ...formData,
       firstName,
       lastName,
       code,
       mobileNumber,
-      expertiseZoneId,
+      expertiseZoneIds,
       licenseNumber,
       rank: String(rank),
     };
 
-    /*
-     * ۸. ساخت payload
-     */
     const payload = makePayload(normalizedFormData);
 
-    /*
-     * ۹. ارسال درخواست ایجاد یا ویرایش
-     */
     if (formMode === "create") {
       createMutation.mutate(payload);
       return;
@@ -898,17 +950,88 @@ export default function ExpertsPage() {
               min={1}
               max={10}
             />
-            <FormSelect<string>
-              id="modal-expertiseZoneId"
-              name="expertiseZoneId"
-              label="حدود صلاحیت"
-              value={formData.expertiseZoneId}
-              onChange={(v) =>
-                setFormData((p) => ({ ...p, expertiseZoneId: v }))
-              }
-              options={zoneOptions}
-              required
-            />
+            <div className="md:col-span-2 space-y-2">
+              <label
+                htmlFor="modal-expertiseZoneButton"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-200"
+              >
+                حدود صلاحیت <span className="text-red-500">*</span>
+              </label>
+
+              <button
+                id="modal-expertiseZoneButton"
+                type="button"
+                onClick={() => {
+                  // هنگام باز شدن، انتخاب‌های فعلی فرم را داخل مودال قرار بده
+                  setZoneModalSelectedIds(formData.expertiseZoneIds);
+                  setIsZoneModalOpen(true);
+                }}
+                className="flex min-h-[42px] w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-right text-sm text-gray-700 shadow-sm transition hover:border-blue-400 hover:bg-blue-50 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              >
+                <span
+                  className={
+                    formData.expertiseZoneIds.length > 0
+                      ? "text-gray-800 dark:text-gray-100"
+                      : "text-gray-400"
+                  }
+                >
+                  {formData.expertiseZoneIds.length > 0
+                    ? `${formData.expertiseZoneIds.length} حدود صلاحیت انتخاب شده`
+                    : "برای انتخاب حدود صلاحیت کلیک کنید"}
+                </span>
+
+                <span className="text-gray-400">⌄</span>
+              </button>
+
+              {selectedZoneTitles.length > 0 && (
+                <div className="flex flex-wrap gap-2 rounded-md border border-gray-200 bg-gray-50 p-2 dark:border-gray-700 dark:bg-gray-900">
+                  {selectedZoneTitles.map((title) => {
+                    const zone = zoneOptions.find(
+                      (item) => item.title === title,
+                    );
+
+                    if (!zone) return null;
+
+                    return (
+                      <span
+                        key={zone.id}
+                        className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-3 py-1 text-xs text-blue-800 dark:bg-blue-900/40 dark:text-blue-200"
+                      >
+                        {title}
+
+                        <button
+                          type="button"
+                          className="font-bold text-red-600 hover:text-red-800"
+                          onClick={() => {
+                            setFormData((previous) => ({
+                              ...previous,
+                              expertiseZoneIds:
+                                previous.expertiseZoneIds.filter(
+                                  (id) => id !== zone.id,
+                                ),
+                            }));
+
+                            setZoneModalSelectedIds((previous) =>
+                              previous.filter((id) => id !== zone.id),
+                            );
+                          }}
+                          aria-label={`حذف ${title}`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+
+              {formData.expertiseZoneIds.length === 0 && (
+                <p className="text-xs text-gray-500">
+                  حداقل یک حدود صلاحیت انتخاب کنید.
+                </p>
+              )}
+            </div>
+
             <FormInput
               id="modal-licenseNumber"
               name="licenseNumber"
@@ -1284,6 +1407,85 @@ export default function ExpertsPage() {
             </strong>{" "}
             مطمئن هستید؟
           </p>
+        )}
+      />
+
+      <Modal
+        isOpen={isZoneModalOpen}
+        isRTL
+        header="انتخاب حدود صلاحیت"
+        onClose={() => setIsZoneModalOpen(false)}
+        overlayLock={zonesQuery.isLoading}
+        footerButtons={
+          <div className="flex gap-2">
+            <FormButton
+              title="تأیید انتخاب"
+              variant="success"
+              onClick={() => {
+                setFormData((previous) => ({
+                  ...previous,
+                  expertiseZoneIds: zoneModalSelectedIds,
+                }));
+
+                setIsZoneModalOpen(false);
+              }}
+            />
+
+            <FormButton
+              title="انصراف"
+              variant="secondary"
+              onClick={() => setIsZoneModalOpen(false)}
+            />
+          </div>
+        }
+        renderContent={() => (
+          <div className="space-y-3">
+            {zonesQuery.isLoading ? (
+              <p className="text-sm text-gray-500">
+                در حال بارگذاری حدود صلاحیت‌ها...
+              </p>
+            ) : zonesQuery.isError ? (
+              <p className="text-sm text-red-500">
+                خطا در دریافت حدود صلاحیت‌ها.
+              </p>
+            ) : zoneOptions.length === 0 ? (
+              <p className="text-sm text-gray-500">حدود صلاحیتی یافت نشد.</p>
+            ) : (
+              <div className="grid max-h-[50vh] grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
+                {zoneOptions.map((zone) => {
+                  const checked = zoneModalSelectedIds.includes(zone.id);
+
+                  return (
+                    <label
+                      key={zone.id}
+                      className={`flex cursor-pointer items-center gap-2 rounded-md border p-3 text-sm transition-colors ${
+                        checked
+                          ? "border-blue-400 bg-blue-50 text-blue-800"
+                          : "border-gray-200 hover:bg-gray-50"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          setZoneModalSelectedIds((previous) =>
+                            checked
+                              ? previous.filter((id) => id !== zone.id)
+                              : [...previous, zone.id],
+                          );
+                        }}
+                        className="rounded text-blue-600 focus:ring-blue-500"
+                      />
+
+                      {checked && <Check className="h-4 w-4" />}
+
+                      <span>{zone.title}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
       />
     </MainLayout.Main>

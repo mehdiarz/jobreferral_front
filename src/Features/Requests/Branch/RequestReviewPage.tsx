@@ -30,7 +30,10 @@ import { getAllRequestStatus } from "../../../services/RequestStatusCrud/getAll"
 import type { RequestItem } from "../../../services/RequestCrud/types";
 import type { DocumentItem } from "../../../services/DocumentCrud/types";
 import type { DocumentFile } from "../../../services/FileService/GetDocumentAllFiles";
-import { isoToPersian, persianToISO } from "../../../utils/persianToISO";
+import {
+  isoToPersianDateTime,
+  persianToISO,
+} from "../../../utils/persianToISO";
 import {
   REQUEST_DEPARTMENT_TYPES,
   type RequestDepartmentTypeConfig,
@@ -86,7 +89,10 @@ export function DepartmentRequestReviewPage({
   const statuses = statusQuery.data?.items;
   const reviewStatusCodes = useMemo(
     () => ({
-      initial: resolveRequestStatusCode(statuses, REQUEST_STATUS_TITLES.initial),
+      initial: resolveRequestStatusCode(
+        statuses,
+        REQUEST_STATUS_TITLES.initial,
+      ),
       review: resolveRequestStatusCode(
         statuses,
         REQUEST_STATUS_TITLES.branchReview,
@@ -109,12 +115,14 @@ export function DepartmentRequestReviewPage({
     ],
     queryFn: async () => {
       const apiFilters = Object.fromEntries(
-        filters.filter((f) => f.value.trim()).map((f) => [
-          f.key,
-          f.key === "creationTime"
-            ? persianToISO(f.value.trim()) || f.value.trim()
-            : f.value.trim(),
-        ]),
+        filters
+          .filter((f) => f.value.trim())
+          .map((f) => [
+            f.key,
+            f.key === "creationTime"
+              ? persianToISO(f.value.trim()) || f.value.trim()
+              : f.value.trim(),
+          ]),
       );
       const response = await getAllRequests({
         ...apiFilters,
@@ -348,9 +356,13 @@ export function DepartmentRequestReviewPage({
         id: "date",
         header: "تاریخ و زمان",
         cell: ({ row }) =>
-          row.original.creationTime
-            ? isoToPersian(row.original.creationTime)
-            : "-",
+          row.original.creationTime ? (
+            <span dir="ltr" className="inline-block whitespace-nowrap">
+              {isoToPersianDateTime(row.original.creationTime)}
+            </span>
+          ) : (
+            "-"
+          ),
       },
       {
         id: "desc",

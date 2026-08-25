@@ -51,6 +51,7 @@ import { getPropertyAppraisalByRequestId } from "../../../services/PropertyAppra
 import type { PropertyAppraisalOutputDto } from "../../../services/PropertyAppraisalCrud/types";
 import { getPropertyAppraisalLookups } from "../../../services/PropertyAppraisalCrud/getLookups";
 import PropertyAppraisalReadOnlyModal from "../../../baseComponents/PropertyAppraisalReadOnlyModal";
+import { generateAppraisalPdf } from "../../../utils/htmlPdfGenerator";
 
 import type {
   RequestItem,
@@ -179,6 +180,21 @@ interface RequestViewPageProps {
   departmentType: RequestDepartmentTypeConfig;
 }
 
+const getDepartmentName = (id: number | null | undefined): string => {
+  switch (Number(id)) {
+    case REQUEST_DEPARTMENT_TYPES.branch.id:
+      return REQUEST_DEPARTMENT_TYPES.branch.name;
+    case REQUEST_DEPARTMENT_TYPES.independentBranch.id:
+      return REQUEST_DEPARTMENT_TYPES.independentBranch.name;
+    case REQUEST_DEPARTMENT_TYPES.region.id:
+      return REQUEST_DEPARTMENT_TYPES.region.name;
+    case REQUEST_DEPARTMENT_TYPES.mainOffice.id:
+      return REQUEST_DEPARTMENT_TYPES.mainOffice.name;
+    default:
+      return "نامشخص";
+  }
+};
+
 export function DepartmentRequestViewPage({
   departmentType,
 }: RequestViewPageProps) {
@@ -245,9 +261,13 @@ export function DepartmentRequestViewPage({
   const deletedFileIdsRef = useRef<number[]>([]);
 
   const [, setUserCacheVersion] = useState(0);
-  const [detailAppraisal, setDetailAppraisal] =
+  const [allAppraisals, setAllAppraisals] = useState<
+    PropertyAppraisalOutputDto[]
+  >([]);
+  const [selectedReadonlyAppraisal, setSelectedReadonlyAppraisal] =
     useState<PropertyAppraisalOutputDto | null>(null);
   const [isAppraisalReadOnlyOpen, setIsAppraisalReadOnlyOpen] = useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   // ─── Queries ───────────────────────────────────────────────────
   // 1. بهینه‌سازی شده: Server-Side Pagination با SkipCount و MaxResultCount
@@ -412,7 +432,6 @@ export function DepartmentRequestViewPage({
       setDetailDocs([]);
       setDetailComments([]);
       setDetailCollaterals([]);
-      setDetailAppraisal(null);
       setIsAppraisalReadOnlyOpen(false);
       setIsDetailOpen(true);
 
@@ -428,18 +447,7 @@ export function DepartmentRequestViewPage({
         // 👇 لود فرم ارزیابی اگه وجود داره
         try {
           const appraisals = await getPropertyAppraisalByRequestId(req.id);
-          if (activeRequestIdRef.current !== req.id) return;
-
-          // The API returns all appraisal forms for the request. Only show
-          // the form created by the department whose request list is open.
-          const departmentAppraisal =
-            appraisals.find(
-              (appraisal) =>
-                Number(appraisal.creatorDepartmentId) ===
-                Number(departmentType.id),
-            ) ?? null;
-
-          setDetailAppraisal(departmentAppraisal);
+          setAllAppraisals(appraisals);
         } catch {
           // فرم ارزیابی نداره - نادیده بگیر
         }
@@ -1113,6 +1121,35 @@ export function DepartmentRequestViewPage({
     showToast,
   ]);
 
+  const handleGeneratePdf = useCallback(async () => {
+    if (!selectedReadonlyAppraisal) return;
+    setIsGeneratingPdf(true);
+    try {
+      const pdfUrl = await generateAppraisalPdf(
+        selectedReadonlyAppraisal,
+        lookupsQuery.data ?? {},
+        {
+          requestCode: selectedRequest?.requestCode,
+          date: selectedRequest?.creationTime
+            ? isoToPersian(selectedRequest.creationTime)
+            : "",
+        },
+      );
+      window.open(pdfUrl, "_blank");
+      showToast("گزارش PDF با موفقیت ایجاد شد", "success");
+    } catch (error: unknown) {
+      console.error("Error generating appraisal PDF:", error);
+      showToast(getErrorMessage(error, "خطا در ایجاد فایل PDF"), "error");
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  }, [
+    selectedReadonlyAppraisal,
+    lookupsQuery.data,
+    selectedRequest,
+    showToast,
+  ]);
+
   // ─── Columns Definition (Optimized with useCallback references) ──
   const columns = useMemo<ColumnDef<RequestItem, unknown>[]>(
     () => [
@@ -1254,22 +1291,39 @@ export function DepartmentRequestViewPage({
                 downloadFile(file.filePath, file.documentId)
               }
             >
-              {detailAppraisal && (
+              {allAppraisals.length > 0 && (
                 <RequestDetailSection
-                  icon={<ClipboardList className="h-5 w-5" />}
-                  title="ارزیابی ملک توسط شعبه"
+                  icon={<ClipboardList className="w-5 h-5" />}
+                  title="فرم‌های ارزیابی ملک"
+                  count={`${allAppraisals.length} فرم`}
                   tone="blue"
                 >
-                  <div className="flex items-center justify-between gap-4 rounded-xl border border-blue-100 bg-blue-50 p-4">
-                    <div className="text-sm text-blue-800">
-                      فرم ارزیابی ملک برای این درخواست تکمیل و ذخیره شده است.
-                    </div>
-                    <FormButton
-                      title="مشاهده فرم ارزیابی"
-                      variant="primary"
-                      size="sm"
-                      onClick={() => setIsAppraisalReadOnlyOpen(true)}
-                    />
+                  <div className="space-y-3">
+                    {allAppraisals.map((appraisal, index) => (
+                      <div
+                        key={appraisal.id ?? index}
+                        className="flex items-center justify-between gap-4 rounded-xl border border-blue-100 bg-blue-50 p-4"
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-blue-800">
+                            فرم ارزیابی ملک {index + 1}
+                          </p>
+                          <p className="text-xs text-blue-600 mt-1">
+                            ثبت شده توسط:{" "}
+                            {getDepartmentName(appraisal.creatorDepartmentId)}
+                          </p>
+                        </div>
+                        <FormButton
+                          title="مشاهده فرم"
+                          variant="primary"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedReadonlyAppraisal(appraisal);
+                            setIsAppraisalReadOnlyOpen(true);
+                          }}
+                        />
+                      </div>
+                    ))}
                   </div>
                 </RequestDetailSection>
               )}
@@ -1844,9 +1898,14 @@ export function DepartmentRequestViewPage({
       />
       <PropertyAppraisalReadOnlyModal
         isOpen={isAppraisalReadOnlyOpen}
-        appraisal={detailAppraisal}
+        appraisal={selectedReadonlyAppraisal}
         lookups={lookupsQuery.data ?? {}}
-        onClose={() => setIsAppraisalReadOnlyOpen(false)}
+        isGeneratingPdf={isGeneratingPdf}
+        onGeneratePdf={handleGeneratePdf}
+        onClose={() => {
+          setIsAppraisalReadOnlyOpen(false);
+          setSelectedReadonlyAppraisal(null);
+        }}
       />
     </MainLayout.Main>
   );

@@ -1,12 +1,18 @@
 import { apiClient } from "../../libs/api";
-import type { EditExpertBody, ExpertItem } from "./types";
+import type { AbpResponse, EditExpertBody, ExpertItem } from "./types";
 
 export async function updateExpert(body: EditExpertBody): Promise<ExpertItem> {
-  return apiClient.request<ExpertItem>(
+  const response = await apiClient.request<AbpResponse<ExpertItem>>(
     "/services/app/JudicialExpertCrud/Edit",
     {
       method: "POST",
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        ...body,
+        expertiseZoneIds: body.expertiseZoneIds ?? [],
+        regions: body.regions ?? [],
+      }),
     },
   );
+
+  return response.result;
 }

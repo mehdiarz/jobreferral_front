@@ -125,6 +125,12 @@ export const defaultMenuItems = [
         path: "/dashboard/base-info/credit-limit-authorities",
         permissions: [Permissions.Pages_CreditLimitAuthorities],
       },
+      {
+        id: "fee-regulation",
+        title: "بخشنامه حق‌الزحمه",
+        path: "/dashboard/base-info/fee-regulation",
+        permissions: [],
+      },
     ],
   },
   {

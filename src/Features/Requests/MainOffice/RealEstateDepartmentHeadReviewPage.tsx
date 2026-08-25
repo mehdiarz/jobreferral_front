@@ -24,16 +24,17 @@ import { createRequestComment } from "../../../services/RequestCommentCrud/creat
 import { getUserById } from "../../../services/Users/getUserById";
 import { getPropertyAppraisalLookups } from "../../../services/PropertyAppraisalCrud/getLookups";
 import { getPropertyAppraisalByRequestId } from "../../../services/PropertyAppraisalCrud/getByRequestId";
-import { updatePropertyAppraisal } from "../../../services/PropertyAppraisalCrud/update";
-import type { PropertyAppraisalInputDto } from "../../../services/PropertyAppraisalCrud/types";
-import PropertyAppraisalFormModal from "../../../baseComponents/PropertyAppraisalFormModal";
+import { generateAppraisalPdf } from "../../../utils/htmlPdfGenerator";
 
 import type { RequestItem } from "../../../services/RequestCrud/types";
 import type {
   PropertyAppraisalOutputDto,
   PropertyAppraisalLookupsDto,
 } from "../../../services/PropertyAppraisalCrud/types";
-import { isoToPersianDateTime } from "../../../utils/persianToISO";
+import {
+  isoToPersian,
+  isoToPersianDateTime,
+} from "../../../utils/persianToISO";
 import { persianToISO } from "../../../utils/persianToISO";
 import {
   REQUEST_DEPARTMENT_TYPES,
@@ -64,6 +65,25 @@ interface RealEstateDepartmentHeadReviewPageProps {
   departmentType: RequestDepartmentTypeConfig;
 }
 
+const getDepartmentName = (id: number | null | undefined): string => {
+  switch (Number(id)) {
+    case REQUEST_DEPARTMENT_TYPES.branch.id:
+      return REQUEST_DEPARTMENT_TYPES.branch.name;
+
+    case REQUEST_DEPARTMENT_TYPES.independentBranch.id:
+      return REQUEST_DEPARTMENT_TYPES.independentBranch.name;
+
+    case REQUEST_DEPARTMENT_TYPES.region.id:
+      return REQUEST_DEPARTMENT_TYPES.region.name;
+
+    case REQUEST_DEPARTMENT_TYPES.mainOffice.id:
+      return REQUEST_DEPARTMENT_TYPES.mainOffice.name;
+
+    default:
+      return "نامشخص";
+  }
+};
+
 export function DepartmentRealEstateDepartmentHeadReviewPage({
   departmentType,
 }: RealEstateDepartmentHeadReviewPageProps) {
@@ -85,13 +105,14 @@ export function DepartmentRealEstateDepartmentHeadReviewPage({
   const [mainOfficeAppraisal, setMainOfficeAppraisal] =
     useState<PropertyAppraisalOutputDto | null>(null);
 
-  // فرم ثبت‌شده توسط سایر واحدها؛ فقط قابل مشاهده است.
-  const [externalAppraisal, setExternalAppraisal] =
-    useState<PropertyAppraisalOutputDto | null>(null);
+  // فرم‌های ثبت‌شده توسط سایر واحدها؛ فقط قابل مشاهده هستند.
+  const [externalAppraisals, setExternalAppraisals] = useState<
+    PropertyAppraisalOutputDto[]
+  >([]);
 
-  const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
-  const [assetForm, setAssetForm] = useState<PropertyAppraisalInputDto>({});
-  const [isSavingAppraisal, setIsSavingAppraisal] = useState(false);
+  const [selectedReadonlyAppraisal, setSelectedReadonlyAppraisal] =
+    useState<PropertyAppraisalOutputDto | null>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const userCacheRef = useRef<Map<number, { name: string; role: string }>>(
     new Map(),
@@ -179,13 +200,11 @@ export function DepartmentRealEstateDepartmentHeadReviewPage({
       setSelectedRequest(null);
       setComment("");
 
-      // جلوگیری از نمایش داده‌های درخواست قبلی
       setMainOfficeAppraisal(null);
-      setExternalAppraisal(null);
-      setAssetForm({});
+      setExternalAppraisals([]);
+      setSelectedReadonlyAppraisal(null);
 
       setIsAppraisalReadOnlyOpen(false);
-      setIsAssetModalOpen(false);
       setIsDetailOpen(true);
 
       try {
@@ -207,24 +226,20 @@ export function DepartmentRealEstateDepartmentHeadReviewPage({
                 Number(mainOfficeDepartmentId),
             ) ?? null;
 
-          const externalForm =
-            appraisals.find(
-              (appraisal) =>
-                Number(appraisal.creatorDepartmentId) !==
-                Number(mainOfficeDepartmentId),
-            ) ?? null;
+          const externalForms = appraisals.filter(
+            (appraisal) =>
+              Number(appraisal.creatorDepartmentId) !==
+              Number(mainOfficeDepartmentId),
+          );
 
           setMainOfficeAppraisal(mainOfficeForm);
-          setExternalAppraisal(externalForm);
-
-          // فرم مودال ویرایش فقط باید با فرم ستاد پر شود.
-          setAssetForm(mainOfficeForm ?? {});
+          setExternalAppraisals(externalForms);
         } catch (error) {
           console.error("Error loading property appraisals:", error);
 
           setMainOfficeAppraisal(null);
-          setExternalAppraisal(null);
-          setAssetForm({});
+          setExternalAppraisals([]);
+          setSelectedReadonlyAppraisal(null);
         }
 
         const ids = new Set<number>();
@@ -288,77 +303,29 @@ export function DepartmentRealEstateDepartmentHeadReviewPage({
     [selectedRequest, comment, user, requestsQuery, showToast],
   );
 
-  const handleFormChange = useCallback(
-    (
-      field: keyof PropertyAppraisalInputDto,
-      value: string | boolean | number,
-    ) => {
-      setAssetForm((prev) => ({ ...prev, [field]: value }));
-    },
-    [],
-  );
-
-  const handleSaveAppraisal = useCallback(async () => {
-    const mainOfficeDepartmentId = REQUEST_DEPARTMENT_TYPES.mainOffice.id;
-
-    if (!selectedRequest?.id) {
-      showToast("شناسه درخواست نامعتبر است.", "error");
-      return;
-    }
-
-    // فقط فرم متعلق به ستاد قابل ویرایش است.
-    if (
-      !mainOfficeAppraisal?.id ||
-      Number(mainOfficeAppraisal.creatorDepartmentId) !==
-        Number(mainOfficeDepartmentId)
-    ) {
-      showToast(
-        "در این مرحله فقط فرم ارزیابی ثبت‌شده توسط ستاد قابل ویرایش است.",
-        "error",
-      );
-      return;
-    }
-
-    setIsSavingAppraisal(true);
-
+  const handleGeneratePdf = useCallback(async () => {
+    if (!selectedReadonlyAppraisal) return;
+    setIsGeneratingPdf(true);
     try {
-      const cleanBody: PropertyAppraisalInputDto = {
-        ...assetForm,
-        requestId: selectedRequest.id,
-        creatorDepartmentId: mainOfficeDepartmentId,
-      };
-
-      /*
-       * null، undefined و string خالی به API ارسال نمی‌شوند.
-       * مقدار false حفظ می‌شود تا checkboxها دچار مشکل نشوند.
-       */
-      (Object.keys(cleanBody) as (keyof PropertyAppraisalInputDto)[]).forEach(
-        (key) => {
-          const value = cleanBody[key];
-
-          if (value === null || value === undefined || value === "") {
-            delete cleanBody[key];
-          }
+      const pdfUrl = await generateAppraisalPdf(
+        selectedReadonlyAppraisal,
+        lookups,
+        {
+          requestCode: selectedRequest?.requestCode,
+          date: selectedRequest?.creationTime
+            ? isoToPersian(selectedRequest.creationTime)
+            : "",
         },
       );
-
-      const saved = await updatePropertyAppraisal({
-        ...cleanBody,
-        id: mainOfficeAppraisal.id,
-      });
-
-      setMainOfficeAppraisal(saved);
-      setAssetForm(saved);
-
-      showToast("فرم ارزیابی ستاد با موفقیت ویرایش شد.", "success");
-      setIsAssetModalOpen(false);
+      window.open(pdfUrl, "_blank");
+      showToast("گزارش PDF با موفقیت ایجاد شد", "success");
     } catch (error: unknown) {
-      console.error("Error saving appraisal:", error);
-      showToast(getErrorMessage(error, "خطا در ذخیره ارزیابی"), "error");
+      console.error("Error generating appraisal PDF:", error);
+      showToast(getErrorMessage(error, "خطا در ایجاد فایل PDF"), "error");
     } finally {
-      setIsSavingAppraisal(false);
+      setIsGeneratingPdf(false);
     }
-  }, [assetForm, mainOfficeAppraisal, selectedRequest, showToast]);
+  }, [selectedReadonlyAppraisal, lookups, selectedRequest, showToast]);
 
   // ─── Columns ───────────────────────────────────────────────────
   const columns = useMemo<ColumnDef<RequestItem, unknown>[]>(
@@ -387,9 +354,13 @@ export function DepartmentRealEstateDepartmentHeadReviewPage({
         id: "date",
         header: "تاریخ و زمان",
         cell: ({ row }) =>
-          row.original.creationTime
-            ? isoToPersianDateTime(row.original.creationTime)
-            : "-",
+          row.original.creationTime ? (
+            <span dir="ltr" className="inline-block whitespace-nowrap">
+              {isoToPersianDateTime(row.original.creationTime)}
+            </span>
+          ) : (
+            "-"
+          ),
       },
       {
         id: "title",
@@ -471,52 +442,75 @@ export function DepartmentRealEstateDepartmentHeadReviewPage({
               documents={[]}
               getUserData={getUserCacheData}
             >
-              {(mainOfficeAppraisal || externalAppraisal) && (
-                <RequestDetailSection
-                  icon={<ClipboardList className="w-5 h-5" />}
-                  title="فرم ارزیابی ملک"
-                  tone="blue"
-                >
-                  <div className="space-y-3">
-                    {/* فرم سایر واحدها: فقط مشاهده */}
-                    {externalAppraisal && (
-                      <div className="flex items-center justify-between gap-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
-                        <div className="text-sm text-amber-800">
-                          فرم ارزیابی توسط شعبه، شعبه مستقل یا منطقه ثبت شده است
-                          و فقط قابل مشاهده است.
-                        </div>
-
-                        <FormButton
-                          title="مشاهده فرم ارزیابی واحد"
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => setIsAppraisalReadOnlyOpen(true)}
-                        />
+              <RequestDetailSection
+                icon={<ClipboardList className="w-5 h-5" />}
+                title="فرم‌های ارزیابی ملک"
+                tone="blue"
+              >
+                <div className="space-y-3">
+                  {/* فرم ارزیابی ستاد */}
+                  {mainOfficeAppraisal && (
+                    <div className="flex items-center justify-between gap-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+                      <div className="text-sm text-blue-800">
+                        فرم ارزیابی توسط واحد{" "}
+                        <span className="font-semibold">
+                          {REQUEST_DEPARTMENT_TYPES.mainOffice.name}
+                        </span>{" "}
+                        ثبت شده است و فقط قابل مشاهده است.
                       </div>
-                    )}
 
-                    {/* فرم ستاد: قابل ویرایش */}
-                    {mainOfficeAppraisal && (
-                      <div className="flex items-center justify-between gap-4 rounded-xl border border-blue-100 bg-blue-50 p-4">
+                      <FormButton
+                        title={`مشاهده فرم ارزیابی ${REQUEST_DEPARTMENT_TYPES.mainOffice.name}`}
+                        variant="primary"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedReadonlyAppraisal(mainOfficeAppraisal);
+                          setIsAppraisalReadOnlyOpen(true);
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {/* فرم‌های سایر واحدها */}
+                  {externalAppraisals.map((appraisal, index) => {
+                    const departmentName = getDepartmentName(
+                      appraisal.creatorDepartmentId,
+                    );
+
+                    return (
+                      <div
+                        key={appraisal.id ?? index}
+                        className="flex items-center justify-between gap-4 rounded-xl border border-blue-200 bg-blue-50 p-4"
+                      >
                         <div className="text-sm text-blue-800">
-                          فرم ارزیابی توسط ستاد ثبت شده است و در این مرحله امکان
-                          ویرایش آن وجود دارد.
+                          فرم ارزیابی توسط واحد{" "}
+                          <span className="font-semibold">
+                            {departmentName}
+                          </span>{" "}
+                          ثبت شده است و فقط قابل مشاهده است.
                         </div>
 
                         <FormButton
-                          title="ویرایش فرم ارزیابی ستاد"
+                          title={`مشاهده فرم ارزیابی ${departmentName}`}
                           variant="primary"
                           size="sm"
                           onClick={() => {
-                            setAssetForm(mainOfficeAppraisal);
-                            setIsAssetModalOpen(true);
+                            setSelectedReadonlyAppraisal(appraisal);
+                            setIsAppraisalReadOnlyOpen(true);
                           }}
                         />
                       </div>
-                    )}
-                  </div>
-                </RequestDetailSection>
-              )}
+                    );
+                  })}
+
+                  {/* هیچ فرمی ثبت نشده است */}
+                  {!mainOfficeAppraisal && externalAppraisals.length === 0 && (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                      هنوز هیچ فرم ارزیابی ملکی توسط واحدها ثبت نشده است.
+                    </div>
+                  )}
+                </div>
+              </RequestDetailSection>
 
               <RequestDetailSection
                 icon={<MessageSquareText className="w-5 h-5" />}
@@ -540,18 +534,15 @@ export function DepartmentRealEstateDepartmentHeadReviewPage({
       {/* مودال نمایش فرم ارزیابی - فقط خواندنی */}
       <PropertyAppraisalReadOnlyModal
         isOpen={isAppraisalReadOnlyOpen}
-        appraisal={externalAppraisal}
+        appraisal={selectedReadonlyAppraisal}
         lookups={lookups}
-        onClose={() => setIsAppraisalReadOnlyOpen(false)}
-      />
-      <PropertyAppraisalFormModal
-        isOpen={isAssetModalOpen}
-        form={assetForm}
-        lookups={lookups}
-        isSaving={isSavingAppraisal}
-        onChange={handleFormChange}
-        onSave={handleSaveAppraisal}
-        onClose={() => setIsAssetModalOpen(false)}
+        isGeneratingPdf={isGeneratingPdf}
+        onGeneratePdf={handleGeneratePdf}
+
+        onClose={() => {
+          setIsAppraisalReadOnlyOpen(false);
+          setSelectedReadonlyAppraisal(null);
+        }}
       />
     </MainLayout.Main>
   );

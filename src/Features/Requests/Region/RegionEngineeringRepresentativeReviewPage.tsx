@@ -385,9 +385,13 @@ export function DepartmentRegionEngineeringRepresentativeReviewPage({
         id: "date",
         header: "تاریخ و زمان",
         cell: ({ row }) =>
-          row.original.creationTime
-            ? isoToPersianDateTime(row.original.creationTime)
-            : "-",
+          row.original.creationTime ? (
+            <span dir="ltr" className="inline-block whitespace-nowrap">
+              {isoToPersianDateTime(row.original.creationTime)}
+            </span>
+          ) : (
+            "-"
+          ),
       },
       {
         id: "title",

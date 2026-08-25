@@ -7,6 +7,7 @@ import type {
   PropertyAppraisalLookupsDto,
   LookupValueDto,
 } from "../services/PropertyAppraisalCrud/types";
+import type { RequestSignatureOutputDto } from "../services/RequestSignatureCrud/types";
 
 // ─── Styles ──────────────────────────────────────────────────────
 const inputClass =
@@ -112,6 +113,7 @@ export default function PropertyAppraisalFormModal({
   lookups,
   isSaving,
   isGeneratingPdf = false,
+  signatures = [],
   onChange,
   onSave,
   onGeneratePdf,
@@ -122,6 +124,7 @@ export default function PropertyAppraisalFormModal({
   lookups: PropertyAppraisalLookupsDto;
   isSaving: boolean;
   isGeneratingPdf?: boolean;
+  signatures?: RequestSignatureOutputDto[];
   onChange: (
     field: keyof PropertyAppraisalInputDto,
     value: string | boolean | number,
@@ -242,6 +245,45 @@ export default function PropertyAppraisalFormModal({
       checked={Boolean(form[field])}
       onChange={(checked) => onChange(field, checked)}
     />
+  );
+
+  const renderSignatureRow = (signature: RequestSignatureOutputDto) => (
+    <div
+      key={signature.id}
+      className="grid grid-cols-3 gap-3 border-b border-gray-200 pb-3 last:border-b-0 last:pb-0"
+    >
+      <div>
+        <label className={labelClass}>نام و نام خانوادگی</label>
+        <input
+          type="text"
+          className={`${inputClass} bg-gray-100`}
+          readOnly
+          value={signature.fullName ?? ""}
+        />
+      </div>
+      <div>
+        <label className={labelClass}>کد پرسنلی</label>
+        <input
+          type="text"
+          className={`${inputClass} bg-gray-100`}
+          readOnly
+          value={String(signature.personCode ?? "")}
+        />
+      </div>
+      <div>
+        <label className={labelClass}>تاریخ و زمان امضا</label>
+        <input
+          type="text"
+          className={`${inputClass} bg-gray-100`}
+          readOnly
+          value={
+            signature.creationTime
+              ? new Date(signature.creationTime).toLocaleString("fa-IR")
+              : ""
+          }
+        />
+      </div>
+    </div>
   );
 
   return (
@@ -686,6 +728,20 @@ export default function PropertyAppraisalFormModal({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {renderField("نام شعبه", "branchName")}
               {renderField("کد شعبه", "branchCode")}
+            </div>
+          </div>
+
+          {/* بخش ۱۲: امضا کنندگان */}
+          <div className={sectionClass}>
+            <h4 className={sectionTitleClass}>امضا کنندگان</h4>
+            <div className="space-y-3">
+              {signatures && signatures.length > 0 ? (
+                signatures.map(renderSignatureRow)
+              ) : (
+                <p className="text-sm text-gray-500">
+                  هیچ امضاکننده‌ای ثبت نشده است.
+                </p>
+              )}
             </div>
           </div>
         </div>

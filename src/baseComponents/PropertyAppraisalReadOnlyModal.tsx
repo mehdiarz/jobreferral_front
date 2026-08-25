@@ -6,6 +6,7 @@ import type {
   PropertyAppraisalLookupsDto,
   LookupValueDto,
 } from "../services/PropertyAppraisalCrud/types";
+import type { RequestSignatureOutputDto } from "../services/RequestSignatureCrud/types";
 
 // ─── Styles ──────────────────────────────────────────────────────
 const inputClass =
@@ -29,11 +30,17 @@ export default function PropertyAppraisalReadOnlyModal({
   isOpen,
   appraisal,
   lookups,
+  signatures = [],
   onClose,
+  isGeneratingPdf = false,
+  onGeneratePdf,
 }: {
   isOpen: boolean;
   appraisal: PropertyAppraisalOutputDto | null;
   lookups: PropertyAppraisalLookupsDto;
+  signatures?: RequestSignatureOutputDto[];
+  isGeneratingPdf?: boolean;
+  onGeneratePdf?: () => void;
   onClose: () => void;
 }) {
   if (!appraisal) return null;
@@ -183,6 +190,45 @@ export default function PropertyAppraisalReadOnlyModal({
     </div>
   );
 
+  const renderSignatureRow = (signature: RequestSignatureOutputDto) => (
+    <div
+      key={signature.id}
+      className="grid grid-cols-3 gap-3 border-b border-gray-200 pb-3 last:border-b-0 last:pb-0"
+    >
+      <div>
+        <label className={labelClass}>نام و نام خانوادگی</label>
+        <input
+          type="text"
+          className={`${inputClass} bg-gray-100`}
+          readOnly
+          value={signature.fullName ?? ""}
+        />
+      </div>
+      <div>
+        <label className={labelClass}>کد پرسنلی</label>
+        <input
+          type="text"
+          className={`${inputClass} bg-gray-100`}
+          readOnly
+          value={String(signature.personCode ?? "")}
+        />
+      </div>
+      <div>
+        <label className={labelClass}>تاریخ و زمان امضا</label>
+        <input
+          type="text"
+          className={`${inputClass} bg-gray-100`}
+          readOnly
+          value={
+            signature.creationTime
+              ? new Date(signature.creationTime).toLocaleString("fa-IR")
+              : ""
+          }
+        />
+      </div>
+    </div>
+  );
+
   return (
     <Modal
       isOpen={isOpen}
@@ -192,7 +238,17 @@ export default function PropertyAppraisalReadOnlyModal({
       className="min-w-[1100px]"
       overlayLock={false}
       footerButtons={
-        <FormButton title="بستن" variant="secondary" onClick={onClose} />
+        <div className="flex gap-2">
+          {onGeneratePdf && (
+            <FormButton
+              title="دانلود PDF"
+              variant="secondary"
+              onClick={onGeneratePdf}
+              isLoading={isGeneratingPdf}
+              disabled={isGeneratingPdf}
+            />
+          )}
+        </div>
       }
       renderContent={() => (
         <div
@@ -586,6 +642,19 @@ export default function PropertyAppraisalReadOnlyModal({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {renderField("نام شعبه", "branchName")}
               {renderField("کد شعبه", "branchCode")}
+            </div>
+          </div>
+          {/* بخش ۱۲: امضا کنندگان */}
+          <div className={sectionClass}>
+            <h4 className={sectionTitleClass}>امضا کنندگان</h4>
+            <div className="space-y-3">
+              {signatures && signatures.length > 0 ? (
+                signatures.map(renderSignatureRow)
+              ) : (
+                <p className="text-sm text-gray-500">
+                  هیچ امضاکننده‌ای ثبت نشده است.
+                </p>
+              )}
             </div>
           </div>
         </div>

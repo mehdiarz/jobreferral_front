@@ -315,6 +315,21 @@ const personTypeRoute = createRoute({
   },
 });
 
+const FeeRegulationPage = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/base-info/fee-regulation",
+  component: () => {
+    const Page = lazy(
+      () => import("../Features/BaseInfo/FeeRegulationPage.tsx"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
 const requestViewRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/requests/branch/view",
@@ -398,6 +413,22 @@ const independentBranchRequestRequestReferralRoute = createRoute({
     const Page = lazy(
       () =>
         import("../Features/Requests/IndependentBranch/RequestReferralPage"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
+const independentRequestFeeCalculationRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/independent/fee-calculation",
+  component: () => {
+    const Page = lazy(
+      () =>
+        import("../Features/Requests/IndependentBranch/RequestFeeCalculationPage.tsx"),
     );
     return (
       <SuspenseLoading>
@@ -641,6 +672,37 @@ const mainOfficeRequestEngineeringManagementApprovalRoute = createRoute({
   },
 });
 
+const mainOfficeRequestAssetReviewRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/main-office/asset-review",
+  component: () => {
+    const Page = lazy(
+      () =>
+        import("../Features/Requests/MainOffice/RequestAssetReviewPage.tsx"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
+const mainOfficeRequestReferralRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/main-office/referral",
+  component: () => {
+    const Page = lazy(
+      () => import("../Features/Requests/MainOffice/RequestReferralPage.tsx"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
 const requestCreateRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/requests/branch/create",
@@ -701,6 +763,21 @@ const requestReferralRoute = createRoute({
   },
 });
 
+const requestFeeCalculationRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/branch/fee-calculation",
+  component: () => {
+    const Page = lazy(
+      () => import("../Features/Requests/Branch/RequestFeeCalculationPage.tsx"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
 const profileRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/profile",
@@ -736,6 +813,7 @@ const routeTree = rootRoute.addChildren([
     departmentGradeRoute,
     // departmentRoute,
     personTypeRoute,
+    FeeRegulationPage,
     requestViewRoute,
     independentBranchRequestViewRoute,
     independentBranchRequestCreateRoute,
@@ -757,10 +835,14 @@ const routeTree = rootRoute.addChildren([
     mainOfficeRequestRealEstateCircleHeadReviewRoute,
     mainOfficeRequestRealEstateExpertReviewRoute,
     mainOfficeRequestEngineeringManagementApprovalRoute,
+    mainOfficeRequestAssetReviewRoute,
+    mainOfficeRequestReferralRoute,
     requestCreateRoute,
     requestReviewRoute,
     requestAssetReviewRoute,
     requestReferralRoute,
+    requestFeeCalculationRoute,
+    independentRequestFeeCalculationRoute,
   ]),
 ]);
 
