@@ -52,6 +52,8 @@ import type { PropertyAppraisalOutputDto } from "../../../services/PropertyAppra
 import { getPropertyAppraisalLookups } from "../../../services/PropertyAppraisalCrud/getLookups";
 import PropertyAppraisalReadOnlyModal from "../../../baseComponents/PropertyAppraisalReadOnlyModal";
 import { generateAppraisalPdf } from "../../../utils/htmlPdfGenerator";
+import { getAllRequestSignatures } from "../../../services/RequestSignatureCrud/getAll";
+import type { RequestSignatureOutputDto } from "../../../services/RequestSignatureCrud/types";
 
 import type {
   RequestItem,
@@ -268,6 +270,9 @@ export function DepartmentRequestViewPage({
     useState<PropertyAppraisalOutputDto | null>(null);
   const [isAppraisalReadOnlyOpen, setIsAppraisalReadOnlyOpen] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [requestSignatures, setRequestSignatures] = useState<
+    RequestSignatureOutputDto[]
+  >([]);
 
   // ─── Queries ───────────────────────────────────────────────────
   // 1. بهینه‌سازی شده: Server-Side Pagination با SkipCount و MaxResultCount
@@ -434,6 +439,7 @@ export function DepartmentRequestViewPage({
       setDetailCollaterals([]);
       setIsAppraisalReadOnlyOpen(false);
       setIsDetailOpen(true);
+      setRequestSignatures([]);
 
       try {
         await viewRequest(req.id);
@@ -443,6 +449,20 @@ export function DepartmentRequestViewPage({
         if (activeRequestIdRef.current !== req.id) return;
 
         setSelectedRequest(detail);
+
+        try {
+          const signaturesResult = await getAllRequestSignatures({
+            requestId: req.id,
+            sorting: "creationTime asc",
+            skipCount: 0,
+            maxResultCount: 1000,
+          });
+
+          setRequestSignatures(signaturesResult.items);
+        } catch (error) {
+          console.error("Error loading request signatures:", error);
+          setRequestSignatures([]);
+        }
 
         // 👇 لود فرم ارزیابی اگه وجود داره
         try {
@@ -1133,6 +1153,7 @@ export function DepartmentRequestViewPage({
           date: selectedRequest?.creationTime
             ? isoToPersian(selectedRequest.creationTime)
             : "",
+          signatures: requestSignatures,
         },
       );
       window.open(pdfUrl, "_blank");
@@ -1171,7 +1192,7 @@ export function DepartmentRequestViewPage({
       {
         id: "role",
         header: "نقش سازمانی",
-        cell: ({ row }) => row.original.actorUserRoleName || "-",
+        cell: ({ row }) => row.original.actorUserRoleNames?.join("-") || "-",
       },
       {
         id: "date",
@@ -1327,6 +1348,80 @@ export function DepartmentRequestViewPage({
                   </div>
                 </RequestDetailSection>
               )}
+
+              <RequestDetailSection
+                icon={<ClipboardList className="w-5 h-5" />}
+                title="امضاهای ثبت‌شده"
+                tone="blue"
+              >
+                {requestSignatures.length > 0 ? (
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="min-w-full text-right text-sm">
+                      <thead className="bg-slate-50 text-slate-700">
+                        <tr>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            ردیف
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            نام و نام خانوادگی
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            کد پرسنلی
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            نقش سازمانی
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            تاریخ و زمان امضا
+                          </th>
+                        </tr>
+                      </thead>
+
+                      <tbody className="divide-y divide-slate-100">
+                        {requestSignatures.map((signature, index) => (
+                          <tr
+                            key={
+                              signature.id ?? `${signature.personCode}-${index}`
+                            }
+                            className="text-slate-700"
+                          >
+                            <td className="px-4 py-3">{index + 1}</td>
+
+                            <td className="px-4 py-3">
+                              {signature.fullName || "-"}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              {signature.personCode || "-"}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              {signature.roleName || "-"}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              {signature.creationTime ? (
+                                <span
+                                  dir="ltr"
+                                  className="inline-block whitespace-nowrap"
+                                >
+                                  {isoToPersianDateTime(signature.creationTime)}
+                                </span>
+                              ) : (
+                                "-"
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                    هنوز امضایی برای این درخواست ثبت نشده است.
+                  </div>
+                )}
+              </RequestDetailSection>
             </RequestDetailsPanel>
           );
         }}
@@ -1900,6 +1995,7 @@ export function DepartmentRequestViewPage({
         isOpen={isAppraisalReadOnlyOpen}
         appraisal={selectedReadonlyAppraisal}
         lookups={lookupsQuery.data ?? {}}
+        signatures={requestSignatures}
         isGeneratingPdf={isGeneratingPdf}
         onGeneratePdf={handleGeneratePdf}
         onClose={() => {

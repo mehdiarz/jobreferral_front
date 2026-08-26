@@ -23,6 +23,7 @@ export interface RequestSignatureOutputDto {
 }
 
 export interface GetAllRequestSignaturesParams {
+  requestId?: number;
   sorting?: string;
   skipCount?: number;
   maxResultCount?: number;

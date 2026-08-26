@@ -1,5 +1,3 @@
-// src/Features/Requests/Region/RegionDescriptionReferralPage.tsx
-
 import { useMemo, useRef, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -22,18 +20,19 @@ import { useAuthStore } from "../../../libs/store";
 import { getAllRequests } from "../../../services/RequestCrud/getAll";
 import { getRequest } from "../../../services/RequestCrud/get";
 import { viewRequest } from "../../../services/RequestCrud/viewRequest";
-import { userAction } from "../../../services/RequestCrud/userAction";
+import {
+  getUserActionSuccessMessage,
+  userAction,
+} from "../../../services/RequestCrud/userAction";
 import { createRequestComment } from "../../../services/RequestCommentCrud/create";
 import { getUserById } from "../../../services/Users/getUserById";
 import { getPropertyAppraisalLookups } from "../../../services/PropertyAppraisalCrud/getLookups";
 import { getPropertyAppraisalByRequestId } from "../../../services/PropertyAppraisalCrud/getByRequestId";
-
-import { updatePropertyAppraisal } from "../../../services/PropertyAppraisalCrud/update";
-import PropertyAppraisalFormModal from "../../../baseComponents/PropertyAppraisalFormModal";
+import { getAllRequestSignatures } from "../../../services/RequestSignatureCrud/getAll";
+import type { RequestSignatureOutputDto } from "../../../services/RequestSignatureCrud/types";
 
 import type { RequestItem } from "../../../services/RequestCrud/types";
 import type {
-  PropertyAppraisalInputDto,
   PropertyAppraisalOutputDto,
   PropertyAppraisalLookupsDto,
 } from "../../../services/PropertyAppraisalCrud/types";
@@ -65,6 +64,25 @@ interface RegionDescriptionReferralPageProps {
   departmentType: RequestDepartmentTypeConfig;
 }
 
+const getDepartmentName = (id: number | string | null | undefined): string => {
+  switch (Number(id)) {
+    case Number(REQUEST_DEPARTMENT_TYPES.branch.id):
+      return REQUEST_DEPARTMENT_TYPES.branch.name;
+
+    case Number(REQUEST_DEPARTMENT_TYPES.independentBranch.id):
+      return REQUEST_DEPARTMENT_TYPES.independentBranch.name;
+
+    case Number(REQUEST_DEPARTMENT_TYPES.region.id):
+      return REQUEST_DEPARTMENT_TYPES.region.name;
+
+    case Number(REQUEST_DEPARTMENT_TYPES.mainOffice.id):
+      return REQUEST_DEPARTMENT_TYPES.mainOffice.name;
+
+    default:
+      return "واحد نامشخص";
+  }
+};
+
 export function DepartmentRegionDescriptionReferralPage({
   departmentType,
 }: RegionDescriptionReferralPageProps) {
@@ -82,27 +100,17 @@ export function DepartmentRegionDescriptionReferralPage({
   // مودال مشاهده فرم‌های سایر واحدها
   const [isAppraisalReadOnlyOpen, setIsAppraisalReadOnlyOpen] = useState(false);
 
-  // مودال ویرایش فرم ثبت‌شده توسط منطقه
-  const [isAppraisalEditOpen, setIsAppraisalEditOpen] = useState(false);
-  const [isSavingAppraisal, setIsSavingAppraisal] = useState(false);
-
-  // فقط فرم ثبت‌شده توسط منطقه قابل ویرایش است.
-  const [regionAppraisal, setRegionAppraisal] =
-    useState<PropertyAppraisalOutputDto | null>(null);
-
-  // تمام فرم‌های واحدهای دیگر فقط قابل مشاهده هستند.
-  const [otherAppraisals, setOtherAppraisals] = useState<
-    PropertyAppraisalOutputDto[]
-  >([]);
-
   // فرم انتخاب‌شده برای نمایش readonly
   const [selectedReadonlyAppraisal, setSelectedReadonlyAppraisal] =
     useState<PropertyAppraisalOutputDto | null>(null);
+  // تمام فرم‌های ارزیابی ثبت‌شده برای درخواست؛ فقط قابل مشاهده
+  const [appraisals, setAppraisals] = useState<PropertyAppraisalOutputDto[]>(
+    [],
+  );
 
-  // داده فرم editable منطقه
-  const [assetForm, setAssetForm] = useState<
-    Partial<PropertyAppraisalInputDto>
-  >({});
+  const [requestSignatures, setRequestSignatures] = useState<
+    RequestSignatureOutputDto[]
+  >([]);
 
   const userCacheRef = useRef<Map<number, { name: string; role: string }>>(
     new Map(),
@@ -183,15 +191,11 @@ export function DepartmentRegionDescriptionReferralPage({
     async (req: RequestItem) => {
       setSelectedRequest(null);
       setComment("");
-
-      // پاک‌سازی داده‌های درخواست قبلی
-      setRegionAppraisal(null);
-      setOtherAppraisals([]);
+      setAppraisals([]);
       setSelectedReadonlyAppraisal(null);
-      setAssetForm({});
+      setRequestSignatures([]);
 
       setIsAppraisalReadOnlyOpen(false);
-      setIsAppraisalEditOpen(false);
       setIsDetailOpen(true);
 
       try {
@@ -201,43 +205,31 @@ export function DepartmentRegionDescriptionReferralPage({
         setSelectedRequest(detail);
 
         try {
-          /*
-           * خروجی سرویس آرایه است:
-           * [
-           *   { id: 1, creatorDepartmentId: 2, ... },
-           *   { id: 2, creatorDepartmentId: 3, ... }
-           * ]
-           */
-          const appraisals = await getPropertyAppraisalByRequestId(req.id);
+          const signaturesResult = await getAllRequestSignatures({
+            requestId: req.id,
+            sorting: "creationTime asc",
+            skipCount: 0,
+            maxResultCount: 1000,
+          });
 
-          const regionDepartmentId = REQUEST_DEPARTMENT_TYPES.region.id;
+          setRequestSignatures(signaturesResult.items);
+        } catch (error) {
+          console.error("Error loading request signatures:", error);
+          setRequestSignatures([]);
+        }
 
-          // فقط فرم ایجادشده توسط منطقه قابل ویرایش است.
-          const regionForm =
-            appraisals.find(
-              (appraisal) =>
-                Number(appraisal.creatorDepartmentId) ===
-                Number(regionDepartmentId),
-            ) ?? null;
-
-          // همه فرم‌های غیرمنطقه‌ای فقط برای مشاهده هستند.
-          const formsFromOtherDepartments = appraisals.filter(
-            (appraisal) =>
-              Number(appraisal.creatorDepartmentId) !==
-              Number(regionDepartmentId),
+        try {
+          // سرویس تمام فرم‌های ارزیابی ثبت‌شده برای این درخواست را برمی‌گرداند.
+          const requestAppraisals = await getPropertyAppraisalByRequestId(
+            req.id,
           );
 
-          setRegionAppraisal(regionForm);
-          setOtherAppraisals(formsFromOtherDepartments);
-
-          // فقط اطلاعات فرم منطقه باید وارد فرم editable شود.
-          setAssetForm(regionForm ?? {});
+          setAppraisals(requestAppraisals ?? []);
         } catch (error) {
           console.error("Error loading property appraisals:", error);
 
-          setRegionAppraisal(null);
-          setOtherAppraisals([]);
-          setAssetForm({});
+          setAppraisals([]);
+          setSelectedReadonlyAppraisal(null);
         }
 
         const ids = new Set<number>();
@@ -275,84 +267,6 @@ export function DepartmentRegionDescriptionReferralPage({
     [showToast],
   );
 
-  const handleSaveRegionAppraisal = useCallback(async () => {
-    const regionDepartmentId = REQUEST_DEPARTMENT_TYPES.region.id;
-
-    if (!selectedRequest?.id) {
-      showToast("شناسه درخواست نامعتبر است.", "error");
-      return;
-    }
-
-    if (
-      !regionAppraisal?.id ||
-      Number(regionAppraisal.creatorDepartmentId) !== Number(regionDepartmentId)
-    ) {
-      showToast("فقط فرم ارزیابی ثبت‌شده توسط منطقه قابل ویرایش است.", "error");
-      return;
-    }
-
-    setIsSavingAppraisal(true);
-
-    try {
-      /*
-       * یک بررسی مجدد از API انجام می‌دهیم تا فرم دیگری
-       * به‌اشتباه یا هم‌زمان جایگزین فرم منطقه نشده باشد.
-       */
-      const latestAppraisals = await getPropertyAppraisalByRequestId(
-        selectedRequest.id,
-      );
-
-      const latestRegionAppraisal = latestAppraisals.find(
-        (appraisal) =>
-          Number(appraisal.creatorDepartmentId) === Number(regionDepartmentId),
-      );
-
-      if (!latestRegionAppraisal?.id) {
-        showToast(
-          "فرم ارزیابی منطقه برای این درخواست یافت نشد یا تغییر کرده است.",
-          "error",
-        );
-        return;
-      }
-
-      const cleanBody: PropertyAppraisalInputDto = {
-        ...assetForm,
-        requestId: selectedRequest.id,
-        creatorDepartmentId: regionDepartmentId,
-      };
-
-      /*
-       * null، undefined و رشته خالی ارسال نشوند.
-       * مقدار false برای checkboxها حفظ می‌شود.
-       */
-      (Object.keys(cleanBody) as (keyof PropertyAppraisalInputDto)[]).forEach(
-        (key) => {
-          const value = cleanBody[key];
-
-          if (value === null || value === undefined || value === "") {
-            delete cleanBody[key];
-          }
-        },
-      );
-
-      const saved = await updatePropertyAppraisal({
-        ...cleanBody,
-        id: latestRegionAppraisal.id,
-      });
-
-      setRegionAppraisal(saved);
-      setAssetForm(saved);
-
-      showToast("فرم ارزیابی منطقه با موفقیت ویرایش شد.", "success");
-      setIsAppraisalEditOpen(false);
-    } catch (error: unknown) {
-      console.error("Error saving region appraisal:", error);
-      showToast(getErrorMessage(error, "خطا در ذخیره ارزیابی"), "error");
-    } finally {
-      setIsSavingAppraisal(false);
-    }
-  }, [assetForm, regionAppraisal, selectedRequest, showToast]);
-
   const handleAction = useCallback(
     async (accepted: boolean) => {
       if (!selectedRequest?.id) {
@@ -372,14 +286,16 @@ export function DepartmentRegionDescriptionReferralPage({
           });
         }
 
-        // سپس درخواست تأیید یا رد می‌شود.
-        await userAction({
+        const actionResult = await userAction({
           requestId: selectedRequest.id,
           accepted,
         });
 
         showToast(
-          accepted ? "درخواست با موفقیت به شعبه ارجاع شد." : "درخواست رد شد.",
+          getUserActionSuccessMessage(
+            actionResult,
+            accepted ? "درخواست با موفقیت تأیید شد" : "درخواست با موفقیت رد شد",
+          ),
           "success",
         );
 
@@ -396,19 +312,6 @@ export function DepartmentRegionDescriptionReferralPage({
       }
     },
     [comment, requestsQuery, selectedRequest, showToast, user],
-  );
-
-  const handleAppraisalFieldChange = useCallback(
-    (
-      field: keyof PropertyAppraisalInputDto,
-      value: string | number | boolean,
-    ) => {
-      setAssetForm((previous) => ({
-        ...previous,
-        [field]: value,
-      }));
-    },
-    [],
   );
 
   const columns = useMemo<ColumnDef<RequestItem, unknown>[]>(
@@ -431,7 +334,7 @@ export function DepartmentRegionDescriptionReferralPage({
       {
         id: "role",
         header: "نقش سازمانی",
-        cell: ({ row }) => row.original.actorUserRoleName || "-",
+        cell: ({ row }) => row.original.actorUserRoleNames?.join("-") || "-",
       },
       {
         id: "date",
@@ -524,59 +427,57 @@ export function DepartmentRegionDescriptionReferralPage({
               documents={[]}
               getUserData={getUserCacheData}
             >
-              {(regionAppraisal || otherAppraisals.length > 0) && (
-                <RequestDetailSection
-                  icon={<ClipboardList className="w-5 h-5" />}
-                  title="فرم‌های ارزیابی ملک"
-                  tone="blue"
-                >
-                  <div className="space-y-3">
-                    {/* فرم منطقه: قابل ویرایش */}
-                    {regionAppraisal && (
-                      <div className="flex items-center justify-between gap-4 rounded-xl border border-blue-100 bg-blue-50 p-4">
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium text-blue-800">
-                            فرم ارزیابی ثبت‌شده توسط منطقه
-                          </div>
+              <RequestDetailSection
+                icon={<ClipboardList className="w-5 h-5" />}
+                title="فرم‌های ارزیابی ملک"
+                tone="blue"
+              >
+                <div className="space-y-3">
+                  {appraisals.map((appraisal, index) => {
+                    const departmentName = getDepartmentName(
+                      appraisal.creatorDepartmentId,
+                    );
 
-                          <div className="mt-1 text-xs text-blue-600">
-                            این فرم در این مرحله قابل ویرایش است.
-                          </div>
-                        </div>
+                    const isMainOffice =
+                      Number(appraisal.creatorDepartmentId) ===
+                      Number(REQUEST_DEPARTMENT_TYPES.mainOffice.id);
 
-                        <FormButton
-                          title="ویرایش فرم منطقه"
-                          variant="primary"
-                          size="sm"
-                          onClick={() => {
-                            setAssetForm(regionAppraisal);
-                            setIsAppraisalEditOpen(true);
-                          }}
-                        />
-                      </div>
-                    )}
-
-                    {/* تمام فرم‌های غیرمنطقه‌ای: فقط مشاهده */}
-                    {otherAppraisals.map((appraisal, index) => (
+                    return (
                       <div
                         key={
                           appraisal.id ??
                           `${appraisal.creatorDepartmentId}-${index}`
                         }
-                        className="flex items-center justify-between gap-4 rounded-xl border border-amber-200 bg-amber-50 p-4"
+                        className={[
+                          "flex items-center justify-between gap-4 rounded-xl border p-4",
+                          isMainOffice
+                            ? "border-blue-200 bg-blue-50"
+                            : "border-amber-200 bg-amber-50",
+                        ].join(" ")}
                       >
                         <div className="min-w-0">
-                          <div className="text-sm font-medium text-amber-800">
-                            فرم ارزیابی ثبت‌شده توسط واحد دیگر
+                          <div
+                            className={[
+                              "text-sm font-medium",
+                              isMainOffice ? "text-blue-800" : "text-amber-800",
+                            ].join(" ")}
+                          >
+                            فرم ارزیابی ثبت‌شده توسط واحد{" "}
+                            <span className="font-bold">{departmentName}</span>
                           </div>
 
-                          <div className="mt-1 text-xs text-amber-700">
+                          <div
+                            className={[
+                              "mt-1 text-xs",
+                              isMainOffice ? "text-blue-700" : "text-amber-700",
+                            ].join(" ")}
+                          >
                             این فرم فقط قابل مشاهده است.
                           </div>
                         </div>
 
                         <FormButton
-                          title="مشاهده فرم"
+                          title={`مشاهده فرم ${departmentName}`}
                           variant="secondary"
                           size="sm"
                           onClick={() => {
@@ -585,10 +486,90 @@ export function DepartmentRegionDescriptionReferralPage({
                           }}
                         />
                       </div>
-                    ))}
+                    );
+                  })}
+
+                  {appraisals.length === 0 && (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                      هنوز هیچ فرم ارزیابی ملکی توسط واحدها ثبت نشده است.
+                    </div>
+                  )}
+                </div>
+              </RequestDetailSection>
+
+              <RequestDetailSection
+                icon={<ClipboardList className="w-5 h-5" />}
+                title="امضاهای ثبت‌شده"
+                tone="blue"
+              >
+                {requestSignatures.length > 0 ? (
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="min-w-full text-right text-sm">
+                      <thead className="bg-slate-50 text-slate-700">
+                        <tr>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            ردیف
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            نام و نام خانوادگی
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            کد پرسنلی
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            نقش سازمانی
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            تاریخ و زمان امضا
+                          </th>
+                        </tr>
+                      </thead>
+
+                      <tbody className="divide-y divide-slate-100">
+                        {requestSignatures.map((signature, index) => (
+                          <tr
+                            key={
+                              signature.id ?? `${signature.personCode}-${index}`
+                            }
+                            className="text-slate-700"
+                          >
+                            <td className="px-4 py-3">{index + 1}</td>
+
+                            <td className="px-4 py-3">
+                              {signature.fullName || "-"}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              {signature.personCode || "-"}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              {signature.roleName || "-"}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              {signature.creationTime ? (
+                                <span
+                                  dir="ltr"
+                                  className="inline-block whitespace-nowrap"
+                                >
+                                  {isoToPersianDateTime(signature.creationTime)}
+                                </span>
+                              ) : (
+                                "-"
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                </RequestDetailSection>
-              )}
+                ) : (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                    هنوز امضایی برای این درخواست ثبت نشده است.
+                  </div>
+                )}
+              </RequestDetailSection>
 
               <RequestDetailSection
                 icon={<MessageSquareText className="w-5 h-5" />}
@@ -613,20 +594,11 @@ export function DepartmentRegionDescriptionReferralPage({
         isOpen={isAppraisalReadOnlyOpen}
         appraisal={selectedReadonlyAppraisal}
         lookups={lookups}
+        signatures={requestSignatures}
         onClose={() => {
           setIsAppraisalReadOnlyOpen(false);
           setSelectedReadonlyAppraisal(null);
         }}
-      />
-
-      <PropertyAppraisalFormModal
-        isOpen={isAppraisalEditOpen}
-        form={assetForm as PropertyAppraisalInputDto}
-        lookups={lookups}
-        isSaving={isSavingAppraisal}
-        onChange={handleAppraisalFieldChange}
-        onClose={() => setIsAppraisalEditOpen(false)}
-        onSave={handleSaveRegionAppraisal}
       />
     </MainLayout.Main>
   );

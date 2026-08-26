@@ -80,7 +80,9 @@ export interface RequestItem {
 
   actorUserId?: number | null;
   actorUserFullName?: string | null;
-  actorUserRoleName?: string | null;
+
+  /** مطابق Swagger: لیستی از نام نقش‌های کاربر */
+  actorUserRoleNames?: string[] | null;
 
   requestTypeId?: number | null;
   requestTypeOutputDto?: RequestTypeOutputDto | null;
@@ -93,6 +95,8 @@ export interface RequestItem {
 
   currentDepartmentTypeId?: number | null;
   currentDepartmentTypeOutputDto?: RequestDepartmentTypeOutputDto | null;
+
+  creatorDepartmentTypeId?: number | null;
 
   customerId?: number | null;
   customerOutputDto?: CustomerOutputDto | null;
@@ -114,6 +118,8 @@ export interface RequestItem {
   lastModificationTime?: string | null;
   isDeleted?: boolean;
 
+  requiredJudicialExpertCount?: number | null;
+
   requestCommentOutputDtos?: RequestCommentOutputDto[] | null;
   collatralOutputDtos?: CollatralOutputDto[] | null;
   requestHistoryOutputDtos?: RequestHistoryOutputDto[] | null;
@@ -130,6 +136,7 @@ export interface CreateRequestBody {
   departmentId?: number | null;
   authorityDepartmentTypeId?: number | null;
   currentDepartmentTypeId?: number | null;
+  creatorDepartmentTypeId?: number | null;
   customerId: number;
 
   title?: string | null;
@@ -153,6 +160,7 @@ export interface EditRequestBody {
   departmentId?: number | null;
   authorityDepartmentTypeId?: number | null;
   currentDepartmentTypeId?: number | null;
+  creatorDepartmentTypeId?: number | null;
   customerId: number;
 
   title?: string | null;

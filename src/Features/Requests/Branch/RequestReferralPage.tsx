@@ -24,7 +24,10 @@ import { useAuthStore } from "../../../libs/store";
 import { getAllRequests } from "../../../services/RequestCrud/getAll";
 import { getRequest } from "../../../services/RequestCrud/get";
 import { viewRequest } from "../../../services/RequestCrud/viewRequest";
-import { userAction } from "../../../services/RequestCrud/userAction";
+import {
+  getUserActionSuccessMessage,
+  userAction,
+} from "../../../services/RequestCrud/userAction";
 import { createRequestComment } from "../../../services/RequestCommentCrud/create";
 import { getAllRequestStatus } from "../../../services/RequestStatusCrud/getAll";
 import { getAllDocumentTypes } from "../../../services/DocumentTypeCrud/getAll";
@@ -47,6 +50,8 @@ import type {
   PropertyAppraisalOutputDto,
 } from "../../../services/PropertyAppraisalCrud/types";
 import { generateAppraisalPdf } from "../../../utils/htmlPdfGenerator";
+import { getAllRequestSignatures } from "../../../services/RequestSignatureCrud/getAll";
+import type { RequestSignatureOutputDto } from "../../../services/RequestSignatureCrud/types";
 
 import {
   REQUEST_CHUNK_SIZE,
@@ -151,6 +156,9 @@ export function DepartmentRequestReferralPage({
   const [isAppraisalReadOnlyOpen, setIsAppraisalReadOnlyOpen] = useState(false);
   const [selectedReadonlyAppraisal, setSelectedReadonlyAppraisal] =
     useState<PropertyAppraisalOutputDto | null>(null);
+  const [requestSignatures, setRequestSignatures] = useState<
+    RequestSignatureOutputDto[]
+  >([]);
 
   const statusesQuery = useQuery({
     queryKey: ["request-statuses"],
@@ -245,11 +253,25 @@ export function DepartmentRequestReferralPage({
       setAssetForm({});
       setIsAssetModalOpen(false);
       setIsOpen(true);
+      setRequestSignatures([]);
 
       try {
         await viewRequest(request.id);
         const detail = await getRequest(request.id);
         setSelectedRequest(detail);
+        try {
+          const signaturesResult = await getAllRequestSignatures({
+            requestId: request.id,
+            sorting: "creationTime asc",
+            skipCount: 0,
+            maxResultCount: 1000,
+          });
+
+          setRequestSignatures(signaturesResult.items);
+        } catch (error) {
+          console.error("Error loading request signatures:", error);
+          setRequestSignatures([]);
+        }
 
         // لود فرم‌های ارزیابی
         try {
@@ -261,11 +283,14 @@ export function DepartmentRequestReferralPage({
           const current =
             appraisals.find(
               (appraisal) =>
-                appraisal.creatorDepartmentId === departmentType.id,
+                Number(appraisal.creatorDepartmentId) ===
+                Number(departmentType.id),
             ) ?? null;
 
           const others = appraisals.filter(
-            (appraisal) => appraisal.creatorDepartmentId !== departmentType.id,
+            (appraisal) =>
+              Number(appraisal.creatorDepartmentId) !==
+              Number(departmentType.id),
           );
 
           setCurrentAppraisal(current);
@@ -487,7 +512,10 @@ export function DepartmentRequestReferralPage({
       let saved: PropertyAppraisalOutputDto;
 
       if (latestCurrent?.id) {
-        if (latestCurrent.creatorDepartmentId !== departmentType.id) {
+        if (
+          Number(latestCurrent.creatorDepartmentId) !==
+          Number(departmentType.id)
+        ) {
           showToast("امکان ویرایش فرم ارزیابی واحد دیگر وجود ندارد", "error");
           return;
         }
@@ -527,6 +555,7 @@ export function DepartmentRequestReferralPage({
         date: selectedRequest?.creationTime
           ? isoToPersian(selectedRequest.creationTime)
           : "",
+        signatures: requestSignatures,
       });
 
       window.open(pdfUrl, "_blank");
@@ -567,9 +596,20 @@ export function DepartmentRequestReferralPage({
             description: comment.trim(),
           });
         }
-        await userAction({ requestId: selectedRequest.id, accepted });
+        const actionResult = await userAction({
+          requestId: selectedRequest.id,
+          accepted,
+        });
+
+        showToast(
+          getUserActionSuccessMessage(
+            actionResult,
+            accepted ? "درخواست با موفقیت تأیید شد" : "درخواست با موفقیت رد شد",
+          ),
+          "success",
+        );
         setIsOpen(false);
-        requestsQuery.refetch();
+        await requestsQuery.refetch();
       } catch (error) {
         showToast(
           error instanceof Error ? error.message : "خطا در انجام عملیات",
@@ -610,7 +650,7 @@ export function DepartmentRequestReferralPage({
       {
         id: "role",
         header: "نقش سازمانی",
-        cell: ({ row }) => row.original.actorUserRoleName || "-",
+        cell: ({ row }) => row.original.actorUserRoleNames?.join("-") || "-",
       },
       {
         id: "date",
@@ -777,6 +817,81 @@ export function DepartmentRequestReferralPage({
                   </div>
                 </RequestDetailSection>
               )}
+
+              <RequestDetailSection
+                icon={<ClipboardList className="h-5 w-5" />}
+                title="امضاهای ثبت‌شده"
+                tone="blue"
+              >
+                {requestSignatures.length > 0 ? (
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="min-w-full text-right text-sm">
+                      <thead className="bg-slate-50 text-slate-700">
+                        <tr>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            ردیف
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            نام و نام خانوادگی
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            کد پرسنلی
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            نقش سازمانی
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            تاریخ و زمان امضا
+                          </th>
+                        </tr>
+                      </thead>
+
+                      <tbody className="divide-y divide-slate-100">
+                        {requestSignatures.map((signature, index) => (
+                          <tr
+                            key={
+                              signature.id ?? `${signature.personCode}-${index}`
+                            }
+                            className="bg-white text-slate-700"
+                          >
+                            <td className="px-4 py-3">{index + 1}</td>
+
+                            <td className="px-4 py-3">
+                              {signature.fullName || "-"}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              {signature.personCode || "-"}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              {signature.roleName || "-"}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              {signature.creationTime ? (
+                                <span
+                                  dir="ltr"
+                                  className="inline-block whitespace-nowrap"
+                                >
+                                  {isoToPersianDateTime(signature.creationTime)}
+                                </span>
+                              ) : (
+                                "-"
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                    هنوز امضایی برای این درخواست ثبت نشده است.
+                  </div>
+                )}
+              </RequestDetailSection>
+
               <RequestDetailSection
                 icon={<Upload className="h-5 w-5" />}
                 title="بارگذاری فایل نتیجه ارزیابی"
@@ -913,6 +1028,7 @@ export function DepartmentRequestReferralPage({
         isOpen={isAssetModalOpen}
         form={assetForm}
         lookups={lookups}
+        signatures={requestSignatures}
         isSaving={isSavingAppraisal}
         isGeneratingPdf={isGeneratingPdf}
         onChange={handleFormChange}
@@ -925,6 +1041,7 @@ export function DepartmentRequestReferralPage({
         isOpen={isAppraisalReadOnlyOpen}
         appraisal={selectedReadonlyAppraisal}
         lookups={lookups}
+        signatures={requestSignatures}
         onClose={() => {
           setIsAppraisalReadOnlyOpen(false);
           setSelectedReadonlyAppraisal(null);

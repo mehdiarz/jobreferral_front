@@ -20,11 +20,16 @@ import { useAuthStore } from "../../../libs/store";
 import { getAllRequests } from "../../../services/RequestCrud/getAll";
 import { getRequest } from "../../../services/RequestCrud/get";
 import { viewRequest } from "../../../services/RequestCrud/viewRequest";
-import { userAction } from "../../../services/RequestCrud/userAction";
+import {
+  getUserActionSuccessMessage,
+  userAction,
+} from "../../../services/RequestCrud/userAction";
 import { createRequestComment } from "../../../services/RequestCommentCrud/create";
 import { getUserById } from "../../../services/Users/getUserById";
 import { getPropertyAppraisalLookups } from "../../../services/PropertyAppraisalCrud/getLookups";
 import { getPropertyAppraisalByRequestId } from "../../../services/PropertyAppraisalCrud/getByRequestId";
+import { getAllRequestSignatures } from "../../../services/RequestSignatureCrud/getAll";
+import type { RequestSignatureOutputDto } from "../../../services/RequestSignatureCrud/types";
 
 import type { RequestItem } from "../../../services/RequestCrud/types";
 import type {
@@ -59,6 +64,25 @@ interface RegionManagerApprovalPageProps {
   departmentType: RequestDepartmentTypeConfig;
 }
 
+const getDepartmentName = (id: number | string | null | undefined): string => {
+  switch (Number(id)) {
+    case Number(REQUEST_DEPARTMENT_TYPES.branch.id):
+      return REQUEST_DEPARTMENT_TYPES.branch.name;
+
+    case Number(REQUEST_DEPARTMENT_TYPES.independentBranch.id):
+      return REQUEST_DEPARTMENT_TYPES.independentBranch.name;
+
+    case Number(REQUEST_DEPARTMENT_TYPES.region.id):
+      return REQUEST_DEPARTMENT_TYPES.region.name;
+
+    case Number(REQUEST_DEPARTMENT_TYPES.mainOffice.id):
+      return REQUEST_DEPARTMENT_TYPES.mainOffice.name;
+
+    default:
+      return "واحد نامشخص";
+  }
+};
+
 export function DepartmentRegionManagerApprovalPage({
   departmentType,
 }: RegionManagerApprovalPageProps) {
@@ -81,6 +105,9 @@ export function DepartmentRegionManagerApprovalPage({
 
   const [selectedReadonlyAppraisal, setSelectedReadonlyAppraisal] =
     useState<PropertyAppraisalOutputDto | null>(null);
+  const [requestSignatures, setRequestSignatures] = useState<
+    RequestSignatureOutputDto[]
+  >([]);
 
   const userCacheRef = useRef<Map<number, { name: string; role: string }>>(
     new Map(),
@@ -164,6 +191,7 @@ export function DepartmentRegionManagerApprovalPage({
       setAppraisals([]);
       setSelectedReadonlyAppraisal(null);
       setIsAppraisalReadOnlyOpen(false);
+      setRequestSignatures([]);
 
       setIsDetailOpen(true);
 
@@ -172,6 +200,20 @@ export function DepartmentRegionManagerApprovalPage({
 
         const detail = await getRequest(req.id);
         setSelectedRequest(detail);
+
+        try {
+          const signaturesResult = await getAllRequestSignatures({
+            requestId: req.id,
+            sorting: "creationTime asc",
+            skipCount: 0,
+            maxResultCount: 1000,
+          });
+
+          setRequestSignatures(signaturesResult.items);
+        } catch (error) {
+          console.error("Error loading request signatures:", error);
+          setRequestSignatures([]);
+        }
 
         try {
           const existingAppraisals = await getPropertyAppraisalByRequestId(
@@ -231,10 +273,20 @@ export function DepartmentRegionManagerApprovalPage({
             description: comment.trim(),
           });
         }
-        await userAction({ requestId: selectedRequest.id, accepted });
-        showToast(accepted ? "درخواست تأیید شد" : "درخواست رد شد", "success");
+        const actionResult = await userAction({
+          requestId: selectedRequest.id,
+          accepted,
+        });
+
+        showToast(
+          getUserActionSuccessMessage(
+            actionResult,
+            accepted ? "درخواست با موفقیت تأیید شد" : "درخواست با موفقیت رد شد",
+          ),
+          "success",
+        );
         setIsDetailOpen(false);
-        requestsQuery.refetch();
+        await requestsQuery.refetch();
       } catch (error: unknown) {
         console.error("Error in action:", error);
         showToast(getErrorMessage(error, "خطا در انجام عملیات"), "error");
@@ -265,7 +317,7 @@ export function DepartmentRegionManagerApprovalPage({
       {
         id: "role",
         header: "نقش سازمانی",
-        cell: ({ row }) => row.original.actorUserRoleName || "-",
+        cell: ({ row }) => row.original.actorUserRoleNames?.join("-") || "-",
       },
       {
         id: "date",
@@ -358,35 +410,58 @@ export function DepartmentRegionManagerApprovalPage({
               documents={[]}
               getUserData={getUserCacheData}
             >
-              {appraisals.length > 0 && (
-                <RequestDetailSection
-                  icon={<ClipboardList className="w-5 h-5" />}
-                  title="فرم‌های ارزیابی ملک"
-                  tone="blue"
-                >
-                  <div className="space-y-3">
-                    {appraisals.map((appraisal, index) => (
+              <RequestDetailSection
+                icon={<ClipboardList className="w-5 h-5" />}
+                title="فرم‌های ارزیابی ملک"
+                tone="blue"
+              >
+                <div className="space-y-3">
+                  {appraisals.map((appraisal, index) => {
+                    const departmentName = getDepartmentName(
+                      appraisal.creatorDepartmentId,
+                    );
+
+                    const isMainOffice =
+                      Number(appraisal.creatorDepartmentId) ===
+                      Number(REQUEST_DEPARTMENT_TYPES.mainOffice.id);
+
+                    return (
                       <div
                         key={
                           appraisal.id ??
                           `${appraisal.creatorDepartmentId}-${index}`
                         }
-                        className="flex items-center justify-between gap-4 rounded-xl border border-blue-100 bg-blue-50 p-4"
+                        className={[
+                          "flex items-center justify-between gap-4 rounded-xl border p-4",
+                          isMainOffice
+                            ? "border-blue-200 bg-blue-50"
+                            : "border-amber-200 bg-amber-50",
+                        ].join(" ")}
                       >
                         <div className="min-w-0">
-                          <div className="text-sm font-medium text-blue-800">
-                            فرم ارزیابی ملک
-                            {appraisals.length > 1 ? ` شماره ${index + 1}` : ""}
+                          <div
+                            className={[
+                              "text-sm font-medium",
+                              isMainOffice ? "text-blue-800" : "text-amber-800",
+                            ].join(" ")}
+                          >
+                            فرم ارزیابی ثبت‌شده توسط واحد{" "}
+                            <span className="font-bold">{departmentName}</span>
                           </div>
 
-                          <div className="mt-1 text-xs text-blue-600">
+                          <div
+                            className={[
+                              "mt-1 text-xs",
+                              isMainOffice ? "text-blue-700" : "text-amber-700",
+                            ].join(" ")}
+                          >
                             این فرم فقط قابل مشاهده است.
                           </div>
                         </div>
 
                         <FormButton
-                          title="مشاهده فرم"
-                          variant="primary"
+                          title={`مشاهده فرم ${departmentName}`}
+                          variant="secondary"
                           size="sm"
                           onClick={() => {
                             setSelectedReadonlyAppraisal(appraisal);
@@ -394,10 +469,90 @@ export function DepartmentRegionManagerApprovalPage({
                           }}
                         />
                       </div>
-                    ))}
+                    );
+                  })}
+
+                  {appraisals.length === 0 && (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                      هنوز هیچ فرم ارزیابی ملکی توسط واحدها ثبت نشده است.
+                    </div>
+                  )}
+                </div>
+              </RequestDetailSection>
+
+              <RequestDetailSection
+                icon={<ClipboardList className="w-5 h-5" />}
+                title="امضاهای ثبت‌شده"
+                tone="blue"
+              >
+                {requestSignatures.length > 0 ? (
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="min-w-full text-right text-sm">
+                      <thead className="bg-slate-50 text-slate-700">
+                        <tr>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            ردیف
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            نام و نام خانوادگی
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            کد پرسنلی
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            نقش سازمانی
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            تاریخ و زمان امضا
+                          </th>
+                        </tr>
+                      </thead>
+
+                      <tbody className="divide-y divide-slate-100">
+                        {requestSignatures.map((signature, index) => (
+                          <tr
+                            key={
+                              signature.id ?? `${signature.personCode}-${index}`
+                            }
+                            className="text-slate-700"
+                          >
+                            <td className="px-4 py-3">{index + 1}</td>
+
+                            <td className="px-4 py-3">
+                              {signature.fullName || "-"}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              {signature.personCode || "-"}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              {signature.roleName || "-"}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              {signature.creationTime ? (
+                                <span
+                                  dir="ltr"
+                                  className="inline-block whitespace-nowrap"
+                                >
+                                  {isoToPersianDateTime(signature.creationTime)}
+                                </span>
+                              ) : (
+                                "-"
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                </RequestDetailSection>
-              )}
+                ) : (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                    هنوز امضایی برای این درخواست ثبت نشده است.
+                  </div>
+                )}
+              </RequestDetailSection>
 
               <RequestDetailSection
                 icon={<MessageSquareText className="w-5 h-5" />}
@@ -422,6 +577,7 @@ export function DepartmentRegionManagerApprovalPage({
         isOpen={isAppraisalReadOnlyOpen}
         appraisal={selectedReadonlyAppraisal}
         lookups={lookups}
+        signatures={requestSignatures}
         onClose={() => {
           setIsAppraisalReadOnlyOpen(false);
           setSelectedReadonlyAppraisal(null);

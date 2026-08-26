@@ -22,8 +22,6 @@ import type { RoleItem } from "../../services/Roles/getAllRoles";
 import Modal from "../../baseComponents/Modal";
 import { X } from "lucide-react";
 import { required } from "../../libs/validations";
-// CHANGE: اضافه کردن useTranslation برای ترجمه permission ها
-import { useTranslation } from "react-i18next";
 
 const translateError = (msg: string): string => {
   if (!msg) return "عملیات با خطا مواجه شد";
@@ -36,8 +34,6 @@ const translateError = (msg: string): string => {
 
 export default function RolesPage() {
   const { showToast } = useToast();
-  // CHANGE: گرفتن تابع t برای ترجمه
-  const { t } = useTranslation();
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
   const [filters, setFilters] = useState<Array<{ key: string; value: string }>>(
     [],
@@ -63,12 +59,13 @@ export default function RolesPage() {
 
   const getPermissionLabel = useCallback(
     (permissionName: string): string => {
-      // مستقیم از i18n استفاده کن و displayName سرور رو نادیده بگیر
-      const translated = t(permissionName);
-      // اگه ترجمه پیدا نشد (همون کلید برگشت خورد)، خود کلید رو نشون بده
-      return translated !== permissionName ? translated : permissionName;
+      const permission = permissionsList.find(
+        (item) => item.name === permissionName,
+      );
+
+      return permission?.displayName || permissionName;
     },
-    [t],
+    [permissionsList],
   );
 
   const roleKeyword = useMemo(
@@ -182,38 +179,46 @@ export default function RolesPage() {
   const fetchPermissionOptions = useCallback(
     async (search: string): Promise<{ value: string; label: string }[]> => {
       const term = (search || "").trim().toLowerCase();
-      const filtered = permissionsList
+
+      return permissionsList
         .filter((p) => {
           if (selectedForCombo.includes(p.name)) return false;
           if (!term) return true;
+
           const name = (p.name || "").toLowerCase();
-          const displayName = (p.displayName || p.name || "").toLowerCase();
+          const displayName = (p.displayName || "").toLowerCase();
+
           return name.includes(term) || displayName.includes(term);
         })
-        // CHANGE: استفاده از getPermissionLabel برای label
-        .map((p) => ({ value: p.name, label: getPermissionLabel(p.name) }));
-      return filtered;
+        .map((p) => ({
+          value: p.name,
+          label: p.displayName || p.name,
+        }));
     },
-    [permissionsList, selectedForCombo, getPermissionLabel],
+    [permissionsList, selectedForCombo],
   );
 
   const editSelectedPermissions = editFormState?.grantedPermissions ?? [];
   const fetchEditPermissionOptions = useCallback(
     async (search: string): Promise<{ value: string; label: string }[]> => {
       const term = (search || "").trim().toLowerCase();
-      const filtered = permissionsList
+
+      return permissionsList
         .filter((p) => {
           if (editSelectedPermissions.includes(p.name)) return false;
           if (!term) return true;
+
           const name = (p.name || "").toLowerCase();
-          const displayName = (p.displayName || p.name || "").toLowerCase();
+          const displayName = (p.displayName || "").toLowerCase();
+
           return name.includes(term) || displayName.includes(term);
         })
-        // CHANGE: استفاده از getPermissionLabel برای label
-        .map((p) => ({ value: p.name, label: getPermissionLabel(p.name) }));
-      return filtered;
+        .map((p) => ({
+          value: p.name,
+          label: p.displayName || p.name,
+        }));
     },
-    [permissionsList, editSelectedPermissions, getPermissionLabel],
+    [permissionsList, editSelectedPermissions],
   );
 
   const addPermission = useCallback(

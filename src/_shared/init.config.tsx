@@ -1,20 +1,79 @@
 export const Permissions = {
+  // Users & Roles
   Pages_Users: "Pages.Users",
   Pages_Roles: "Pages.Roles",
-  Pages_BaseInfo: "Pages.BaseInfo",
 
-  Pages_Experts: "Pages.JudicialExperts",
-  Pages_ExpertiseZones: "Pages.ExpertiseZones",
-  Pages_Regions: "Pages.Regions",
-  Pages_RequestTypes: "Pages.RequestTypes",
-  Pages_AttachmentTypes: "Pages.DocumentTypes",
-  Pages_Customers: "Pages.Customers",
-  Pages_CollateralTypes: "Pages.CollatralTypes",
-  Pages_CreditLimitAuthorities: "Pages.CreditLimitAuthorities",
-  Pages_DepartmentGrades: "Pages.DepartmentGrades",
-  Pages_Departments: "Pages.Departments",
-  Pages_DepartmentTypes: "Pages.DepartmentTypes",
-  Pages_PersonTypes: "Pages.PersonTypes",
+  // Base Info (Cruds)
+  Pages_BaseInfo_DepartmentTypes: "Pages.BaseInfo_department-types",
+  Pages_BaseInfo_PersonTypes: "Pages.BaseInfo_person-types",
+  Pages_BaseInfo_FeeRegulation: "Pages.BaseInfo_fee-regulation",
+  Pages_BaseInfo_CreditLimits: "Pages.BaseInfo_credit-limits",
+  Pages_BaseInfo_Experts: "Pages.BaseInfo_experts",
+  Pages_BaseInfo_Regions: "Pages.BaseInfo_regions",
+  Pages_BaseInfo_RequestTypes: "Pages.BaseInfo_request-types",
+  Pages_BaseInfo_AttachmentTypes: "Pages.BaseInfo_attachment-types",
+  Pages_BaseInfo_CollateralTypes: "Pages.BaseInfo_collateral-types",
+  Pages_BaseInfo_ExpertiseZones: "Pages.BaseInfo_expertise-zones",
+  Pages_BaseInfo_Departments: "Pages.BaseInfo_departments",
+  Pages_BaseInfo_DepartmentGrades: "Pages.BaseInfo_department-grades",
+  Pages_BaseInfo_Customers: "Pages.BaseInfo_customers",
+
+  // Branch Permissions
+  Pages_Branch_RequestsCreate: "Pages.Branch.requests-create",
+  Pages_Branch_RequestsBranchReview: "Pages.Branch.requests-branch-review",
+  Pages_Branch_RequestsAssetReview: "Pages.Branch.requests-asset-review",
+  Pages_Branch_RequestsFeeCalculation: "Pages.Branch.requests-fee-calculation",
+  Pages_Branch_RequestsView: "Pages.Branch.requests-view",
+  Pages_Branch_RequestsReferral: "Pages.Branch.requests-referral",
+
+  // Independent Branch Permissions
+  Pages_IndependentBranch_RequestsIndependentCreate:
+    "Pages.IndependentBranch.requests-independent-create",
+  Pages_IndependentBranch_RequestsIndependentReview:
+    "Pages.IndependentBranch.requests-independent-review",
+  Pages_IndependentBranch_RequestsIndependentAssetReview:
+    "Pages.IndependentBranch.requests-independent-asset-review",
+  Pages_IndependentBranch_RequestsIndependentFeeCalculation:
+    "Pages.IndependentBranch.requests-independent-fee-calculation",
+  Pages_IndependentBranch_RequestsIndependentView:
+    "Pages.IndependentBranch.requests-independent-view",
+  Pages_IndependentBranch_RequestsIndependentReferral:
+    "Pages.IndependentBranch.requests-independent-referral",
+
+  // Region Permissions
+  Pages_Region_RequestsRegionEngineeringRepresentativeReview:
+    "Pages.Region.requests-region-engineering-representative-review",
+  Pages_Region_RequestsRegionManagerApproval:
+    "Pages.Region.requests-region-manager-approval",
+  Pages_Region_RequestsRegionEngineeringExpertReview:
+    "Pages.Region.requests-region-engineering-expert-review",
+  Pages_Region_RequestsRegionAssetReview:
+    "Pages.Region.requests-region-asset-review",
+  Pages_Region_RequestsRegionDescription:
+    "Pages.Region.requests-region-description",
+  Pages_Region_RequestsRegionEngineeringExpertView:
+    "Pages.Region.requests-region-engineering-expert-view",
+  Pages_Region_RequestsRegionReview: "Pages.Region.requests-region-review",
+  Pages_Region_RequestsRegionView: "Pages.Region.requests-region-view",
+  Pages_Region_RequestsRegionReferral: "Pages.Region.requests-region-referral",
+
+  // Main Office Permissions
+  Pages_MainOffice_RequestsMainOfficeRealEstateUnitManagerReview:
+    "Pages.MainOffice.requests-main-office-real-estate-unit-manager-review",
+  Pages_MainOffice_RequestsMainOfficeRealEstateDepartmentReview:
+    "Pages.MainOffice.requests-main-office-real-estate-department-review",
+  Pages_MainOffice_RequestsMainOfficeRealEstateExpertReview:
+    "Pages.MainOffice.requests-main-office-real-estate-expert-review",
+  Pages_MainOffice_RequestsMainOfficeEngineeringManagementReview:
+    "Pages.MainOffice.requests-main-office-engineering-management-review",
+  Pages_MainOffice_RequestsMainOfficeEngineeringManagementApproval:
+    "Pages.MainOffice.requests-main-office-engineering-management-approval",
+  Pages_MainOffice_RequestsMainOfficeAssetReview:
+    "Pages.MainOffice.requests-main-office-asset-review",
+  Pages_MainOffice_RequestsMainOfficeView:
+    "Pages.MainOffice.requests-main-office-view",
+  Pages_MainOffice_RequestsMainOfficeReferral:
+    "Pages.MainOffice.requests-main-office-referral",
 } as const;
 
 export type PermissionName = (typeof Permissions)[keyof typeof Permissions];
@@ -57,79 +116,67 @@ export const defaultMenuItems = [
         id: "experts",
         title: "ثبت کارشناسان دادگستری",
         path: "/dashboard/base-info/experts",
-        permissions: [Permissions.Pages_Experts],
+        permissions: [Permissions.Pages_BaseInfo_Experts],
       },
       {
         id: "expertise-zones",
         title: "حدود صلاحیت کارشناس",
         path: "/dashboard/base-info/expertise-zones",
-        permissions: [Permissions.Pages_ExpertiseZones],
+        permissions: [Permissions.Pages_BaseInfo_ExpertiseZones],
       },
       {
         id: "regions",
         title: "ثبت منطقه استانی",
         path: "/dashboard/base-info/regions",
-        permissions: [Permissions.Pages_Regions],
+        permissions: [Permissions.Pages_BaseInfo_Regions],
       },
       {
         id: "request-types",
         title: "ثبت نوع درخواست",
         path: "/dashboard/base-info/request-types",
-        permissions: [Permissions.Pages_RequestTypes],
+        permissions: [Permissions.Pages_BaseInfo_RequestTypes],
       },
       {
         id: "attachment-types",
         title: "ثبت نوع مدارک پیوست",
         path: "/dashboard/base-info/attachment-types",
-        permissions: [Permissions.Pages_AttachmentTypes],
+        permissions: [Permissions.Pages_BaseInfo_AttachmentTypes],
       },
-      // {
-      //   id: "customers",
-      //   title: "لیست مشتریان",
-      //   path: "/dashboard/base-info/customers",
-      //   permissions: [Permissions.Pages_Customers],
-      // },
       {
         id: "collateral-types",
         title: "ثبت نوع وثیقه",
         path: "/dashboard/base-info/collateral-types",
-        permissions: [Permissions.Pages_CollateralTypes],
+        permissions: [Permissions.Pages_BaseInfo_CollateralTypes],
       },
       {
         id: "department-grades",
         title: "رتبه‌های دپارتمان",
         path: "/dashboard/base-info/department-grades",
-        permissions: [Permissions.Pages_DepartmentGrades],
+        permissions: [Permissions.Pages_BaseInfo_DepartmentGrades],
       },
       {
         id: "department-types",
         title: "انواع دپارتمان",
         path: "/dashboard/base-info/department-types",
-        permissions: [Permissions.Pages_DepartmentTypes],
+        permissions: [Permissions.Pages_BaseInfo_DepartmentTypes],
       },
-      // {
-      //   id: "departments",
-      //   title: "دپارتمان‌ها",
-      //   path: "/dashboard/base-info/departments",
-      //   permissions: [Permissions.Pages_Departments],
-      // },
       {
         id: "person-types",
         title: "انواع شخص",
         path: "/dashboard/base-info/person-types",
-        permissions: [Permissions.Pages_PersonTypes],
+        permissions: [Permissions.Pages_BaseInfo_PersonTypes],
       },
       {
         id: "credit-limits",
         title: "ثبت حدود اختیارات",
         path: "/dashboard/base-info/credit-limit-authorities",
-        permissions: [Permissions.Pages_CreditLimitAuthorities],
+        permissions: [Permissions.Pages_BaseInfo_CreditLimits],
       },
       {
         id: "fee-regulation",
         title: "بخشنامه حق‌الزحمه",
         path: "/dashboard/base-info/fee-regulation",
-        permissions: [],
+        permissions: [Permissions.Pages_BaseInfo_FeeRegulation],
       },
     ],
   },
@@ -147,79 +194,92 @@ export const defaultMenuItems = [
             id: "requests-view",
             title: "مشاهده و پیگیری درخواست‌ها",
             path: "/dashboard/requests/branch/view",
-            permissions: [],
+            permissions: [Permissions.Pages_Branch_RequestsView],
           },
           {
             id: "requests-create",
             title: "ایجاد درخواست جدید",
             path: "/dashboard/requests/branch/create",
-            permissions: [],
+            permissions: [Permissions.Pages_Branch_RequestsCreate],
           },
           {
             id: "requests-branch-review",
             title: "بررسی درخواست توسط شعبه",
             path: "/dashboard/requests/branch/review",
-            permissions: [],
+            permissions: [Permissions.Pages_Branch_RequestsBranchReview],
           },
           {
             id: "requests-asset-review",
             title: "بررسی و بازنگری اطلاعات ملک توسط شعبه",
             path: "/dashboard/requests/branch/asset-review",
-            permissions: [],
+            permissions: [Permissions.Pages_Branch_RequestsAssetReview],
           },
           {
             id: "requests-referral",
             title: "نتیجه ارزیابی ارجاع به کارشناس رسمی دادگستری",
             path: "/dashboard/requests/branch/referral",
-            permissions: [],
+            permissions: [Permissions.Pages_Branch_RequestsReferral],
           },
           {
             id: "requests-fee-calculation",
             title: "محاسبه کارمزد کارشناس رسمی دادگستری",
             path: "/dashboard/requests/branch/fee-calculation",
-            permissions: [],
+            permissions: [Permissions.Pages_Branch_RequestsFeeCalculation],
           },
         ],
       },
       {
         id: "independent-branch",
         title: "شعبه مستقل",
+        icon: "building",
         children: [
           {
             id: "requests-independent-view",
             title: "مشاهده و پیگیری درخواست‌ها",
             path: "/dashboard/requests/independent/view",
-            permissions: [],
+            permissions: [
+              Permissions.Pages_IndependentBranch_RequestsIndependentView,
+            ],
           },
           {
             id: "requests-independent-create",
             title: "ایجاد درخواست جدید",
             path: "/dashboard/requests/independent/create",
-            permissions: [],
+            permissions: [
+              Permissions.Pages_IndependentBranch_RequestsIndependentCreate,
+            ],
           },
           {
             id: "requests-independent-review",
             title: "بررسی درخواست توسط شعبه مستقل",
             path: "/dashboard/requests/independent/review",
-            permissions: [],
+            permissions: [
+              Permissions.Pages_IndependentBranch_RequestsIndependentReview,
+            ],
           },
           {
             id: "requests-independent-asset-review",
             title: "بازنگری اطلاعات ملک توسط شعبه مستقل",
             path: "/dashboard/requests/independent/asset-review",
-            permissions: [],
+            permissions: [
+              Permissions.Pages_IndependentBranch_RequestsIndependentAssetReview,
+            ],
           },
           {
             id: "requests-independent-referral",
             title: "نتیجه ارزیابی ارجاع به کارشناس رسمی دادگستری",
             path: "/dashboard/requests/independent/referral",
-            permissions: [],
+            permissions: [
+              Permissions.Pages_IndependentBranch_RequestsIndependentReferral,
+            ],
           },
           {
             id: "requests-independent-fee-calculation",
             title: "محاسبه کارمزد کارشناس رسمی دادگستری",
             path: "/dashboard/requests/independent/fee-calculation",
-            permissions: [],
+            permissions: [
+              Permissions.Pages_IndependentBranch_RequestsIndependentFeeCalculation,
+            ],
           },
         ],
       },
@@ -232,55 +292,63 @@ export const defaultMenuItems = [
             id: "requests-region-view",
             title: "مشاهده و پیگیری درخواست‌ها",
             path: "/dashboard/requests/region/view",
-            permissions: [],
+            permissions: [Permissions.Pages_Region_RequestsRegionView],
           },
           {
             id: "requests-region-review",
             title: "کارتابل منطقه",
             path: "/dashboard/requests/region/review",
-            permissions: [],
+            permissions: [Permissions.Pages_Region_RequestsRegionReview],
           },
           {
             id: "requests-region-asset-review",
             title: "بررسی و بازنگری اطلاعات ملک توسط منطقه",
             path: "/dashboard/requests/region/asset-review",
-            permissions: [],
+            permissions: [Permissions.Pages_Region_RequestsRegionAssetReview],
           },
           {
             id: "requests-region-referral",
             title: "نتیجه ارزیابی ارجاع به کارشناس رسمی دادگستری",
             path: "/dashboard/requests/region/referral",
-            permissions: [],
+            permissions: [Permissions.Pages_Region_RequestsRegionReferral],
           },
           {
             id: "requests-region-engineering-expert-view",
             title: "کارتابل کارشناس مهندسی",
             path: "/dashboard/requests/region/engineering-expert-view",
-            permissions: [],
+            permissions: [
+              Permissions.Pages_Region_RequestsRegionEngineeringExpertView,
+            ],
           },
           {
             id: "requests-region-engineering-expert-review",
             title: "بررسی و امضا ملک توسط کارشناس مهندسی",
             path: "/dashboard/requests/region/engineering-expert-review",
-            permissions: [],
+            permissions: [
+              Permissions.Pages_Region_RequestsRegionEngineeringExpertReview,
+            ],
           },
           {
             id: "requests-region-engineering-representative-review",
             title: "بررسی توسط نماینده دایره مهندسی",
             path: "/dashboard/requests/region/engineering-representative-review",
-            permissions: [],
+            permissions: [
+              Permissions.Pages_Region_RequestsRegionEngineeringRepresentativeReview,
+            ],
           },
           {
             id: "requests-region-manager-approval",
             title: "بررسی و امضا توسط مدیر منطقه",
             path: "/dashboard/requests/region/manager-approval",
-            permissions: [],
+            permissions: [
+              Permissions.Pages_Region_RequestsRegionManagerApproval,
+            ],
           },
           {
             id: "requests-region-description",
             title: "درج توضیحات و ارجاع به شعبه",
             path: "/dashboard/requests/region/description",
-            permissions: [],
+            permissions: [Permissions.Pages_Region_RequestsRegionDescription],
           },
         ],
       },
@@ -293,49 +361,63 @@ export const defaultMenuItems = [
             id: "requests-main-office-view",
             title: "مشاهده و پیگیری درخواست‌ها",
             path: "/dashboard/requests/main-office/view",
-            permissions: [],
+            permissions: [Permissions.Pages_MainOffice_RequestsMainOfficeView],
           },
           {
             id: "requests-main-office-engineering-management-review",
             title: "بررسی و ارجاع توسط مدیریت مهندسی و پشتیبانی",
             path: "/dashboard/requests/main-office/engineering-management-review",
-            permissions: [],
+            permissions: [
+              Permissions.Pages_MainOffice_RequestsMainOfficeEngineeringManagementReview,
+            ],
           },
           {
             id: "requests-main-office-real-estate-department-review",
             title: "بررسی توسط ریاست اداره املاک",
             path: "/dashboard/requests/main-office/real-estate-department-review",
-            permissions: [],
+            permissions: [
+              Permissions.Pages_MainOffice_RequestsMainOfficeRealEstateDepartmentReview,
+            ],
           },
           {
             id: "requests-main-office-real-estate-unit-manager-review",
             title: "بررسی توسط رئیس دایره املاک",
             path: "/dashboard/requests/main-office/real-estate-unit-manager-review",
-            permissions: [],
+            permissions: [
+              Permissions.Pages_MainOffice_RequestsMainOfficeRealEstateUnitManagerReview,
+            ],
           },
           {
             id: "requests-main-office-real-estate-expert-review",
             title: "بررسی توسط کارشناس املاک",
             path: "/dashboard/requests/main-office/real-estate-expert-review",
-            permissions: [],
+            permissions: [
+              Permissions.Pages_MainOffice_RequestsMainOfficeRealEstateExpertReview,
+            ],
           },
           {
             id: "requests-main-office-asset-review",
             title: "بررسی و بازنگری اطلاعات ملک توسط ستاد",
             path: "/dashboard/requests/main-office/asset-review",
-            permissions: [],
+            permissions: [
+              Permissions.Pages_MainOffice_RequestsMainOfficeAssetReview,
+            ],
           },
           {
             id: "requests-main-office-referral",
             title: "نتیجه ارزیابی ارجاع به کارشناس رسمی دادگستری",
             path: "/dashboard/requests/main-office/referral",
-            permissions: [],
+            permissions: [
+              Permissions.Pages_MainOffice_RequestsMainOfficeReferral,
+            ],
           },
           {
             id: "requests-main-office-engineering-management-approval",
             title: "بررسی و امضا توسط مدیریت مهندسی و پشتیبانی",
             path: "/dashboard/requests/main-office/engineering-management-approval",
-            permissions: [],
+            permissions: [
+              Permissions.Pages_MainOffice_RequestsMainOfficeEngineeringManagementApproval,
+            ],
           },
         ],
       },

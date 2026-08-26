@@ -7,6 +7,7 @@ import type {
   LookupValueDto,
 } from "../services/PropertyAppraisalCrud/types";
 import type { RequestSignatureOutputDto } from "../services/RequestSignatureCrud/types";
+import { isoToPersianDateTime } from "../utils/persianToISO.tsx";
 
 // ─── Styles ──────────────────────────────────────────────────────
 const inputClass =
@@ -193,7 +194,7 @@ export default function PropertyAppraisalReadOnlyModal({
   const renderSignatureRow = (signature: RequestSignatureOutputDto) => (
     <div
       key={signature.id}
-      className="grid grid-cols-3 gap-3 border-b border-gray-200 pb-3 last:border-b-0 last:pb-0"
+      className="grid grid-cols-4 gap-3 border-b border-gray-200 pb-3 last:border-b-0 last:pb-0"
     >
       <div>
         <label className={labelClass}>نام و نام خانوادگی</label>
@@ -214,14 +215,24 @@ export default function PropertyAppraisalReadOnlyModal({
         />
       </div>
       <div>
-        <label className={labelClass}>تاریخ و زمان امضا</label>
+        <label className={labelClass}>نقش سازمانی</label>
         <input
           type="text"
           className={`${inputClass} bg-gray-100`}
           readOnly
+          value={String(signature.roleName ?? "")}
+        />
+      </div>
+      <div>
+        <label className={labelClass}>تاریخ و زمان امضا</label>
+        <input
+          type="text"
+          className={`${inputClass} bg-gray-100`}
+          dir="ltr"
+          readOnly
           value={
             signature.creationTime
-              ? new Date(signature.creationTime).toLocaleString("fa-IR")
+              ? isoToPersianDateTime(signature.creationTime)
               : ""
           }
         />

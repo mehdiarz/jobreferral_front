@@ -319,6 +319,55 @@ export function isoToPersianDateTime(isoDate: string): string {
   }
 }
 
+export function isoToPersianDateTimeForPdf(isoDate: string): string {
+  if (!isoDate) return "";
+
+  try {
+    const d = new Date(isoDate);
+    if (isNaN(d.getTime())) return "";
+
+    // استخراج اجزای تاریخ و زمان مستقیماً در تایم‌زون تهران
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Tehran",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+
+    const parts = formatter.formatToParts(d);
+    const getPart = (type: string) =>
+      Number(parts.find((p) => p.type === type)?.value || 0);
+
+    const gy = getPart("year");
+    const gm = getPart("month");
+    const gd = getPart("day");
+    // اصلاح مقدار ساعت 24 در برخی مرورگرها به 00
+    const hours = getPart("hour") % 24;
+    const minutes = getPart("minute");
+    const seconds = getPart("second");
+
+    const { jy, jm, jd } = toJalaali(gy, gm, gd);
+
+    const pad = (n: number) => String(n).padStart(2, "0");
+
+    const toPersianDigits = (num: number | string): string => {
+      const persianDigits = "۰۱۲۳۴۵۶۷۸۹";
+      return String(num).replace(/\d/g, (d) => persianDigits[Number(d)]);
+    };
+
+    const persianDate = `${toPersianDigits(jy)}/${toPersianDigits(pad(jm))}/${toPersianDigits(pad(jd))}`;
+    const persianTime = `${toPersianDigits(pad(hours))}:${toPersianDigits(pad(minutes))}:${toPersianDigits(pad(seconds))}`;
+
+    return `${persianTime} - ${persianDate}`;
+  } catch {
+    return "";
+  }
+}
+
 // تابع جدید - تاریخ با ساعت و رسم‌الخط فارسی (بدون ثانیه)
 export function isoToPersianDateTimeShort(isoDate: string): string {
   try {

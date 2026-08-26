@@ -19,12 +19,17 @@ import { useAuthStore } from "../../../libs/store";
 import { getAllRequests } from "../../../services/RequestCrud/getAll";
 import { getRequest } from "../../../services/RequestCrud/get";
 import { viewRequest } from "../../../services/RequestCrud/viewRequest";
-import { userAction } from "../../../services/RequestCrud/userAction";
+import {
+  getUserActionSuccessMessage,
+  userAction,
+} from "../../../services/RequestCrud/userAction";
 import { createRequestComment } from "../../../services/RequestCommentCrud/create";
 import { getUserById } from "../../../services/Users/getUserById";
 import { getPropertyAppraisalLookups } from "../../../services/PropertyAppraisalCrud/getLookups";
 import { getPropertyAppraisalByRequestId } from "../../../services/PropertyAppraisalCrud/getByRequestId";
 import { generateAppraisalPdf } from "../../../utils/htmlPdfGenerator";
+import { getAllRequestSignatures } from "../../../services/RequestSignatureCrud/getAll";
+import type { RequestSignatureOutputDto } from "../../../services/RequestSignatureCrud/types";
 
 import type { RequestItem } from "../../../services/RequestCrud/types";
 import type {
@@ -113,6 +118,9 @@ export function DepartmentRealEstateDepartmentHeadReviewPage({
   const [selectedReadonlyAppraisal, setSelectedReadonlyAppraisal] =
     useState<PropertyAppraisalOutputDto | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [requestSignatures, setRequestSignatures] = useState<
+    RequestSignatureOutputDto[]
+  >([]);
 
   const userCacheRef = useRef<Map<number, { name: string; role: string }>>(
     new Map(),
@@ -206,12 +214,26 @@ export function DepartmentRealEstateDepartmentHeadReviewPage({
 
       setIsAppraisalReadOnlyOpen(false);
       setIsDetailOpen(true);
+      setRequestSignatures([]);
 
       try {
         await viewRequest(req.id);
 
         const detail = await getRequest(req.id);
         setSelectedRequest(detail);
+        try {
+          const signaturesResult = await getAllRequestSignatures({
+            requestId: req.id,
+            sorting: "creationTime asc",
+            skipCount: 0,
+            maxResultCount: 1000,
+          });
+
+          setRequestSignatures(signaturesResult.items);
+        } catch (error) {
+          console.error("Error loading request signatures:", error);
+          setRequestSignatures([]);
+        }
 
         try {
           // سرویس اکنون آرایه‌ای از فرم‌ها برمی‌گرداند.
@@ -289,10 +311,21 @@ export function DepartmentRealEstateDepartmentHeadReviewPage({
             description: comment.trim(),
           });
         }
-        await userAction({ requestId: selectedRequest.id, accepted });
-        showToast(accepted ? "درخواست تأیید شد" : "درخواست رد شد", "success");
+        const actionResult = await userAction({
+          requestId: selectedRequest.id,
+          accepted,
+        });
+
+        showToast(
+          getUserActionSuccessMessage(
+            actionResult,
+            accepted ? "درخواست با موفقیت تأیید شد" : "درخواست با موفقیت رد شد",
+          ),
+          "success",
+          8000,
+        );
         setIsDetailOpen(false);
-        requestsQuery.refetch();
+        await requestsQuery.refetch();
       } catch (error: unknown) {
         console.error("Error in action:", error);
         showToast(getErrorMessage(error, "خطا در انجام عملیات"), "error");
@@ -315,6 +348,7 @@ export function DepartmentRealEstateDepartmentHeadReviewPage({
           date: selectedRequest?.creationTime
             ? isoToPersian(selectedRequest.creationTime)
             : "",
+          signatures: requestSignatures,
         },
       );
       window.open(pdfUrl, "_blank");
@@ -348,7 +382,7 @@ export function DepartmentRealEstateDepartmentHeadReviewPage({
       {
         id: "role",
         header: "نقش سازمانی",
-        cell: ({ row }) => row.original.actorUserRoleName || "-",
+        cell: ({ row }) => row.original.actorUserRoleNames?.join("-") || "-",
       },
       {
         id: "date",
@@ -511,6 +545,75 @@ export function DepartmentRealEstateDepartmentHeadReviewPage({
                   )}
                 </div>
               </RequestDetailSection>
+              <RequestDetailSection
+                icon={<ClipboardList className="w-5 h-5" />}
+                title="امضاهای ثبت‌شده"
+                tone="blue"
+              >
+                {requestSignatures.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[720px] border-collapse text-right text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50 text-slate-700">
+                          <th className="px-4 py-3 font-semibold">ردیف</th>
+                          <th className="px-4 py-3 font-semibold">
+                            نام و نام خانوادگی
+                          </th>
+                          <th className="px-4 py-3 font-semibold">کد پرسنلی</th>
+                          <th className="px-4 py-3 font-semibold">
+                            نقش سازمانی
+                          </th>
+                          <th className="px-4 py-3 font-semibold">
+                            تاریخ و زمان امضا
+                          </th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {requestSignatures.map((signature, index) => (
+                          <tr
+                            key={signature.id}
+                            className="border-b border-slate-100 last:border-b-0"
+                          >
+                            <td className="px-4 py-3 text-slate-600">
+                              {index + 1}
+                            </td>
+
+                            <td className="px-4 py-3 font-medium text-slate-800">
+                              {signature.fullName || "-"}
+                            </td>
+
+                            <td className="px-4 py-3 text-slate-700">
+                              {signature.personCode || "-"}
+                            </td>
+
+                            <td className="px-4 py-3 text-slate-700">
+                              {signature.roleName || "-"}
+                            </td>
+
+                            <td className="px-4 py-3 text-slate-700">
+                              {signature.creationTime ? (
+                                <span
+                                  dir="ltr"
+                                  className="inline-block whitespace-nowrap"
+                                >
+                                  {isoToPersianDateTime(signature.creationTime)}
+                                </span>
+                              ) : (
+                                "-"
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                    هنوز امضایی برای این درخواست ثبت نشده است.
+                  </div>
+                )}
+              </RequestDetailSection>
 
               <RequestDetailSection
                 icon={<MessageSquareText className="w-5 h-5" />}
@@ -536,6 +639,7 @@ export function DepartmentRealEstateDepartmentHeadReviewPage({
         isOpen={isAppraisalReadOnlyOpen}
         appraisal={selectedReadonlyAppraisal}
         lookups={lookups}
+        signatures={requestSignatures}
         isGeneratingPdf={isGeneratingPdf}
         onGeneratePdf={handleGeneratePdf}
 

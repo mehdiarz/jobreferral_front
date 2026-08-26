@@ -4,7 +4,6 @@ import {
   PDFBool,
   PDFFont,
   PDFForm,
-  PDFTextField,
   TextAlignment,
 } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
@@ -14,6 +13,8 @@ import type {
   PropertyAppraisalInputDto,
   PropertyAppraisalLookupsDto,
 } from "../services/PropertyAppraisalCrud/types";
+import type { RequestSignatureOutputDto } from "../services/RequestSignatureCrud/types";
+import { isoToPersianDateTimeForPdf } from "./persianToISO";
 
 const PDF_PATH = `${import.meta.env.BASE_URL}templates/appraisal-template-acroform-final.pdf`;
 const FONT_PATH = `${import.meta.env.BASE_URL}fonts/Vazirmatn-Regular.ttf`;
@@ -24,6 +25,7 @@ const MULTILINE_FONT_SIZE = 8;
 type AppraisalPdfMetadata = {
   requestCode?: string | null;
   date?: string | null;
+  signatures?: RequestSignatureOutputDto[];
 };
 
 function displayValue(value: unknown): string {
@@ -38,6 +40,64 @@ function displayValue(value: unknown): string {
   return String(value);
 }
 
+function toPersianDigits(value: string | number): string {
+  const persianDigits = "۰۱۲۳۴۵۶۷۸۹";
+
+  return String(value).replace(/\d/g, (digit) => {
+    return persianDigits[Number(digit)];
+  });
+}
+
+function reverseText(value: string): string {
+  return Array.from(value).reverse().join("");
+}
+
+/**
+ * pdf-lib/AcroForm در خروجی فارسی، ترتیب توکن‌های عددی را برعکس نشان می‌دهد.
+ *
+ * این تابع عددها و جداکننده‌های مربوط به آن‌ها را از قبل reverse می‌کند
+ * تا در خروجی نهایی PDF درست نمایش داده شوند.
+ *
+ * مثال:
+ * ۵,۰۰۰,۰۰۰,۰۰۰ -> ۰۰۰,۰۰۰,۰۰۰,۵
+ * ۱۴۰۵/۰۶/۰۴ -> ۴۰/۶۰/۵۰۴۱
+ *
+ * سپس موتور PDF آن را به شکل دیداری درست نشان می‌دهد.
+ */
+function reverseNumericTokensForPdf(value: string): string {
+  return value.replace(
+    /[0-9۰-۹][0-9۰-۹,٬./:]*[0-9۰-۹]|[0-9۰-۹]/g,
+    (numericToken) => reverseText(numericToken),
+  );
+}
+
+/**
+ * نمایش مبلغ، مساحت و عددهایی که جداکننده هزارگان دارند.
+ */
+function displayPersianNumberForPdf(value: unknown): string {
+  const formattedValue = displayValue(value);
+
+  if (!formattedValue) {
+    return "";
+  }
+
+  return reverseNumericTokensForPdf(toPersianDigits(formattedValue));
+}
+
+/**
+ * نمایش کدها و شماره‌ها بدون جداکننده هزارگان:
+ * کد پرسنلی، کد پستی، شماره سند، کد رهگیری و ...
+ */
+function displayPersianPlainNumberForPdf(value: unknown): string {
+  if (value === null || value === undefined || value === "") {
+    return "";
+  }
+
+  const plainValue = String(value).trim();
+
+  return reverseNumericTokensForPdf(toPersianDigits(plainValue));
+}
+
 function normalizePersianText(value: string): string {
   return value
     .normalize("NFC")
@@ -45,7 +105,10 @@ function normalizePersianText(value: string): string {
     .replace(/ى/g, "ی")
     .replace(/ك/g, "ک")
     .replace(/\u00A0/g, " ")
-    .replace(/[\u200B\u200C\u200D\uFEFF]/g, "")
+    .replace(/\u200B/g, "")
+    .replace(/\u200C/g, "")
+    .replace(/\u200D/g, "")
+    .replace(/\uFEFF/g, "")
     .replace(/[ \t]+/g, " ")
     .replace(/\r\n?/g, "\n");
 }
@@ -91,7 +154,14 @@ function prepareRtlTextForPdf(value: string): string {
 
   return normalizePersianText(value)
     .split("\n")
-    .map((line) => reshaper.PersianShaper.convertArabic(line))
+    .map((line) => {
+      // قبل از reshape، فقط عددهای داخل متن را reverse می‌کنیم.
+      // این کار باعث می‌شود پس از پردازش Arabic/Persian reshaper
+      // عددها در PDF به ترتیب صحیح دیده شوند.
+      const textWithFixedNumbers = reverseNumericTokensForPdf(line);
+
+      return reshaper.PersianShaper.convertArabic(textWithFixedNumbers);
+    })
     .join("\n");
 }
 
@@ -132,7 +202,6 @@ function getTextAlignment(
 
 function setTextField(
   form: PDFForm,
-  persianFont: PDFFont,
   fieldName: string,
   value: string,
   options: TextFieldOptions = {},
@@ -217,7 +286,6 @@ export async function generateAppraisalPdf(
 ): Promise<string> {
   try {
     void lookups;
-    void metadata;
 
     const existingPdfBytes = await fetchAsArrayBuffer(PDF_PATH);
     const fontBytes = await fetchAsArrayBuffer(FONT_PATH);
@@ -234,51 +302,28 @@ export async function generateAppraisalPdf(
     // ==================== صفحه ۱ ====================
 
     // مشخصات متقاضی
+    setTextField(form, "page1_applicantName", displayValue(data.applicantName));
+    setTextField(form, "page1_ownerName", displayValue(data.ownerName));
     setTextField(
       form,
-      persianFont,
-      "page1_applicantName",
-      displayValue(data.applicantName),
-    );
-    setTextField(
-      form,
-      persianFont,
-      "page1_ownerName",
-      displayValue(data.ownerName),
-    );
-    setTextField(
-      form,
-      persianFont,
       "page1_ownerPhone",
-      displayValue(data.ownerPhone),
+      displayPersianNumberForPdf(data.ownerPhone),
       {
         alignment: "center",
         rtl: false,
       },
     );
+    setTextField(form, "page1_ownerAddress", displayValue(data.ownerAddress), {
+      multiline: true,
+      wrap: true,
+      wrapLength: 75,
+      alignment: "center",
+    });
+    setTextField(form, "page1_loanType", displayValue(data.loanType));
     setTextField(
       form,
-      persianFont,
-      "page1_ownerAddress",
-      displayValue(data.ownerAddress),
-      {
-        multiline: true,
-        wrap: true,
-        wrapLength: 75,
-        alignment: "center",
-      },
-    );
-    setTextField(
-      form,
-      persianFont,
-      "page1_loanType",
-      displayValue(data.loanType),
-    );
-    setTextField(
-      form,
-      persianFont,
       "page1_loanAmount",
-      displayValue(data.loanAmount),
+      displayPersianNumberForPdf(data.loanAmount),
       {
         alignment: "center",
         rtl: false,
@@ -286,7 +331,6 @@ export async function generateAppraisalPdf(
     );
     setTextField(
       form,
-      persianFont,
       "page1_propertyOccupierDescription",
       displayValue(data.propertyOccupierDescription),
     );
@@ -302,57 +346,48 @@ export async function generateAppraisalPdf(
     // اطلاعات ثبتی
     setTextField(
       form,
-      persianFont,
       "page1_propertyNumber",
-      displayValue(data.propertyNumber),
+      displayPersianNumberForPdf(data.propertyNumber),
       {
         alignment: "center",
         rtl: false,
       },
     );
+    setTextField(form, "page1_seperatedFrom", displayValue(data.seperatedFrom));
     setTextField(
       form,
-      persianFont,
-      "page1_seperatedFrom",
-      displayValue(data.seperatedFrom),
-    );
-    setTextField(
-      form,
-      persianFont,
       "page1_separationPiece",
-      displayValue(data.separationPiece),
+      displayPersianNumberForPdf(data.separationPiece),
     );
     setTextField(
       form,
-      persianFont,
       "page1_registrationNumber",
-      displayValue(data.registrationNumber),
+      displayPersianNumberForPdf(data.registrationNumber),
       {
         alignment: "center",
         rtl: false,
       },
     );
-    setTextField(form, persianFont, "page1_page", displayValue(data.page), {
+    setTextField(form, "page1_page", displayValue(data.page), {
       alignment: "center",
       rtl: false,
     });
     setTextField(
       form,
-      persianFont,
       "page1_officeNumber",
-      displayValue(data.officeNumber),
+      displayPersianNumberForPdf(data.officeNumber),
       {
         alignment: "center",
         rtl: false,
       },
     );
-    setTextField(form, persianFont, "page1_part", displayValue(data.part));
-    setTextField(form, persianFont, "page1_city", displayValue(data.city));
+    setTextField(form, "page1_part", displayValue(data.part));
+    setTextField(form, "page1_city", displayValue(data.city));
     setTextField(
       form,
-      persianFont,
+
       "page1_titleDeedNumber",
-      displayValue(data.titleDeedNumber),
+      displayPersianNumberForPdf(data.titleDeedNumber),
       {
         alignment: "center",
         rtl: false,
@@ -360,7 +395,7 @@ export async function generateAppraisalPdf(
     );
     setTextField(
       form,
-      persianFont,
+
       "page1_pageCount",
       displayValue(data.pageCount),
       {
@@ -368,20 +403,14 @@ export async function generateAppraisalPdf(
         rtl: false,
       },
     );
-    setTextField(form, persianFont, "page1_dong", displayValue(data.dong), {
+    setTextField(form, "page1_dong", displayValue(data.dong), {
       alignment: "center",
       rtl: false,
     });
-    setTextField(
-      form,
-      persianFont,
-      "page1_postalCode",
-      displayValue(data.postalCode),
-      {
-        alignment: "center",
-        rtl: false,
-      },
-    );
+    setTextField(form, "page1_postalCode", displayValue(data.postalCode), {
+      alignment: "center",
+      rtl: false,
+    });
 
     // سند قطعی مالکیت
     if (data.hasDefinitiveOwnershipDocument === true) {
@@ -401,39 +430,29 @@ export async function generateAppraisalPdf(
     );
 
     // مشخصات ملک
+    setTextField(form, "page1_municipalArea", displayValue(data.municipalArea));
+    setTextField(form, "page1_propertyType", displayValue(data.propertyType));
     setTextField(
       form,
-      persianFont,
-      "page1_municipalArea",
-      displayValue(data.municipalArea),
-    );
-    setTextField(
-      form,
-      persianFont,
-      "page1_propertyType",
-      displayValue(data.propertyType),
-    );
-    setTextField(
-      form,
-      persianFont,
+
       "page1_useAccordingToTheCompletionOfTheWork",
       displayValue(data.useAccordingToTheCompletionOfTheWork),
     );
     setTextField(
       form,
-      persianFont,
+
       "page1_typeOfUseOfTheProperty",
       displayValue(data.typeOfUseOfTheProperty),
     );
     setTextField(
       form,
-      persianFont,
+
       "page1_typeOfEndowmentPropertyIfOther",
       displayValue(data.typeOfEndowmentPropertyIfOther),
     );
     setTextField(
       form,
-      persianFont,
+
       "page1_explanationInCaseOfDisagreement",
       displayValue(data.explanationInCaseOfDisagreement),
       {
@@ -526,15 +545,21 @@ export async function generateAppraisalPdf(
     ];
 
     priceFields.forEach(([fieldName, value]) => {
-      setTextField(form, persianFont, fieldName, displayValue(value), {
-        alignment: "center",
-        rtl: false,
-      });
+      setTextField(
+        form,
+
+        fieldName,
+        displayPersianNumberForPdf(value),
+        {
+          alignment: "center",
+          rtl: false,
+        },
+      );
     });
 
     setTextField(
       form,
-      persianFont,
+
       "page1_finalPriceInWords",
       displayValue(data.finalPriceInWords),
       {
@@ -548,7 +573,7 @@ export async function generateAppraisalPdf(
     // مشخصات فنی
     setTextField(
       form,
-      persianFont,
+
       "page1_totalFloors",
       displayValue(data.totalFloors),
       {
@@ -558,37 +583,37 @@ export async function generateAppraisalPdf(
     );
     setTextField(
       form,
-      persianFont,
+
       "page1_usageBreakdown",
       displayValue(data.usageBreakdown),
     );
     setTextField(
       form,
-      persianFont,
+
       "page1_structureTypeOther",
       displayValue(data.structureTypeOther),
     );
     setTextField(
       form,
-      persianFont,
+
       "page1_facadeType",
       displayValue(data.facadeType),
     );
     setTextField(
       form,
-      persianFont,
+
       "page1_buildingAgeCalculation",
       displayValue(data.buildingAgeCalculation),
     );
     setTextField(
       form,
-      persianFont,
+
       "page1_heatingSystem",
       displayValue(data.heatingSystem),
     );
     setTextField(
       form,
-      persianFont,
+
       "page1_coolingSystem",
       displayValue(data.coolingSystem),
     );
@@ -618,19 +643,19 @@ export async function generateAppraisalPdf(
 
     setTextField(
       form,
-      persianFont,
+
       "page1_electricityDetails",
       displayValue(data.electricityDetails),
     );
     setTextField(
       form,
-      persianFont,
+
       "page1_certificateDetails",
       displayValue(data.certificateDetails),
     );
     setTextField(
       form,
-      persianFont,
+
       "page1_otherDetails",
       displayValue(data.otherDetails),
       {
@@ -686,7 +711,7 @@ export async function generateAppraisalPdf(
 
     setTextField(
       form,
-      persianFont,
+
       "page2_parkingCount",
       displayValue(data.parkingCount),
       {
@@ -696,7 +721,7 @@ export async function generateAppraisalPdf(
     );
     setTextField(
       form,
-      persianFont,
+
       "page2_storageCount",
       displayValue(data.storageCount),
       {
@@ -706,7 +731,7 @@ export async function generateAppraisalPdf(
     );
     setTextField(
       form,
-      persianFont,
+
       "page2_storageArea",
       displayValue(data.storageArea),
       {
@@ -716,7 +741,7 @@ export async function generateAppraisalPdf(
     );
     setTextField(
       form,
-      persianFont,
+
       "page2_elevatorCount",
       displayValue(data.elevatorCount),
       {
@@ -726,7 +751,7 @@ export async function generateAppraisalPdf(
     );
     setTextField(
       form,
-      persianFont,
+
       "page2_otherPrivileges",
       displayValue(data.otherPrivileges),
     );
@@ -749,9 +774,9 @@ export async function generateAppraisalPdf(
 
     setTextField(
       form,
-      persianFont,
+
       "page2_certificateNumber",
-      displayValue(data.certificateNumber),
+      displayPersianNumberForPdf(data.certificateNumber),
       {
         alignment: "center",
         rtl: false,
@@ -759,7 +784,7 @@ export async function generateAppraisalPdf(
     );
     setTextField(
       form,
-      persianFont,
+
       "page2_certificateDate",
       displayValue(data.certificateDate),
       {
@@ -779,7 +804,7 @@ export async function generateAppraisalPdf(
 
     setTextField(
       form,
-      persianFont,
+
       "page2_mortgageBeneficiary",
       displayValue(data.mortgageBeneficiary),
     );
@@ -795,7 +820,7 @@ export async function generateAppraisalPdf(
 
     setTextField(
       form,
-      persianFont,
+
       "page2_benefitsTransferDescription",
       displayValue(data.benefitsTransferDescription),
       {
@@ -817,7 +842,7 @@ export async function generateAppraisalPdf(
 
     setTextField(
       form,
-      persianFont,
+
       "page2_rentalAdvancePayment",
       displayValue(data.rentalAdvancePayment),
       {
@@ -827,7 +852,7 @@ export async function generateAppraisalPdf(
     );
     setTextField(
       form,
-      persianFont,
+
       "page2_monthlyRent",
       displayValue(data.monthlyRent),
       {
@@ -841,7 +866,7 @@ export async function generateAppraisalPdf(
 
     setTextField(
       form,
-      persianFont,
+
       "page2_leaseTrackingCode",
       displayValue(data.leaseTrackingCode),
       {
@@ -851,9 +876,9 @@ export async function generateAppraisalPdf(
     );
     setTextField(
       form,
-      persianFont,
+
       "page2_leaseNumber",
-      displayValue(data.leaseNumber),
+      displayPersianNumberForPdf(data.leaseNumber),
       {
         alignment: "center",
         rtl: false,
@@ -861,7 +886,7 @@ export async function generateAppraisalPdf(
     );
     setTextField(
       form,
-      persianFont,
+
       "page2_leaseDate",
       displayValue(data.leaseDate),
       {
@@ -881,7 +906,7 @@ export async function generateAppraisalPdf(
 
     setTextField(
       form,
-      persianFont,
+
       "page2_shopCount",
       displayValue(data.shopCount),
       {
@@ -891,13 +916,13 @@ export async function generateAppraisalPdf(
     );
     setTextField(
       form,
-      persianFont,
+
       "page2_shopOccupier",
       displayValue(data.shopOccupier),
     );
     setTextField(
       form,
-      persianFont,
+
       "page2_shopBusinessType",
       displayValue(data.shopBusinessType),
     );
@@ -913,7 +938,7 @@ export async function generateAppraisalPdf(
 
     setTextField(
       form,
-      persianFont,
+
       "page2_marketabilityNotes1",
       displayValue(data.marketabilityNotes),
       {
@@ -925,7 +950,7 @@ export async function generateAppraisalPdf(
     );
     setTextField(
       form,
-      persianFont,
+
       "page2_marketabilityNotes2",
       displayValue(data.marketabilityNotes),
       {
@@ -955,7 +980,7 @@ export async function generateAppraisalPdf(
 
     setTextField(
       form,
-      persianFont,
+
       "page2_visibleViolationDescription",
       displayValue(data.visibleViolationDescription),
       {
@@ -967,7 +992,7 @@ export async function generateAppraisalPdf(
     );
     setTextField(
       form,
-      persianFont,
+
       "page2_additionalCollateralDescription",
       displayValue(data.additionalCollateralDescription),
       {
@@ -981,13 +1006,13 @@ export async function generateAppraisalPdf(
     // جمع‌بندی
     setTextField(
       form,
-      persianFont,
+
       "page2_branchName",
       displayValue(data.branchName),
     );
     setTextField(
       form,
-      persianFont,
+
       "page2_branchCode",
       displayValue(data.branchCode),
       {
@@ -995,6 +1020,78 @@ export async function generateAppraisalPdf(
         rtl: false,
       },
     );
+    // امضاکنندگان درخواست
+    // قالب PDF فعلی حداکثر ۴ امضا را نمایش می‌دهد.
+    const signatures = metadata.signatures ?? [];
+    const maxSignatureCount = 4;
+
+    signatures.slice(0, maxSignatureCount).forEach((signature, index) => {
+      const fieldIndex = index + 1;
+
+      // نام و نام خانوادگی
+      setTextField(
+        form,
+
+        `page2_signatureFullName${fieldIndex}`,
+        displayValue(signature.fullName),
+        {
+          alignment: "center",
+          fontSize: 7,
+        },
+      );
+
+      // نقش سازمانی: با پیشوند فارسی
+      setTextField(
+        form,
+
+        `page2_signatureRoleName${fieldIndex}`,
+        signature.roleName?.trim() ? `نقش: ${signature.roleName.trim()}` : "",
+        {
+          alignment: "center",
+          fontSize: 7,
+        },
+      );
+
+      // کد پرسنلی: به‌صورت رشته، بدون جداکننده‌ی هزارگان
+      const personCode = displayPersianPlainNumberForPdf(signature.personCode);
+
+      setTextField(
+        form,
+
+        `page2_signaturePersonCode${fieldIndex}`,
+        personCode ? `کد پرسنلی: ${personCode}` : "",
+        {
+          alignment: "center",
+          rtl: false,
+          fontSize: 7,
+        },
+      );
+
+      // تاریخ و زمان امضا:
+      // خروجی isoToPersianDateTime شامل اعداد فارسی است؛
+      // rtl را false نگذار تا ترتیب متن و تاریخ برعکس نشود.
+      setTextField(
+        form,
+
+        `page2_signatureCreationTime${fieldIndex}`,
+        signature.creationTime
+          ? reverseNumericTokensForPdf(
+              isoToPersianDateTimeForPdf(signature.creationTime),
+            )
+          : "",
+        {
+          alignment: "center",
+          rtl: false,
+          fontSize: 6.5,
+        },
+      );
+    });
+
+    if (signatures.length > maxSignatureCount) {
+      console.warn(
+        `تعداد امضاها ${signatures.length} مورد است، اما قالب PDF فقط ${maxSignatureCount} امضا را نمایش می‌دهد.`,
+      );
+    }
 
     // ==================== نهایی‌سازی ====================
 

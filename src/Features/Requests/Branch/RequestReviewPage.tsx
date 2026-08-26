@@ -19,7 +19,10 @@ import { useAuthStore } from "../../../libs/store";
 import { getAllRequests } from "../../../services/RequestCrud/getAll";
 import { getRequest } from "../../../services/RequestCrud/get";
 import { viewRequest } from "../../../services/RequestCrud/viewRequest";
-import { userAction } from "../../../services/RequestCrud/userAction";
+import {
+  getUserActionSuccessMessage,
+  userAction,
+} from "../../../services/RequestCrud/userAction";
 import { createRequestComment } from "../../../services/RequestCommentCrud/create";
 import { getAllDocuments } from "../../../services/DocumentCrud/getAll";
 import { getDocumentAllFiles } from "../../../services/FileService/GetDocumentAllFiles";
@@ -284,9 +287,15 @@ export function DepartmentRequestReviewPage({
         });
       }
 
-      await userAction({ requestId: selectedRequest.id, accepted: true });
+      const actionResult = await userAction({
+        requestId: selectedRequest.id,
+        accepted: true,
+      });
 
-      showToast("درخواست با موفقیت ارسال شد", "success");
+      showToast(
+        getUserActionSuccessMessage(actionResult, "درخواست با موفقیت تأیید شد"),
+        "success",
+      );
       setIsDetailOpen(false);
       setSelectedRequest(null);
       requestsQuery.refetch();
@@ -313,9 +322,18 @@ export function DepartmentRequestReviewPage({
           });
         }
 
-        await userAction({ requestId: selectedRequest.id, accepted });
+        const actionResult = await userAction({
+          requestId: selectedRequest.id,
+          accepted,
+        });
 
-        showToast(accepted ? "درخواست تأیید شد" : "درخواست رد شد", "success");
+        showToast(
+          getUserActionSuccessMessage(
+            actionResult,
+            accepted ? "درخواست با موفقیت تأیید شد" : "درخواست با موفقیت رد شد",
+          ),
+          "success",
+        );
         setIsDetailOpen(false);
         setSelectedRequest(null);
         requestsQuery.refetch();
@@ -350,7 +368,7 @@ export function DepartmentRequestReviewPage({
       {
         id: "role",
         header: "نقش سازمانی",
-        cell: ({ row }) => row.original.actorUserRoleName || "-",
+        cell: ({ row }) => row.original.actorUserRoleNames?.join("-") || "-",
       },
       {
         id: "date",

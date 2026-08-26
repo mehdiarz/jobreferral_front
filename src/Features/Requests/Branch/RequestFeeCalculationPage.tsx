@@ -1,5 +1,3 @@
-// src/Features/Requests/Branch/RequestFeeCalculationPage.tsx
-
 import { useMemo, useRef, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -30,6 +28,11 @@ import { getPropertyAppraisalLookups } from "../../../services/PropertyAppraisal
 import { getPropertyAppraisalByRequestId } from "../../../services/PropertyAppraisalCrud/getByRequestId";
 import { calculateBankFee } from "../../../services/FeeCalculationCrud/feeCalculation";
 import { calculateJudicialFee } from "../../../services/FeeCalculationCrud/feeCalculation";
+import { generateAppraisalPdf } from "../../../utils/htmlPdfGenerator";
+import { getAllRequestSignatures } from "../../../services/RequestSignatureCrud/getAll";
+import { createCalculatedFee } from "../../../services/CalculatedFeeCrud/create";
+
+import type { RequestSignatureOutputDto } from "../../../services/RequestSignatureCrud/types";
 
 import type { RequestItem } from "../../../services/RequestCrud/types";
 import type {
@@ -41,7 +44,10 @@ import type {
   CalculateJudicialFeeInput,
   FeeCalculationResultDto,
 } from "../../../services/FeeCalculationCrud/types";
-import { isoToPersianDateTime } from "../../../utils/persianToISO";
+import {
+  isoToPersianDateTime,
+  isoToPersian,
+} from "../../../utils/persianToISO";
 import { persianToISO } from "../../../utils/persianToISO";
 import {
   REQUEST_DEPARTMENT_TYPES,
@@ -82,6 +88,43 @@ interface RequestFeeCalculationPageProps {
   departmentType: RequestDepartmentTypeConfig;
 }
 
+const getDepartmentName = (id: number | string | null | undefined): string => {
+  switch (Number(id)) {
+    case Number(REQUEST_DEPARTMENT_TYPES.branch.id):
+      return REQUEST_DEPARTMENT_TYPES.branch.name;
+
+    case Number(REQUEST_DEPARTMENT_TYPES.independentBranch.id):
+      return REQUEST_DEPARTMENT_TYPES.independentBranch.name;
+
+    case Number(REQUEST_DEPARTMENT_TYPES.region.id):
+      return REQUEST_DEPARTMENT_TYPES.region.name;
+
+    case Number(REQUEST_DEPARTMENT_TYPES.mainOffice.id):
+      return REQUEST_DEPARTMENT_TYPES.mainOffice.name;
+
+    default:
+      return "واحد نامشخص";
+  }
+};
+
+function getValidNumber(
+  value: number | string | null | undefined,
+): number | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const numberValue = Number(value);
+
+  return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function hasValidPositiveAmount(value: string): boolean {
+  const parsedValue = parseValue(value);
+
+  return Number.isFinite(parsedValue) && parsedValue > 0;
+}
+
 export function DepartmentRequestFeeCalculationPage({
   departmentType,
 }: RequestFeeCalculationPageProps) {
@@ -96,26 +139,60 @@ export function DepartmentRequestFeeCalculationPage({
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // مودال مشاهده فرم ارزیابی
   const [isAppraisalReadOnlyOpen, setIsAppraisalReadOnlyOpen] = useState(false);
-  const [detailAppraisal, setDetailAppraisal] =
+
+  // تمام فرم‌های ارزیابی ثبت‌شده برای درخواست
+  const [appraisals, setAppraisals] = useState<PropertyAppraisalOutputDto[]>(
+    [],
+  );
+
+  // فرم انتخاب‌شده برای مشاهده و دریافت PDF
+  const [selectedReadonlyAppraisal, setSelectedReadonlyAppraisal] =
     useState<PropertyAppraisalOutputDto | null>(null);
+
+  const [requestSignatures, setRequestSignatures] = useState<
+    RequestSignatureOutputDto[]
+  >([]);
+
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   // Bank fee modal
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
   const [bankFa, setBankFa] = useState("");
   const [bankPv, setBankPv] = useState("");
-  const [bankResult, setBankResult] = useState<FeeCalculationResultDto | null>(
-    null,
-  );
+
   const [isCalculatingBank, setIsCalculatingBank] = useState(false);
 
   // Judicial fee modal
   const [isJudicialModalOpen, setIsJudicialModalOpen] = useState(false);
   const [judicialFa, setJudicialFa] = useState("");
   const [judicialPv, setJudicialPv] = useState("");
-  const [judicialResult, setJudicialResult] =
-    useState<FeeCalculationResultDto | null>(null);
+
   const [isCalculatingJudicial, setIsCalculatingJudicial] = useState(false);
+
+  // نتیجه موقت داخل مودال؛ تا زمانی که کاربر «ثبت نتیجه» نزند نهایی نیست.
+  const [bankCalculationPreview, setBankCalculationPreview] =
+    useState<FeeCalculationResultDto | null>(null);
+
+  const [judicialCalculationPreview, setJudicialCalculationPreview] =
+    useState<FeeCalculationResultDto | null>(null);
+
+  // آخرین محاسبه‌ای که کاربر آن را ثبت کرده است.
+  // فقط همین مقادیر در زمان تأیید درخواست به CalculatedFee/Create می‌روند.
+  const [savedBankCalculation, setSavedBankCalculation] = useState<{
+    facilityAmount: number;
+    propertyValue: number;
+    isBoard: boolean;
+    fee: number;
+  } | null>(null);
+
+  const [savedJudicialCalculation, setSavedJudicialCalculation] = useState<{
+    facilityAmount: number;
+    propertyValue: number;
+    isBoard: boolean;
+    fee: number;
+  } | null>(null);
 
   const userCacheRef = useRef<Map<number, { name: string; role: string }>>(
     new Map(),
@@ -195,25 +272,57 @@ export function DepartmentRequestFeeCalculationPage({
     async (req: RequestItem) => {
       setSelectedRequest(null);
       setComment("");
-      setDetailAppraisal(null);
+      setRequestSignatures([]);
+
+      setAppraisals([]);
+      setSelectedReadonlyAppraisal(null);
+
       setIsAppraisalReadOnlyOpen(false);
       setIsDetailOpen(true);
+      setBankFa("");
+      setBankPv("");
+      setBankCalculationPreview(null);
+      setSavedBankCalculation(null);
+
+      setJudicialFa("");
+      setJudicialPv("");
+      setJudicialCalculationPreview(null);
+      setSavedJudicialCalculation(null);
+
+      setIsBankModalOpen(false);
+      setIsJudicialModalOpen(false);
+
       try {
         await viewRequest(req.id);
         const detail = await getRequest(req.id);
         setSelectedRequest(detail);
 
         try {
-          const existingAppraisal = await getPropertyAppraisalByRequestId(
+          const signaturesResult = await getAllRequestSignatures({
+            requestId: req.id,
+            sorting: "creationTime asc",
+            skipCount: 0,
+            maxResultCount: 1000,
+          });
+
+          setRequestSignatures(signaturesResult.items);
+        } catch (error) {
+          console.error("Error loading request signatures:", error);
+          setRequestSignatures([]);
+        }
+
+        try {
+          // سرویس همه فرم‌های ارزیابی ثبت‌شده برای درخواست را برمی‌گرداند.
+          const requestAppraisals = await getPropertyAppraisalByRequestId(
             req.id,
           );
-          if (existingAppraisal && Array.isArray(existingAppraisal)) {
-            setDetailAppraisal(existingAppraisal[0] ?? null);
-          } else if (existingAppraisal) {
-            setDetailAppraisal(existingAppraisal as PropertyAppraisalOutputDto);
-          }
-        } catch {
-          console.log("No appraisal found for this request");
+
+          setAppraisals(requestAppraisals ?? []);
+        } catch (error) {
+          console.error("Error loading property appraisals:", error);
+
+          setAppraisals([]);
+          setSelectedReadonlyAppraisal(null);
         }
 
         const ids = new Set<number>();
@@ -243,9 +352,69 @@ export function DepartmentRequestFeeCalculationPage({
 
   const handleAction = useCallback(
     async (accepted: boolean) => {
-      if (!selectedRequest) return;
+      if (!selectedRequest) {
+        return;
+      }
+
       setIsSubmitting(true);
+
       try {
+        if (accepted) {
+          if (!savedBankCalculation) {
+            showToast(
+              "لطفاً ابتدا کارمزد بانک را محاسبه و نتیجه آن را ثبت کنید.",
+              "error",
+            );
+            return;
+          }
+
+          if (!savedJudicialCalculation) {
+            showToast(
+              "لطفاً ابتدا حق‌الزحمه کارشناس دادگستری را محاسبه و نتیجه آن را ثبت کنید.",
+              "error",
+            );
+            return;
+          }
+
+          const departmentId = getValidNumber(
+            selectedRequest.currentDepartmentTypeId,
+          );
+          const branchCode = getValidNumber(selectedRequest.branchId);
+          const supervisionCode = getValidNumber(
+            selectedRequest.supersvisionId,
+          );
+
+          if (departmentId === null) {
+            showToast("شناسه دپارتمان درخواست معتبر نیست.", "error");
+            return;
+          }
+
+          if (branchCode === null) {
+            showToast("کد شعبه درخواست معتبر نیست.", "error");
+            return;
+          }
+
+          if (supervisionCode === null) {
+            showToast("کد سرپرستی درخواست معتبر نیست.", "error");
+            return;
+          }
+
+          await createCalculatedFee({
+            requestId: selectedRequest.id,
+            departmentId,
+            branchCode,
+            supervisionCode,
+
+            propertyValueBankFee: savedBankCalculation.propertyValue,
+            loanAmountBankFee: savedBankCalculation.facilityAmount,
+            isBankFeeBoard: savedBankCalculation.isBoard,
+
+            propertyValueJudicialFee: savedJudicialCalculation.propertyValue,
+            loanAmountJudicialFee: savedJudicialCalculation.facilityAmount,
+            isJudicialFeeBoard: savedJudicialCalculation.isBoard,
+          });
+        }
+
         if (comment.trim()) {
           await createRequestComment({
             requestId: selectedRequest.id,
@@ -253,69 +422,223 @@ export function DepartmentRequestFeeCalculationPage({
             description: comment.trim(),
           });
         }
-        await userAction({ requestId: selectedRequest.id, accepted });
-        showToast(accepted ? "درخواست تأیید شد" : "درخواست رد شد", "success");
+
+        await userAction({
+          requestId: selectedRequest.id,
+          accepted,
+        });
+
+        showToast(
+          accepted
+            ? "کارمزدها ثبت و درخواست با موفقیت تأیید شد."
+            : "درخواست رد شد.",
+          "success",
+        );
+
         setIsDetailOpen(false);
-        requestsQuery.refetch();
+        await requestsQuery.refetch();
       } catch (error: unknown) {
-        console.error("Error in action:", error);
-        showToast(getErrorMessage(error, "خطا در انجام عملیات"), "error");
+        console.error("Error in request action:", error);
+
+        showToast(
+          getErrorMessage(
+            error,
+            accepted
+              ? "خطا در ثبت کارمزد یا تأیید درخواست"
+              : "خطا در رد درخواست",
+          ),
+          "error",
+        );
       } finally {
         setIsSubmitting(false);
       }
     },
-    [selectedRequest, comment, user, requestsQuery, showToast],
+    [
+      selectedRequest,
+      savedBankCalculation,
+      savedJudicialCalculation,
+      comment,
+      user,
+      requestsQuery,
+      showToast,
+    ],
   );
 
   const handleCalculateBank = useCallback(async () => {
-    const fa = parseValue(bankFa);
-    const pv = parseValue(bankPv);
-    if (!fa || !pv) {
-      showToast("لطفاً هر دو مقدار را وارد کنید", "error");
+    if (!hasValidPositiveAmount(bankFa) || !hasValidPositiveAmount(bankPv)) {
+      showToast(
+        "مبلغ تسهیلات و ارزش ملک برای کارمزد بانک باید بزرگ‌تر از صفر باشند.",
+        "error",
+      );
       return;
     }
 
+    const facilityAmount = parseValue(bankFa);
+    const propertyValue = parseValue(bankPv);
+
     setIsCalculatingBank(true);
+
     try {
       const body: CalculateBankFeeInput = {
-        facilityAmount: fa,
-        propertyValue: pv,
+        facilityAmount,
+        propertyValue,
       };
+
       const result = await calculateBankFee(body);
-      setBankResult(result);
-      showToast("محاسبه با موفقیت انجام شد", "success");
+
+      // فقط پیش‌نمایش است و هنوز برای درخواست ثبت نشده.
+      setBankCalculationPreview(result);
+
+      showToast(
+        "محاسبه انجام شد. برای استفاده در تأیید درخواست، نتیجه را ثبت کنید.",
+        "success",
+      );
     } catch (error: unknown) {
       console.error("Error calculating bank fee:", error);
-      showToast(getErrorMessage(error, "خطا در محاسبه"), "error");
+      showToast(getErrorMessage(error, "خطا در محاسبه کارمزد بانک"), "error");
     } finally {
       setIsCalculatingBank(false);
     }
-  }, [bankFa, bankPv, selectedRequest, showToast]);
+  }, [bankFa, bankPv, showToast]);
 
   const handleCalculateJudicial = useCallback(async () => {
-    const fa = parseValue(judicialFa);
-    const pv = parseValue(judicialPv);
-    if (!fa || !pv) {
-      showToast("لطفاً هر دو مقدار را وارد کنید", "error");
+    if (
+      !hasValidPositiveAmount(judicialFa) ||
+      !hasValidPositiveAmount(judicialPv)
+    ) {
+      showToast(
+        "مبلغ تسهیلات و ارزش ملک برای حق‌الزحمه کارشناس باید بزرگ‌تر از صفر باشند.",
+        "error",
+      );
       return;
     }
 
+    const facilityAmount = parseValue(judicialFa);
+    const propertyValue = parseValue(judicialPv);
+
     setIsCalculatingJudicial(true);
+
     try {
       const body: CalculateJudicialFeeInput = {
-        facilityAmount: fa,
-        propertyValue: pv,
+        facilityAmount,
+        propertyValue,
       };
+
       const result = await calculateJudicialFee(body);
-      setJudicialResult(result);
-      showToast("محاسبه با موفقیت انجام شد", "success");
+
+      // فقط پیش‌نمایش است و هنوز برای درخواست ثبت نشده.
+      setJudicialCalculationPreview(result);
+
+      showToast(
+        "محاسبه انجام شد. برای استفاده در تأیید درخواست، نتیجه را ثبت کنید.",
+        "success",
+      );
     } catch (error: unknown) {
       console.error("Error calculating judicial fee:", error);
-      showToast(getErrorMessage(error, "خطا در محاسبه"), "error");
+      showToast(
+        getErrorMessage(error, "خطا در محاسبه حق‌الزحمه کارشناس"),
+        "error",
+      );
     } finally {
       setIsCalculatingJudicial(false);
     }
-  }, [judicialFa, judicialPv, selectedRequest, showToast]);
+  }, [judicialFa, judicialPv, showToast]);
+
+  const handleSaveBankCalculation = useCallback(() => {
+    if (!bankCalculationPreview) {
+      showToast("ابتدا کارمزد بانک را محاسبه کنید.", "error");
+      return;
+    }
+
+    const facilityAmount = parseValue(bankFa);
+    const propertyValue = parseValue(bankPv);
+
+    if (!facilityAmount || !propertyValue) {
+      showToast(
+        "مقادیر واردشده برای محاسبه کارمزد بانک معتبر نیستند.",
+        "error",
+      );
+      return;
+    }
+
+    setSavedBankCalculation({
+      facilityAmount,
+      propertyValue,
+      isBoard: Boolean(bankCalculationPreview.isBoard),
+      fee: bankCalculationPreview.bankFee ?? 0,
+    });
+
+    setIsBankModalOpen(false);
+
+    showToast(
+      "کارمزد بانک ثبت شد و در زمان تأیید درخواست استفاده می‌شود.",
+      "success",
+    );
+  }, [bankCalculationPreview, bankFa, bankPv, showToast]);
+
+  const handleSaveJudicialCalculation = useCallback(() => {
+    if (!judicialCalculationPreview) {
+      showToast("ابتدا حق‌الزحمه کارشناس دادگستری را محاسبه کنید.", "error");
+      return;
+    }
+
+    const facilityAmount = parseValue(judicialFa);
+    const propertyValue = parseValue(judicialPv);
+
+    if (!facilityAmount || !propertyValue) {
+      showToast(
+        "مقادیر واردشده برای محاسبه حق‌الزحمه کارشناس معتبر نیستند.",
+        "error",
+      );
+      return;
+    }
+
+    setSavedJudicialCalculation({
+      facilityAmount,
+      propertyValue,
+      isBoard: Boolean(judicialCalculationPreview.isBoard),
+      fee: judicialCalculationPreview.judicialFee ?? 0,
+    });
+
+    setIsJudicialModalOpen(false);
+
+    showToast(
+      "حق‌الزحمه کارشناس ثبت شد و در زمان تأیید درخواست استفاده می‌شود.",
+      "success",
+    );
+  }, [judicialCalculationPreview, judicialFa, judicialPv, showToast]);
+
+  const handleGeneratePdf = useCallback(async () => {
+    if (!selectedReadonlyAppraisal) {
+      showToast("فرم ارزیابی برای ایجاد PDF انتخاب نشده است.", "error");
+      return;
+    }
+
+    setIsGeneratingPdf(true);
+
+    try {
+      const pdfUrl = await generateAppraisalPdf(
+        selectedReadonlyAppraisal,
+        lookups,
+        {
+          requestCode: selectedRequest?.requestCode,
+          date: selectedRequest?.creationTime
+            ? isoToPersian(selectedRequest.creationTime)
+            : "",
+          signatures: requestSignatures,
+        },
+      );
+
+      window.open(pdfUrl, "_blank");
+
+      showToast("گزارش PDF با موفقیت ایجاد شد", "success");
+    } catch (error: unknown) {
+      console.error("Error generating appraisal PDF:", error);
+      showToast(getErrorMessage(error, "خطا در ایجاد فایل PDF"), "error");
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  }, [lookups, selectedReadonlyAppraisal, selectedRequest, showToast]);
 
   const columns = useMemo<ColumnDef<RequestItem, unknown>[]>(
     () => [
@@ -337,7 +660,7 @@ export function DepartmentRequestFeeCalculationPage({
       {
         id: "role",
         header: "نقش سازمانی",
-        cell: ({ row }) => row.original.actorUserRoleName || "-",
+        cell: ({ row }) => row.original.actorUserRoleNames?.join("-") || "-",
       },
       {
         id: "date",
@@ -433,54 +756,308 @@ export function DepartmentRequestFeeCalculationPage({
               getUserData={getUserCacheData}
             >
               {/* محاسبه کارمزد */}
+              {/*<RequestDetailSection*/}
+              {/*  icon={<Calculator className="w-5 h-5" />}*/}
+              {/*  title="محاسبه کارمزد"*/}
+              {/*  tone="blue"*/}
+              {/*>*/}
+              {/*  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">*/}
+              {/*    <button*/}
+              {/*      onClick={() => setIsBankModalOpen(true)}*/}
+              {/*      className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-center hover:bg-blue-100 transition-colors cursor-pointer"*/}
+              {/*    >*/}
+              {/*      <p className="font-bold text-blue-700">کارمزد بانک</p>*/}
+              {/*      <p className="text-xs text-blue-500 mt-1">*/}
+              {/*        کلیک برای محاسبه*/}
+              {/*      </p>*/}
+              {/*    </button>*/}
+              {/*    <button*/}
+              {/*      onClick={() => setIsJudicialModalOpen(true)}*/}
+              {/*      className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center hover:bg-emerald-100 transition-colors cursor-pointer"*/}
+              {/*    >*/}
+              {/*      <p className="font-bold text-emerald-700">*/}
+              {/*        کارمزد کارشناس دادگستری*/}
+              {/*      </p>*/}
+              {/*      <p className="text-xs text-emerald-500 mt-1">*/}
+              {/*        کلیک برای محاسبه*/}
+              {/*      </p>*/}
+              {/*    </button>*/}
+              {/*  </div>*/}
+              {/*</RequestDetailSection>*/}
+
+              <RequestDetailSection
+                icon={<ClipboardList className="w-5 h-5" />}
+                title="فرم‌های ارزیابی ملک"
+                tone="blue"
+              >
+                <div className="space-y-3">
+                  {appraisals.map((appraisal, index) => {
+                    const departmentName = getDepartmentName(
+                      appraisal.creatorDepartmentId,
+                    );
+
+                    const isMainOffice =
+                      Number(appraisal.creatorDepartmentId) ===
+                      Number(REQUEST_DEPARTMENT_TYPES.mainOffice.id);
+
+                    return (
+                      <div
+                        key={
+                          appraisal.id ??
+                          `${appraisal.creatorDepartmentId}-${index}`
+                        }
+                        className={[
+                          "flex items-center justify-between gap-4 rounded-xl border p-4",
+                          isMainOffice
+                            ? "border-blue-200 bg-blue-50"
+                            : "border-blue-200 bg-blue-50",
+                        ].join(" ")}
+                      >
+                        <div className="min-w-0">
+                          <div
+                            className={[
+                              "text-sm font-medium",
+                              isMainOffice ? "text-blue-800" : "text-blue-800",
+                            ].join(" ")}
+                          >
+                            فرم ارزیابی ثبت‌شده توسط واحد{" "}
+                            <span className="font-bold">{departmentName}</span>
+                          </div>
+
+                          <div
+                            className={[
+                              "mt-1 text-xs",
+                              isMainOffice ? "text-blue-700" : "text-blue-700",
+                            ].join(" ")}
+                          >
+                            این فرم فقط قابل مشاهده است.
+                          </div>
+                        </div>
+
+                        <FormButton
+                          title={`مشاهده فرم ${departmentName}`}
+                          variant="primary"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedReadonlyAppraisal(appraisal);
+                            setIsAppraisalReadOnlyOpen(true);
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
+
+                  {appraisals.length === 0 && (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                      هنوز هیچ فرم ارزیابی ملکی توسط واحدها ثبت نشده است.
+                    </div>
+                  )}
+                </div>
+              </RequestDetailSection>
+
+              <RequestDetailSection
+                icon={<ClipboardList className="w-5 h-5" />}
+                title="امضاهای ثبت‌شده"
+                tone="blue"
+              >
+                {requestSignatures.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[720px] border-collapse text-right text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50 text-slate-700">
+                          <th className="px-4 py-3 font-semibold">ردیف</th>
+                          <th className="px-4 py-3 font-semibold">
+                            نام و نام خانوادگی
+                          </th>
+                          <th className="px-4 py-3 font-semibold">کد پرسنلی</th>
+                          <th className="px-4 py-3 font-semibold">
+                            نقش سازمانی
+                          </th>
+                          <th className="px-4 py-3 font-semibold">
+                            تاریخ و زمان امضا
+                          </th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {requestSignatures.map((signature, index) => (
+                          <tr
+                            key={signature.id}
+                            className="border-b border-slate-100 last:border-b-0"
+                          >
+                            <td className="px-4 py-3 text-slate-600">
+                              {index + 1}
+                            </td>
+
+                            <td className="px-4 py-3 font-medium text-slate-800">
+                              {signature.fullName || "-"}
+                            </td>
+
+                            <td className="px-4 py-3 text-slate-700">
+                              {signature.personCode || "-"}
+                            </td>
+
+                            <td className="px-4 py-3 text-slate-700">
+                              {signature.roleName || "-"}
+                            </td>
+
+                            <td className="px-4 py-3 text-slate-700">
+                              {signature.creationTime ? (
+                                <span
+                                  dir="ltr"
+                                  className="inline-block whitespace-nowrap"
+                                >
+                                  {isoToPersianDateTime(signature.creationTime)}
+                                </span>
+                              ) : (
+                                "-"
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                    هنوز امضایی برای این درخواست ثبت نشده است.
+                  </div>
+                )}
+              </RequestDetailSection>
+
               <RequestDetailSection
                 icon={<Calculator className="w-5 h-5" />}
                 title="محاسبه کارمزد"
                 tone="blue"
               >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <button
-                    onClick={() => setIsBankModalOpen(true)}
-                    className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-center hover:bg-blue-100 transition-colors cursor-pointer"
-                  >
-                    <p className="font-bold text-blue-700">کارمزد بانک</p>
-                    <p className="text-xs text-blue-500 mt-1">
-                      کلیک برای محاسبه
-                    </p>
-                  </button>
-                  <button
-                    onClick={() => setIsJudicialModalOpen(true)}
-                    className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center hover:bg-emerald-100 transition-colors cursor-pointer"
-                  >
-                    <p className="font-bold text-emerald-700">
-                      کارمزد کارشناس دادگستری
-                    </p>
-                    <p className="text-xs text-emerald-500 mt-1">
-                      کلیک برای محاسبه
-                    </p>
-                  </button>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {/* کارمزد بانک */}
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-blue-700">کارمزد بانک</p>
+
+                        {savedBankCalculation ? (
+                          <div className="mt-2 space-y-1 text-sm text-slate-700">
+                            <p>
+                              مبلغ تسهیلات:{" "}
+                              <span dir="ltr">
+                                {formatWithCommas(
+                                  savedBankCalculation.facilityAmount,
+                                )}
+                              </span>{" "}
+                              ریال
+                            </p>
+
+                            <p>
+                              ارزش ملک:{" "}
+                              <span dir="ltr">
+                                {formatWithCommas(
+                                  savedBankCalculation.propertyValue,
+                                )}
+                              </span>{" "}
+                              ریال
+                            </p>
+
+                            <p className="font-bold text-emerald-700">
+                              کارمزد محاسبه‌شده:{" "}
+                              <span dir="ltr">
+                                {formatWithCommas(savedBankCalculation.fee)}
+                              </span>{" "}
+                              ریال
+                            </p>
+
+                            <p className="text-xs text-slate-500">
+                              {savedBankCalculation.isBoard
+                                ? "نوع کارشناسی: هیئتی"
+                                : "نوع کارشناسی: تک‌نفره"}
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-xs text-amber-700">
+                            هنوز نتیجه‌ای برای کارمزد بانک ثبت نشده است.
+                          </p>
+                        )}
+                      </div>
+
+                      <FormButton
+                        title={savedBankCalculation ? "محاسبه مجدد" : "محاسبه"}
+                        variant="primary"
+                        size="sm"
+                        onClick={() => {
+                          setBankCalculationPreview(null);
+                          setIsBankModalOpen(true);
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* حق‌الزحمه کارشناس دادگستری */}
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-emerald-700">
+                          حق‌الزحمه کارشناس دادگستری
+                        </p>
+
+                        {savedJudicialCalculation ? (
+                          <div className="mt-2 space-y-1 text-sm text-slate-700">
+                            <p>
+                              مبلغ تسهیلات:{" "}
+                              <span dir="ltr">
+                                {formatWithCommas(
+                                  savedJudicialCalculation.facilityAmount,
+                                )}
+                              </span>{" "}
+                              ریال
+                            </p>
+
+                            <p>
+                              ارزش ملک:{" "}
+                              <span dir="ltr">
+                                {formatWithCommas(
+                                  savedJudicialCalculation.propertyValue,
+                                )}
+                              </span>{" "}
+                              ریال
+                            </p>
+
+                            <p className="font-bold text-emerald-700">
+                              حق‌الزحمه محاسبه‌شده:{" "}
+                              <span dir="ltr">
+                                {formatWithCommas(savedJudicialCalculation.fee)}
+                              </span>{" "}
+                              ریال
+                            </p>
+
+                            <p className="text-xs text-slate-500">
+                              {savedJudicialCalculation.isBoard
+                                ? "نوع کارشناسی: هیئتی"
+                                : "نوع کارشناسی: تک‌نفره"}
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-xs text-amber-700">
+                            هنوز نتیجه‌ای برای حق‌الزحمه کارشناس ثبت نشده است.
+                          </p>
+                        )}
+                      </div>
+
+                      <FormButton
+                        title={
+                          savedJudicialCalculation ? "محاسبه مجدد" : "محاسبه"
+                        }
+                        variant="primary"
+                        size="sm"
+                        onClick={() => {
+                          setJudicialCalculationPreview(null);
+                          setIsJudicialModalOpen(true);
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
               </RequestDetailSection>
-
-              {detailAppraisal && (
-                <RequestDetailSection
-                  icon={<ClipboardList className="w-5 h-5" />}
-                  title="فرم ارزیابی ملک"
-                  tone="blue"
-                >
-                  <div className="flex items-center justify-between p-4 bg-blue-50 border border-blue-100 rounded-xl">
-                    <div className="text-sm text-blue-800">
-                      فرم ارزیابی ملک برای این درخواست موجود است.
-                    </div>
-                    <FormButton
-                      title="مشاهده فرم ارزیابی"
-                      variant="primary"
-                      size="sm"
-                      onClick={() => setIsAppraisalReadOnlyOpen(true)}
-                    />
-                  </div>
-                </RequestDetailSection>
-              )}
 
               <RequestDetailSection
                 icon={<MessageSquareText className="w-5 h-5" />}
@@ -509,7 +1086,7 @@ export function DepartmentRequestFeeCalculationPage({
         onClose={() => setIsBankModalOpen(false)}
         overlayLock={isCalculatingBank}
         footerButtons={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <FormButton
               title="محاسبه"
               variant="primary"
@@ -517,8 +1094,16 @@ export function DepartmentRequestFeeCalculationPage({
               isLoading={isCalculatingBank}
               disabled={isCalculatingBank}
             />
+
+            <FormButton
+              title="ثبت نتیجه و بازگشت به جزئیات"
+              variant="success"
+              onClick={handleSaveBankCalculation}
+              disabled={!bankCalculationPreview || isCalculatingBank}
+            />
           </div>
         }
+
         renderContent={() => (
           <div className="space-y-4">
             <FormInput
@@ -526,26 +1111,41 @@ export function DepartmentRequestFeeCalculationPage({
               name="bank-fa"
               label="مبلغ تسهیلات (ریال)"
               value={bankFa}
-              onChange={(v) => setBankFa(formatNumber(v))}
+              onChange={(value) => {
+                setBankFa(formatNumber(value));
+                setBankCalculationPreview(null);
+              }}
               dir="ltr"
             />
+
             <FormInput
               id="bank-pv"
               name="bank-pv"
               label="ارزش ملک (ریال)"
               value={bankPv}
-              onChange={(v) => setBankPv(formatNumber(v))}
+              onChange={(value) => {
+                setBankPv(formatNumber(value));
+                setBankCalculationPreview(null);
+              }}
               dir="ltr"
             />
-            {bankResult && (
+
+            {bankCalculationPreview && (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
                 <p className="font-bold text-emerald-700">
-                  کارمزد بانک: {formatWithCommas(bankResult.bankFee ?? 0)} ریال
+                  کارمزد بانک:{" "}
+                  {formatWithCommas(bankCalculationPreview.bankFee ?? 0)} ریال
                 </p>
-                <p className="text-sm text-slate-600 mt-1">
-                  {bankResult.isBoard
-                    ? "کارشناسی به صورت هیئتی می باشد"
-                    : "کارشناسی به صورت تک نفره می باشد"}
+
+                <p className="mt-1 text-sm text-slate-600">
+                  {bankCalculationPreview.isBoard
+                    ? "کارشناسی به‌صورت هیئتی است."
+                    : "کارشناسی به‌صورت تک‌نفره است."}
+                </p>
+
+                <p className="mt-2 text-xs text-amber-700">
+                  برای ثبت نهایی این نتیجه، دکمه «ثبت نتیجه و بازگشت به جزئیات»
+                  را بزنید.
                 </p>
               </div>
             )}
@@ -561,7 +1161,7 @@ export function DepartmentRequestFeeCalculationPage({
         onClose={() => setIsJudicialModalOpen(false)}
         overlayLock={isCalculatingJudicial}
         footerButtons={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <FormButton
               title="محاسبه"
               variant="primary"
@@ -569,8 +1169,16 @@ export function DepartmentRequestFeeCalculationPage({
               isLoading={isCalculatingJudicial}
               disabled={isCalculatingJudicial}
             />
+
+            <FormButton
+              title="ثبت نتیجه و بازگشت به جزئیات"
+              variant="success"
+              onClick={handleSaveJudicialCalculation}
+              disabled={!judicialCalculationPreview || isCalculatingJudicial}
+            />
           </div>
         }
+
         renderContent={() => (
           <div className="space-y-4">
             <FormInput
@@ -578,27 +1186,44 @@ export function DepartmentRequestFeeCalculationPage({
               name="judicial-fa"
               label="مبلغ تسهیلات (ریال)"
               value={judicialFa}
-              onChange={(v) => setJudicialFa(formatNumber(v))}
+              onChange={(value) => {
+                setJudicialFa(formatNumber(value));
+                setJudicialCalculationPreview(null);
+              }}
               dir="ltr"
             />
+
             <FormInput
               id="judicial-pv"
               name="judicial-pv"
               label="ارزش ملک (ریال)"
               value={judicialPv}
-              onChange={(v) => setJudicialPv(formatNumber(v))}
+              onChange={(value) => {
+                setJudicialPv(formatNumber(value));
+                setJudicialCalculationPreview(null);
+              }}
               dir="ltr"
             />
-            {judicialResult && (
+
+            {judicialCalculationPreview && (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
                 <p className="font-bold text-emerald-700">
                   حق‌الزحمه کارشناس:{" "}
-                  {formatWithCommas(judicialResult.judicialFee ?? 0)} ریال
+                  {formatWithCommas(
+                    judicialCalculationPreview.judicialFee ?? 0,
+                  )}{" "}
+                  ریال
                 </p>
-                <p className="text-sm text-slate-600 mt-1">
-                  {judicialResult.isBoard
-                    ? "کارشناسی به صورت هیئتی می باشد"
-                    : "کارشناسی به صورت تک نفره می باشد"}
+
+                <p className="mt-1 text-sm text-slate-600">
+                  {judicialCalculationPreview.isBoard
+                    ? "کارشناسی به‌صورت هیئتی است."
+                    : "کارشناسی به‌صورت تک‌نفره است."}
+                </p>
+
+                <p className="mt-2 text-xs text-amber-700">
+                  برای ثبت نهایی این نتیجه، دکمه «ثبت نتیجه و بازگشت به جزئیات»
+                  را بزنید.
                 </p>
               </div>
             )}
@@ -608,9 +1233,15 @@ export function DepartmentRequestFeeCalculationPage({
 
       <PropertyAppraisalReadOnlyModal
         isOpen={isAppraisalReadOnlyOpen}
-        appraisal={detailAppraisal}
+        appraisal={selectedReadonlyAppraisal}
         lookups={lookups}
-        onClose={() => setIsAppraisalReadOnlyOpen(false)}
+        signatures={requestSignatures}
+        isGeneratingPdf={isGeneratingPdf}
+        onGeneratePdf={handleGeneratePdf}
+        onClose={() => {
+          setIsAppraisalReadOnlyOpen(false);
+          setSelectedReadonlyAppraisal(null);
+        }}
       />
     </MainLayout.Main>
   );

@@ -13,7 +13,6 @@ import RequestDetailsPanel, {
   RequestDetailSection,
   ViewDetailsButton,
 } from "../../../baseComponents/RequestDetailsPanel";
-import PropertyAppraisalFormModal from "../../../baseComponents/PropertyAppraisalFormModal";
 import PropertyAppraisalReadOnlyModal from "../../../baseComponents/PropertyAppraisalReadOnlyModal";
 import { useToast } from "../../../libs/toastContext";
 import { useAuthStore } from "../../../libs/store";
@@ -21,16 +20,19 @@ import { useAuthStore } from "../../../libs/store";
 import { getAllRequests } from "../../../services/RequestCrud/getAll";
 import { getRequest } from "../../../services/RequestCrud/get";
 import { viewRequest } from "../../../services/RequestCrud/viewRequest";
-import { userAction } from "../../../services/RequestCrud/userAction";
+import {
+  getUserActionSuccessMessage,
+  userAction,
+} from "../../../services/RequestCrud/userAction";
 import { createRequestComment } from "../../../services/RequestCommentCrud/create";
 import { getUserById } from "../../../services/Users/getUserById";
 import { getPropertyAppraisalLookups } from "../../../services/PropertyAppraisalCrud/getLookups";
 import { getPropertyAppraisalByRequestId } from "../../../services/PropertyAppraisalCrud/getByRequestId";
-import { updatePropertyAppraisal } from "../../../services/PropertyAppraisalCrud/update";
+import { getAllRequestSignatures } from "../../../services/RequestSignatureCrud/getAll";
+import type { RequestSignatureOutputDto } from "../../../services/RequestSignatureCrud/types";
 
 import type { RequestItem } from "../../../services/RequestCrud/types";
 import type {
-  PropertyAppraisalInputDto,
   PropertyAppraisalLookupsDto,
   PropertyAppraisalOutputDto,
 } from "../../../services/PropertyAppraisalCrud/types";
@@ -63,6 +65,25 @@ interface RegionEngineeringExpertViewPageProps {
   statusCode?: number;
 }
 
+const getDepartmentName = (id: number | string | null | undefined): string => {
+  switch (Number(id)) {
+    case Number(REQUEST_DEPARTMENT_TYPES.branch.id):
+      return REQUEST_DEPARTMENT_TYPES.branch.name;
+
+    case Number(REQUEST_DEPARTMENT_TYPES.independentBranch.id):
+      return REQUEST_DEPARTMENT_TYPES.independentBranch.name;
+
+    case Number(REQUEST_DEPARTMENT_TYPES.region.id):
+      return REQUEST_DEPARTMENT_TYPES.region.name;
+
+    case Number(REQUEST_DEPARTMENT_TYPES.mainOffice.id):
+      return REQUEST_DEPARTMENT_TYPES.mainOffice.name;
+
+    default:
+      return "واحد نامشخص";
+  }
+};
+
 export function DepartmentRegionEngineeringExpertViewPage({
   departmentType,
   statusCode,
@@ -78,28 +99,19 @@ export function DepartmentRegionEngineeringExpertViewPage({
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // مودال ویرایش فرم ثبت‌شده توسط منطقه
-  const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
-  const [isSavingAppraisal, setIsSavingAppraisal] = useState(false);
-
   // مودال مشاهده فرم‌های سایر واحدها
   const [isAppraisalReadOnlyOpen, setIsAppraisalReadOnlyOpen] = useState(false);
-
-  // فقط فرم ثبت‌شده توسط منطقه قابل ویرایش است.
-  const [regionAppraisal, setRegionAppraisal] =
-    useState<PropertyAppraisalOutputDto | null>(null);
-
-  // تمام فرم‌های ثبت‌شده توسط واحدهای دیگر فقط قابل مشاهده‌اند.
-  const [otherAppraisals, setOtherAppraisals] = useState<
-    PropertyAppraisalOutputDto[]
-  >([]);
 
   // فرم انتخاب‌شده از لیست فرم‌های readonly
   const [selectedReadonlyAppraisal, setSelectedReadonlyAppraisal] =
     useState<PropertyAppraisalOutputDto | null>(null);
-
-  // داده فرم منطقه برای PropertyAppraisalFormModal
-  const [assetForm, setAssetForm] = useState<PropertyAppraisalInputDto>({});
+  // تمام فرم‌های ارزیابی ثبت‌شده برای درخواست؛ فقط قابل مشاهده
+  const [appraisals, setAppraisals] = useState<PropertyAppraisalOutputDto[]>(
+    [],
+  );
+  const [requestSignatures, setRequestSignatures] = useState<
+    RequestSignatureOutputDto[]
+  >([]);
 
   const userCacheRef = useRef<Map<number, { name: string; role: string }>>(
     new Map(),
@@ -183,14 +195,11 @@ export function DepartmentRegionEngineeringExpertViewPage({
     async (req: RequestItem) => {
       setSelectedRequest(null);
       setComment("");
-
       // پاک‌سازی داده‌های درخواست قبلی
-      setRegionAppraisal(null);
-      setOtherAppraisals([]);
+      setAppraisals([]);
       setSelectedReadonlyAppraisal(null);
-      setAssetForm({});
+      setRequestSignatures([]);
 
-      setIsAssetModalOpen(false);
       setIsAppraisalReadOnlyOpen(false);
       setIsDetailOpen(true);
 
@@ -201,44 +210,31 @@ export function DepartmentRegionEngineeringExpertViewPage({
         setSelectedRequest(detail);
 
         try {
-          /*
-           * خروجی سرویس آرایه است:
-           * [
-           *   { id: 1, creatorDepartmentId: 2, ... },
-           *   { id: 2, creatorDepartmentId: 3, ... }
-           * ]
-           */
-          const appraisals = await getPropertyAppraisalByRequestId(req.id);
+          const signaturesResult = await getAllRequestSignatures({
+            requestId: req.id,
+            sorting: "creationTime asc",
+            skipCount: 0,
+            maxResultCount: 1000,
+          });
 
-          const regionDepartmentId = REQUEST_DEPARTMENT_TYPES.region.id;
+          setRequestSignatures(signaturesResult.items);
+        } catch (error) {
+          console.error("Error loading request signatures:", error);
+          setRequestSignatures([]);
+        }
 
-          // فقط فرم منطقه اجازه ویرایش دارد.
-          const ownRegionAppraisal =
-            appraisals.find(
-              (appraisal) =>
-                Number(appraisal.creatorDepartmentId) ===
-                Number(regionDepartmentId),
-            ) ?? null;
-
-          // تمام فرم‌های سایر واحدها readonly هستند.
-          const appraisalsFromOtherDepartments = appraisals.filter(
-            (appraisal) =>
-              Number(appraisal.creatorDepartmentId) !==
-              Number(regionDepartmentId),
+        try {
+          // خروجی سرویس آرایه‌ای از تمام فرم‌های ارزیابی این درخواست است.
+          const requestAppraisals = await getPropertyAppraisalByRequestId(
+            req.id,
           );
 
-          setRegionAppraisal(ownRegionAppraisal);
-          setOtherAppraisals(appraisalsFromOtherDepartments);
-
-          // فقط فرم منطقه باید در فرم editable قرار بگیرد.
-          setAssetForm(ownRegionAppraisal ?? {});
+          setAppraisals(requestAppraisals ?? []);
         } catch (error) {
           console.error("Error loading property appraisals:", error);
 
-          setRegionAppraisal(null);
-          setOtherAppraisals([]);
+          setAppraisals([]);
           setSelectedReadonlyAppraisal(null);
-          setAssetForm({});
         }
 
         const ids = new Set<number>();
@@ -288,10 +284,20 @@ export function DepartmentRegionEngineeringExpertViewPage({
             description: comment.trim(),
           });
         }
-        await userAction({ requestId: selectedRequest.id, accepted });
-        showToast(accepted ? "درخواست تأیید شد" : "درخواست رد شد", "success");
+        const actionResult = await userAction({
+          requestId: selectedRequest.id,
+          accepted,
+        });
+
+        showToast(
+          getUserActionSuccessMessage(
+            actionResult,
+            accepted ? "درخواست با موفقیت تأیید شد" : "درخواست با موفقیت رد شد",
+          ),
+          "success",
+        );
         setIsDetailOpen(false);
-        requestsQuery.refetch();
+        await requestsQuery.refetch();
       } catch (error: unknown) {
         console.error("Error in action:", error);
         showToast(getErrorMessage(error, "خطا در انجام عملیات"), "error");
@@ -301,95 +307,6 @@ export function DepartmentRegionEngineeringExpertViewPage({
     },
     [selectedRequest, comment, user, requestsQuery, showToast],
   );
-
-  const handleFormChange = useCallback(
-    (
-      field: keyof PropertyAppraisalInputDto,
-      value: string | boolean | number,
-    ) => {
-      setAssetForm((prev) => ({ ...prev, [field]: value }));
-    },
-    [],
-  );
-
-  const handleSaveAppraisal = useCallback(async () => {
-    const regionDepartmentId = REQUEST_DEPARTMENT_TYPES.region.id;
-
-    if (!selectedRequest?.id) {
-      showToast("شناسه درخواست نامعتبر است.", "error");
-      return;
-    }
-
-    // فقط فرم منتسب به منطقه قابل ذخیره و ویرایش است.
-    if (
-      !regionAppraisal?.id ||
-      Number(regionAppraisal.creatorDepartmentId) !== Number(regionDepartmentId)
-    ) {
-      showToast("فقط فرم ارزیابی ثبت‌شده توسط منطقه قابل ویرایش است.", "error");
-      return;
-    }
-
-    setIsSavingAppraisal(true);
-
-    try {
-      /*
-       * بررسی مجدد API قبل از ثبت تغییرات:
-       * اطمینان از اینکه فرم منطقه هنوز وجود دارد و شناسه صحیح دارد.
-       */
-      const latestAppraisals = await getPropertyAppraisalByRequestId(
-        selectedRequest.id,
-      );
-
-      const latestRegionAppraisal = latestAppraisals.find(
-        (appraisal) =>
-          Number(appraisal.creatorDepartmentId) === Number(regionDepartmentId),
-      );
-
-      if (!latestRegionAppraisal?.id) {
-        showToast(
-          "فرم ارزیابی منطقه یافت نشد یا توسط کاربر دیگری تغییر کرده است.",
-          "error",
-        );
-        return;
-      }
-
-      const cleanBody: PropertyAppraisalInputDto = {
-        ...assetForm,
-        requestId: selectedRequest.id,
-        creatorDepartmentId: regionDepartmentId,
-      };
-
-      /*
-       * null، undefined و رشته خالی حذف می‌شوند.
-       * false حذف نمی‌شود تا مقادیر checkbox حفظ شوند.
-       */
-      (Object.keys(cleanBody) as (keyof PropertyAppraisalInputDto)[]).forEach(
-        (key) => {
-          const value = cleanBody[key];
-
-          if (value === null || value === undefined || value === "") {
-            delete cleanBody[key];
-          }
-        },
-      );
-
-      const saved = await updatePropertyAppraisal({
-        ...cleanBody,
-        id: latestRegionAppraisal.id,
-      });
-
-      setRegionAppraisal(saved);
-      setAssetForm(saved);
-
-      showToast("فرم ارزیابی منطقه با موفقیت ویرایش شد.", "success");
-      setIsAssetModalOpen(false);
-    } catch (error: unknown) {
-      console.error("Error saving appraisal:", error);
-      showToast(getErrorMessage(error, "خطا در ذخیره ارزیابی"), "error");
-    } finally {
-      setIsSavingAppraisal(false);
-    }
-  }, [assetForm, regionAppraisal, selectedRequest, showToast]);
 
   const columns = useMemo<ColumnDef<RequestItem, unknown>[]>(
     () => [
@@ -411,7 +328,7 @@ export function DepartmentRegionEngineeringExpertViewPage({
       {
         id: "role",
         header: "نقش سازمانی",
-        cell: ({ row }) => row.original.actorUserRoleName || "-",
+        cell: ({ row }) => row.original.actorUserRoleNames?.join("-") || "-",
       },
       {
         id: "date",
@@ -504,59 +421,57 @@ export function DepartmentRegionEngineeringExpertViewPage({
               documents={[]}
               getUserData={getUserCacheData}
             >
-              {(regionAppraisal || otherAppraisals.length > 0) && (
-                <RequestDetailSection
-                  icon={<ClipboardList className="w-5 h-5" />}
-                  title="فرم‌های ارزیابی ملک"
-                  tone="blue"
-                >
-                  <div className="space-y-3">
-                    {/* فرم ثبت‌شده توسط منطقه: قابل ویرایش */}
-                    {regionAppraisal && (
-                      <div className="flex items-center justify-between gap-4 rounded-xl border border-blue-100 bg-blue-50 p-4">
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium text-blue-800">
-                            فرم ارزیابی ثبت‌شده توسط منطقه
-                          </div>
+              <RequestDetailSection
+                icon={<ClipboardList className="w-5 h-5" />}
+                title="فرم‌های ارزیابی ملک"
+                tone="blue"
+              >
+                <div className="space-y-3">
+                  {appraisals.map((appraisal, index) => {
+                    const departmentName = getDepartmentName(
+                      appraisal.creatorDepartmentId,
+                    );
 
-                          <div className="mt-1 text-xs text-blue-600">
-                            این فرم در مرحله فعلی قابل ویرایش است.
-                          </div>
-                        </div>
+                    const isMainOffice =
+                      Number(appraisal.creatorDepartmentId) ===
+                      Number(REQUEST_DEPARTMENT_TYPES.mainOffice.id);
 
-                        <FormButton
-                          title="ویرایش فرم منطقه"
-                          variant="primary"
-                          size="sm"
-                          onClick={() => {
-                            setAssetForm(regionAppraisal);
-                            setIsAssetModalOpen(true);
-                          }}
-                        />
-                      </div>
-                    )}
-
-                    {/* تمام فرم‌های غیرمنطقه‌ای: فقط مشاهده */}
-                    {otherAppraisals.map((appraisal, index) => (
+                    return (
                       <div
                         key={
                           appraisal.id ??
                           `${appraisal.creatorDepartmentId}-${index}`
                         }
-                        className="flex items-center justify-between gap-4 rounded-xl border border-amber-200 bg-amber-50 p-4"
+                        className={[
+                          "flex items-center justify-between gap-4 rounded-xl border p-4",
+                          isMainOffice
+                            ? "border-blue-200 bg-blue-50"
+                            : "border-amber-200 bg-amber-50",
+                        ].join(" ")}
                       >
                         <div className="min-w-0">
-                          <div className="text-sm font-medium text-amber-800">
-                            فرم ارزیابی ثبت‌شده توسط واحد دیگر
+                          <div
+                            className={[
+                              "text-sm font-medium",
+                              isMainOffice ? "text-blue-800" : "text-amber-800",
+                            ].join(" ")}
+                          >
+                            فرم ارزیابی ثبت‌شده توسط واحد{" "}
+                            <span className="font-bold">{departmentName}</span>
                           </div>
 
-                          <div className="mt-1 text-xs text-amber-700">
+                          <div
+                            className={[
+                              "mt-1 text-xs",
+                              isMainOffice ? "text-blue-700" : "text-amber-700",
+                            ].join(" ")}
+                          >
                             این فرم فقط قابل مشاهده است.
                           </div>
                         </div>
 
                         <FormButton
-                          title="مشاهده فرم"
+                          title={`مشاهده فرم ${departmentName}`}
                           variant="secondary"
                           size="sm"
                           onClick={() => {
@@ -565,10 +480,89 @@ export function DepartmentRegionEngineeringExpertViewPage({
                           }}
                         />
                       </div>
-                    ))}
+                    );
+                  })}
+
+                  {appraisals.length === 0 && (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                      هنوز هیچ فرم ارزیابی ملکی توسط واحدها ثبت نشده است.
+                    </div>
+                  )}
+                </div>
+              </RequestDetailSection>
+              <RequestDetailSection
+                icon={<ClipboardList className="w-5 h-5" />}
+                title="امضاهای ثبت‌شده"
+                tone="blue"
+              >
+                {requestSignatures.length > 0 ? (
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="min-w-full text-right text-sm">
+                      <thead className="bg-slate-50 text-slate-700">
+                        <tr>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            ردیف
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            نام و نام خانوادگی
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            کد پرسنلی
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            نقش سازمانی
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            تاریخ و زمان امضا
+                          </th>
+                        </tr>
+                      </thead>
+
+                      <tbody className="divide-y divide-slate-100">
+                        {requestSignatures.map((signature, index) => (
+                          <tr
+                            key={
+                              signature.id ?? `${signature.personCode}-${index}`
+                            }
+                            className="text-slate-700"
+                          >
+                            <td className="px-4 py-3">{index + 1}</td>
+
+                            <td className="px-4 py-3">
+                              {signature.fullName || "-"}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              {signature.personCode || "-"}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              {signature.roleName || "-"}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              {signature.creationTime ? (
+                                <span
+                                  dir="ltr"
+                                  className="inline-block whitespace-nowrap"
+                                >
+                                  {isoToPersianDateTime(signature.creationTime)}
+                                </span>
+                              ) : (
+                                "-"
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                </RequestDetailSection>
-              )}
+                ) : (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                    هنوز امضایی برای این درخواست ثبت نشده است.
+                  </div>
+                )}
+              </RequestDetailSection>
 
               <RequestDetailSection
                 icon={<MessageSquareText className="w-5 h-5" />}
@@ -589,20 +583,11 @@ export function DepartmentRegionEngineeringExpertViewPage({
         }}
       />
 
-      <PropertyAppraisalFormModal
-        isOpen={isAssetModalOpen}
-        form={assetForm}
-        lookups={lookups}
-        isSaving={isSavingAppraisal}
-        onChange={handleFormChange}
-        onSave={handleSaveAppraisal}
-        onClose={() => setIsAssetModalOpen(false)}
-      />
-
       <PropertyAppraisalReadOnlyModal
         isOpen={isAppraisalReadOnlyOpen}
         appraisal={selectedReadonlyAppraisal}
         lookups={lookups}
+        signatures={requestSignatures}
         onClose={() => {
           setIsAppraisalReadOnlyOpen(false);
           setSelectedReadonlyAppraisal(null);

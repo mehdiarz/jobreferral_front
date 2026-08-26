@@ -19,7 +19,10 @@ import { useAuthStore } from "../../../libs/store";
 import { getAllRequests } from "../../../services/RequestCrud/getAll";
 import { getRequest } from "../../../services/RequestCrud/get";
 import { viewRequest } from "../../../services/RequestCrud/viewRequest";
-import { userAction } from "../../../services/RequestCrud/userAction";
+import {
+  getUserActionSuccessMessage,
+  userAction,
+} from "../../../services/RequestCrud/userAction";
 import { createRequestComment } from "../../../services/RequestCommentCrud/create";
 import { getUserById } from "../../../services/Users/getUserById";
 
@@ -44,6 +47,8 @@ import type {
   PropertyAppraisalOutputDto,
   PropertyAppraisalLookupsDto,
 } from "../../../services/PropertyAppraisalCrud/types";
+import { getAllRequestSignatures } from "../../../services/RequestSignatureCrud/getAll";
+import type { RequestSignatureOutputDto } from "../../../services/RequestSignatureCrud/types";
 
 // ─── Types ───────────────────────────────────────────────────────
 type TableFilter = { key: string; value: string };
@@ -81,6 +86,9 @@ export function DepartmentRequestAssetReviewPage({
   const [isAppraisalReadOnlyOpen, setIsAppraisalReadOnlyOpen] = useState(false);
   const [selectedReadonlyAppraisal, setSelectedReadonlyAppraisal] =
     useState<PropertyAppraisalOutputDto | null>(null);
+  const [requestSignatures, setRequestSignatures] = useState<
+    RequestSignatureOutputDto[]
+  >([]);
 
   const userCacheRef = useRef<Map<number, { name: string; role: string }>>(
     new Map(),
@@ -187,7 +195,7 @@ export function DepartmentRequestAssetReviewPage({
       setAppraisals([]);
       setSelectedReadonlyAppraisal(null);
       setIsAppraisalReadOnlyOpen(false);
-
+      setRequestSignatures([]);
       setIsDetailOpen(true);
 
       try {
@@ -204,6 +212,20 @@ export function DepartmentRequestAssetReviewPage({
 
         const detail = await getRequest(req.id);
         setSelectedRequest(detail);
+
+        try {
+          const signaturesResult = await getAllRequestSignatures({
+            requestId: req.id,
+            sorting: "creationTime asc",
+            skipCount: 0,
+            maxResultCount: 1000,
+          });
+
+          setRequestSignatures(signaturesResult.items);
+        } catch (error) {
+          console.error("Error loading request signatures:", error);
+          setRequestSignatures([]);
+        }
 
         const ids = new Set<number>();
 
@@ -265,13 +287,20 @@ export function DepartmentRequestAssetReviewPage({
             description: comment.trim(),
           });
         }
-        await userAction({ requestId: selectedRequest.id, accepted });
+        const actionResult = await userAction({
+          requestId: selectedRequest.id,
+          accepted,
+        });
+
         showToast(
-          accepted ? "درخواست تأیید شد" : "عملیات با موفقیت انجام شد",
+          getUserActionSuccessMessage(
+            actionResult,
+            accepted ? "درخواست با موفقیت تأیید شد" : "درخواست با موفقیت رد شد",
+          ),
           "success",
         );
         setIsDetailOpen(false);
-        requestsQuery.refetch();
+        await requestsQuery.refetch();
       } catch (error: unknown) {
         console.error("Error in action:", error);
         showToast(getErrorMessage(error, "خطا در انجام عملیات"), "error");
@@ -303,7 +332,7 @@ export function DepartmentRequestAssetReviewPage({
       {
         id: "role",
         header: "نقش سازمانی",
-        cell: ({ row }) => row.original.actorUserRoleName || "-",
+        cell: ({ row }) => row.original.actorUserRoleNames?.join("-") || "-",
       },
       {
         id: "date",
@@ -437,6 +466,81 @@ export function DepartmentRequestAssetReviewPage({
                   </div>
                 </RequestDetailSection>
               )}
+
+              <RequestDetailSection
+                icon={<ClipboardList className="w-5 h-5" />}
+                title="امضاهای ثبت‌شده"
+                tone="blue"
+              >
+                {requestSignatures.length > 0 ? (
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="min-w-full text-right text-sm">
+                      <thead className="bg-slate-50 text-slate-700">
+                        <tr>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            ردیف
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            نام و نام خانوادگی
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            کد پرسنلی
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            نقش سازمانی
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                            تاریخ و زمان امضا
+                          </th>
+                        </tr>
+                      </thead>
+
+                      <tbody className="divide-y divide-slate-100">
+                        {requestSignatures.map((signature, index) => (
+                          <tr
+                            key={
+                              signature.id ?? `${signature.personCode}-${index}`
+                            }
+                            className="text-slate-700"
+                          >
+                            <td className="px-4 py-3">{index + 1}</td>
+
+                            <td className="px-4 py-3">
+                              {signature.fullName || "-"}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              {signature.personCode || "-"}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              {signature.roleName || "-"}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              {signature.creationTime ? (
+                                <span
+                                  dir="ltr"
+                                  className="inline-block whitespace-nowrap"
+                                >
+                                  {isoToPersianDateTime(signature.creationTime)}
+                                </span>
+                              ) : (
+                                "-"
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                    هنوز امضایی برای این درخواست ثبت نشده است.
+                  </div>
+                )}
+              </RequestDetailSection>
+
               <RequestDetailSection
                 icon={<MessageSquareText className="w-5 h-5" />}
                 title="توضیحات تکمیلی"
@@ -460,6 +564,7 @@ export function DepartmentRequestAssetReviewPage({
         isOpen={isAppraisalReadOnlyOpen}
         appraisal={selectedReadonlyAppraisal}
         lookups={lookups}
+        signatures={requestSignatures}
         onClose={() => {
           setIsAppraisalReadOnlyOpen(false);
           setSelectedReadonlyAppraisal(null);

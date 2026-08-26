@@ -13,6 +13,9 @@ export async function getAllRequestSignatures(
   params: GetAllRequestSignaturesParams = {},
 ): Promise<PagedResultDto<RequestSignatureOutputDto>> {
   const searchParams = new URLSearchParams();
+  if (params.requestId !== undefined) {
+    searchParams.set("RequestId", String(params.requestId));
+  }
 
   if (params.sorting) {
     searchParams.set("Sorting", params.sorting);
