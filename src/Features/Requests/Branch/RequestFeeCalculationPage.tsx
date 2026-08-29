@@ -238,6 +238,7 @@ export function DepartmentRequestFeeCalculationPage({
       );
       const response = await getAllRequests({
         ...apiFilters,
+        hasBidFilter: true,
         currentDepartmentTypeName: departmentType.name,
         skipCount: pagination.pageIndex * pagination.pageSize,
         maxResultCount: pagination.pageSize,

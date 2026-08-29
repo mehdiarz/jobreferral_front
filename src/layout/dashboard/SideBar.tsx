@@ -94,7 +94,13 @@ export const Sidebar = () => {
   const { items: rawMenuItems } = useMenuStore();
   const { sidebarOpen } = useAppStore();
 
-  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
+  const [openMenus, setOpenMenus] = useState<{
+    level1: string | null;
+    level2: string | null;
+  }>({
+    level1: null,
+    level2: null,
+  });
 
   const currentPath = useRouterState({
     select: (state) => state.location.pathname,
@@ -115,57 +121,44 @@ export const Sidebar = () => {
   }, [rawMenuItems]);
 
   useEffect(() => {
-    // تابع کمکی برای باز کردن خودکار منوهای parent
-    const openParentMenus = (
-      items: MenuItem[] | MenuChild[],
-      parentIds: string[] = [],
-    ) => {
-      const idsToOpen: string[] = [...parentIds];
+    let activeL1: string | null = null;
+    let activeL2: string | null = null;
 
-      items.forEach((item) => {
-        // اگر خود item active باشه
-        if (
-          !!item.path &&
-          (currentPath === item.path || currentPath.startsWith(`${item.path}/`))
-        ) {
-          idsToOpen.push(...parentIds);
-        }
-
-        // اگر descendants active باشن
-        if (item.children && hasActiveDescendant(item.children, currentPath)) {
-          idsToOpen.push(item.id);
-          // اضافه کردن parentIds به لیست
-          if (parentIds.length > 0) {
-            idsToOpen.push(...parentIds);
+    for (const item of menuItems) {
+      if (item.children && hasActiveDescendant(item.children, currentPath)) {
+        activeL1 = item.id;
+        for (const child of item.children) {
+          if (
+            child.children &&
+            hasActiveDescendant(child.children, currentPath)
+          ) {
+            activeL2 = child.id;
+            break;
           }
-          // بازگشت برای children
-          openParentMenus(item.children, [...parentIds, item.id]);
         }
-      });
+        break;
+      }
+    }
 
-      return idsToOpen;
-    };
-
-    const idsToOpen = openParentMenus(menuItems);
-
-    if (idsToOpen.length > 0) {
-      setOpenMenus((prev) => {
-        const next = { ...prev };
-
-        idsToOpen.forEach((id) => {
-          next[id] = true;
-        });
-
-        return next;
-      });
+    if (activeL1) {
+      setOpenMenus({ level1: activeL1, level2: activeL2 });
     }
   }, [currentPath, menuItems]);
 
-  const toggleMenu = (menuId: string) => {
-    setOpenMenus((current) => ({
-      ...current,
-      [menuId]: !current[menuId],
-    }));
+  const toggleMenu = (menuId: string, level: 1 | 2) => {
+    setOpenMenus((prev) => {
+      if (level === 1) {
+        return {
+          level1: prev.level1 === menuId ? null : menuId,
+          level2: null, // وقتی منوی اصلی عوض یا بسته می‌شود، سطح ۲ هم ریست شود
+        };
+      }
+
+      return {
+        ...prev,
+        level2: prev.level2 === menuId ? null : menuId,
+      };
+    });
   };
 
   const closeMobileSidebar = () => {
@@ -218,6 +211,7 @@ export const Sidebar = () => {
   // تابع کمکی برای رندر کردن children
   const renderChildren = (children: MenuChild[]) => {
     return children.map((child) => {
+      const isChildExpanded = openMenus.level2 === child.id;
       const isChildActive =
         !!child.path &&
         (currentPath === child.path ||
@@ -262,7 +256,7 @@ export const Sidebar = () => {
             <>
               <button
                 type="button"
-                onClick={() => toggleMenu(child.id)}
+                onClick={() => toggleMenu(child.id, 2)}
                 className={`
                   relative flex w-full items-center gap-2.5 px-3 py-2 rounded-lg
                   transition-all duration-200 text-xs
@@ -286,15 +280,15 @@ export const Sidebar = () => {
                 </span>
                 <ChevronDown
                   className={`h-3 w-3 transition-transform duration-300 ${
-                    openMenus[child.id] ? "rotate-180" : ""
+                    isChildExpanded ? "rotate-180" : ""
                   }`}
                 />
               </button>
 
               <div
                 className={`
-                  overflow-hidden transition-all duration-300 ease-out
-                  ${openMenus[child.id] ? "max-h-[32rem] opacity-100 mt-0.5" : "max-h-0 opacity-0"}
+                overflow-hidden transition-all duration-300 ease-out
+                 ${isChildExpanded ? "max-h-[32rem] opacity-100 mt-0.5" : "max-h-0 opacity-0"}
                 `}
               >
                 <ul className="space-y-0.5 py-1 pr-3 mr-3 border-r-2 border-slate-200 dark:border-slate-700">
@@ -349,8 +343,8 @@ export const Sidebar = () => {
 
   // تابع کمکی برای رندر یک آیتم منو
   const renderMenuItem = (item: MenuItem) => {
+    const isExpanded = openMenus.level1 === item.id;
     const hasChildren = Boolean(item.children?.length);
-    const isExpanded = openMenus[item.id] || false;
     const isActive =
       !!item.path &&
       (currentPath === item.path || currentPath.startsWith(`${item.path}/`));
@@ -395,7 +389,7 @@ export const Sidebar = () => {
           <>
             <button
               type="button"
-              onClick={() => toggleMenu(item.id)}
+              onClick={() => toggleMenu(item.id, 1)}
               aria-expanded={isExpanded}
               className={`
                 relative flex w-full items-center gap-3 px-3 py-2.5 rounded-xl

@@ -3,6 +3,7 @@ import { apiClient } from "../../libs/api";
 export interface UserActionBody {
   accepted?: boolean | null;
   requestId: number;
+  judicialExpertIds?: number[] | null;
 }
 
 export interface UserActionResult {
@@ -51,11 +52,17 @@ export function getUserActionSuccessMessage(
 export async function userAction(
   body: UserActionBody,
 ): Promise<UserActionResult | null> {
+  const payload = {
+    accepted: body.accepted,
+    requestId: body.requestId,
+    judicialExpertIds: body.judicialExpertIds ?? null,
+  };
+
   const response = await apiClient.request<UserActionApiResponse>(
     "/services/app/RequestCrud/UserAction",
     {
       method: "POST",
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     },
   );
 

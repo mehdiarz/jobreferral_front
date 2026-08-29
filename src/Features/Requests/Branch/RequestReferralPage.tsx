@@ -192,8 +192,12 @@ export function DepartmentRequestReferralPage({
       referralCode,
       filters,
     ],
-    queryFn: () =>
-      getAllRequests({
+    queryFn: () => {
+      const isBranchOrIndependent =
+        departmentType.id === REQUEST_DEPARTMENT_TYPES.branch.id ||
+        departmentType.id === REQUEST_DEPARTMENT_TYPES.independentBranch.id;
+
+      return getAllRequests({
         ...Object.fromEntries(
           filters
             .filter((filter) => filter.value.trim())
@@ -205,10 +209,12 @@ export function DepartmentRequestReferralPage({
             ]),
         ),
         currentDepartmentTypeName: departmentType.name,
+        ...(isBranchOrIndependent ? { hasBidFilter: true } : {}),
         skipCount: pagination.pageIndex * pagination.pageSize,
         maxResultCount: pagination.pageSize,
         sorting: "creationTime desc",
-      }),
+      });
+    },
     enabled: referralCode !== undefined,
     select: (data) => {
       const list = (data.items ?? []).filter(

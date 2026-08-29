@@ -37,6 +37,10 @@ export async function getAllExperts(
     searchParams.set("LicenseNumber", licenseNumber);
   }
 
+  if (typeof params.isCapital === "boolean") {
+    searchParams.set("IsCapital", String(params.isCapital));
+  }
+
   if (sorting) {
     searchParams.set("Sorting", sorting);
   }

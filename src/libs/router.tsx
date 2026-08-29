@@ -422,6 +422,22 @@ const independentBranchRequestRequestReferralRoute = createRoute({
   },
 });
 
+const independentreferredToExpertRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/independent/referred-to-expert",
+  component: () => {
+    const Page = lazy(
+      () =>
+        import("../Features/Requests/IndependentBranch/ReferredToExpertPage.tsx"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
 const independentRequestFeeCalculationRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/requests/independent/fee-calculation",
@@ -577,6 +593,21 @@ const regionDescriptionReferralRoute = createRoute({
   },
 });
 
+const regionreferredToExpertRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/region/referred-to-expert",
+  component: () => {
+    const Page = lazy(
+      () => import("../Features/Requests/Region/ReferredToExpertPage.tsx"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
 const mainOfficeRequestViewRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/requests/main-office/view",
@@ -703,6 +734,21 @@ const mainOfficeRequestReferralRoute = createRoute({
   },
 });
 
+const mainOfficeReferredToExpertRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/main-office/referred-to-expert",
+  component: () => {
+    const Page = lazy(
+      () => import("../Features/Requests/MainOffice/ReferredToExpertPage.tsx"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
 const requestCreateRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/requests/branch/create",
@@ -778,6 +824,21 @@ const requestFeeCalculationRoute = createRoute({
   },
 });
 
+const referredToExpertPageRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/requests/branch/referred-to-expert",
+  component: () => {
+    const Page = lazy(
+      () => import("../Features/Requests/Branch/ReferredToExpertPage.tsx"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
 const profileRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/profile",
@@ -820,6 +881,7 @@ const routeTree = rootRoute.addChildren([
     independentBranchRequestReviewRoute,
     independentBranchRequestAssetReviewRoute,
     independentBranchRequestRequestReferralRoute,
+    independentreferredToExpertRoute,
     regionRequestViewRoute,
     regionRequestAssetReviewRoute,
     regionRequestReviewPageRoute,
@@ -829,6 +891,7 @@ const routeTree = rootRoute.addChildren([
     regionEngineeringRepresentativeReviewRoute,
     regionManagerApprovalRoute,
     regionDescriptionReferralRoute,
+    regionreferredToExpertRoute,
     mainOfficeRequestViewRoute,
     mainOfficeRequestEngineeringManagementReviewRoute,
     mainOfficeRequestRealEstateDepartmentHeadReviewRoute,
@@ -837,11 +900,13 @@ const routeTree = rootRoute.addChildren([
     mainOfficeRequestEngineeringManagementApprovalRoute,
     mainOfficeRequestAssetReviewRoute,
     mainOfficeRequestReferralRoute,
+    mainOfficeReferredToExpertRoute,
     requestCreateRoute,
     requestReviewRoute,
     requestAssetReviewRoute,
     requestReferralRoute,
     requestFeeCalculationRoute,
+    referredToExpertPageRoute,
     independentRequestFeeCalculationRoute,
   ]),
 ]);

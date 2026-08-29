@@ -86,6 +86,7 @@ export interface GetAllExpertsParams {
   code?: string;
   expertiseZoneTitle?: string;
   licenseNumber?: string;
+  isCapital?: boolean;
   sorting?: string;
   skipCount?: number;
   maxResultCount?: number;

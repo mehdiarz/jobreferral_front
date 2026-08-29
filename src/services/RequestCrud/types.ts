@@ -180,6 +180,9 @@ export interface GetAllRequestsParams {
   creationTime?: string | Date;
   authorityDepartmentTypeName?: string;
   currentDepartmentTypeName?: string;
+  hasSidFilter?: boolean;
+  hasBidFilter?: boolean;
+  hasPidFilter?: boolean;
   sorting?: string;
   skipCount?: number;
   maxResultCount?: number;

@@ -121,12 +121,10 @@ interface CollateralFormData {
 }
 
 interface EditFormData {
-  loanNumber: string;
   title: string;
   requestCode: string;
   amount: string;
   requestTypeId: number | null;
-  departmentId: number | null;
   personalTypeId: number | null;
   description: string;
 }
@@ -149,12 +147,10 @@ interface UserCacheData {
 
 // ─── Constants ───────────────────────────────────────────────────
 const EMPTY_EDIT_FORM: EditFormData = {
-  loanNumber: "",
   title: "",
   requestCode: "",
   amount: "",
   requestTypeId: null,
-  departmentId: null,
   personalTypeId: null,
   description: "",
 };
@@ -304,9 +300,15 @@ export function DepartmentRequestViewPage({
         creationTime?: string;
       };
 
+      const isBranchOrIndependent =
+        departmentType.id === REQUEST_DEPARTMENT_TYPES.branch.id ||
+        departmentType.id === REQUEST_DEPARTMENT_TYPES.independentBranch.id;
+
       return getAllRequests({
         ...requestFilters,
-        currentDepartmentTypeName: departmentType.name,
+        ...(isBranchOrIndependent
+          ? { hasBidFilter: true }
+          : { currentDepartmentTypeName: departmentType.name }),
         skipCount: pagination.pageIndex * pagination.pageSize,
         maxResultCount: pagination.pageSize,
         sorting: "creationTime desc",
@@ -335,7 +337,6 @@ export function DepartmentRequestViewPage({
   const {
     documentTypes,
     requestTypeOptions: typeOpts,
-    departmentOptions: deptOpts,
     personalTypeOptions: persTypeOpts,
     collateralTypeOptions: collTypeOpts,
     documentTypeOptions: docTypeOpts,
@@ -529,12 +530,10 @@ export function DepartmentRequestViewPage({
 
         // فرم رو پر کن
         setEditForm({
-          loanNumber: detail.loanNumber ?? "",
           title: detail.title ?? "",
           requestCode: detail.requestCode ?? "",
           amount: detail.amount?.toString() ?? "",
           requestTypeId: detail.requestTypeId ?? null,
-          departmentId: detail.departmentId ?? null,
           personalTypeId: detail.personalTypeId ?? null,
           description: detail.description ?? "",
         });
@@ -985,16 +984,12 @@ export function DepartmentRequestViewPage({
     if (!selectedRequest) return;
 
     const amount = Number(editForm.amount);
-    if (!editForm.loanNumber.trim() || !editForm.title.trim()) {
-      showToast("شماره پرونده و عنوان الزامی هستند", "error");
+    if (!editForm.title.trim()) {
+      showToast("عنوان الزامی است", "error");
       return;
     }
-    if (
-      !editForm.requestTypeId ||
-      !editForm.departmentId ||
-      !editForm.personalTypeId
-    ) {
-      showToast("نوع درخواست، دپارتمان و نوع شخص الزامی هستند", "error");
+    if (!editForm.requestTypeId || !editForm.personalTypeId) {
+      showToast("نوع درخواست و نوع شخص الزامی هستند", "error");
       return;
     }
     if (!editCustomerId) {
@@ -1021,11 +1016,9 @@ export function DepartmentRequestViewPage({
       await editRequest({
         id: selectedRequest.id,
         requestTypeId: editForm.requestTypeId,
-        departmentId: editForm.departmentId,
         customerId: editCustomerId,
         title: editForm.title.trim(),
         requestCode: editForm.requestCode,
-        loanNumber: editForm.loanNumber.trim(),
         amount,
         description: editForm.description,
         personalTypeId: editForm.personalTypeId,
@@ -1461,15 +1454,6 @@ export function DepartmentRequestViewPage({
             >
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <FormInput
-                  id="e-loan"
-                  name="loanNumber"
-                  label="شماره پرونده"
-                  value={editForm.loanNumber}
-                  onChange={(v) => handleEditFormChange("loanNumber", v)}
-                  dir="ltr"
-                  required
-                />
-                <FormInput
                   id="e-title"
                   name="title"
                   label="عنوان"
@@ -1506,16 +1490,6 @@ export function DepartmentRequestViewPage({
                     handleEditFormChange("requestTypeId", v ? Number(v) : null)
                   }
                   options={typeOpts}
-                />
-                <FormSelect<number>
-                  id="e-dept"
-                  name="departmentId"
-                  label="دپارتمان"
-                  value={editForm.departmentId ?? ""}
-                  onChange={(v) =>
-                    handleEditFormChange("departmentId", v ? Number(v) : null)
-                  }
-                  options={deptOpts}
                 />
                 <FormSelect<number>
                   id="e-ptype"

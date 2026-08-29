@@ -153,26 +153,28 @@ const getExpertCode = (e: Expert): string => safeText(e.code || e.nationalCode);
 const getExpertFullName = (e: Expert): string =>
   `${safeText(e.firstName)} ${safeText(e.lastName)}`.trim();
 const getExpertiseZoneTitle = (e: Expert, opts?: SelectOption[]): string => {
-  // ۱. اگر شیء expertiseZones در خروجی بک‌اند بود
+  // ۱. اگر لیست آبجکت‌های حدود صلاحیت در خروجی بک‌اند بود (expertiseZones)
   if (Array.isArray(e.expertiseZones) && e.expertiseZones.length > 0) {
-    return e.expertiseZones
-      .map((z) => safeText(z.title || z.name))
-      .filter(Boolean)
-      .join("، ");
+    const titles = e.expertiseZones
+      .map((z) => safeText(z?.title || z?.name))
+      .filter(Boolean);
+    if (titles.length > 0) return titles.join(" - ");
   }
 
-  // ۲. اگر آرایه شناسه‌ها وجود داشت با گزینه‌ها تطبیق داده شود
+  // ۲. اگر آرایه‌ای از شناسه‌ها بود، با لیست گزینه‌ها (zoneOptions) تطبیق داده شود
   if (
     Array.isArray(e.expertiseZoneIds) &&
     e.expertiseZoneIds.length > 0 &&
-    opts
+    opts &&
+    opts.length > 0
   ) {
     const titles = e.expertiseZoneIds
-      .map((id) => opts.find((opt) => opt.id === String(id))?.title)
+      .map((id) => opts.find((opt) => String(opt.id) === String(id))?.title)
       .filter(Boolean);
-    if (titles.length > 0) return titles.join("، ");
+    if (titles.length > 0) return titles.join(" - ");
   }
 
+  // ۳. اگر به صورت رشته تک‌عنوان یا پیش‌فرض بود
   return safeText(e.expertiseZoneTitle) || "-";
 };
 

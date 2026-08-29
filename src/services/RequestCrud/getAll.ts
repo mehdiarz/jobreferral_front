@@ -53,6 +53,18 @@ export async function getAllRequests(params?: GetAllRequestsParams): Promise<{
     searchParams.set("CurrentDepartmentTypeName", currentDepartmentTypeName);
   }
 
+  if (typeof params?.hasPidFilter === "boolean") {
+    searchParams.set("HasPidFilter", String(params.hasPidFilter));
+  }
+
+  if (typeof params?.hasBidFilter === "boolean") {
+    searchParams.set("HasBidFilter", String(params.hasBidFilter));
+  }
+
+  if (typeof params?.hasSidFilter === "boolean") {
+    searchParams.set("HasSidFilter", String(params.hasSidFilter));
+  }
+
   if (params?.sorting?.trim()) {
     searchParams.set("Sorting", params.sorting.trim());
   }

@@ -3,12 +3,12 @@ import type {
   AbpResponse,
   GetAllRequestAssignedJudicialExpertParams,
   PagedResult,
-  RequestAssignedJudicialExpertItem,
+  RequestWithJudicialExpertsItem,
 } from "./types";
 
-export async function getAllRequestAssignedJudicialExpert(
+export async function getGroupedByRequest(
   params?: GetAllRequestAssignedJudicialExpertParams,
-): Promise<PagedResult<RequestAssignedJudicialExpertItem>> {
+): Promise<PagedResult<RequestWithJudicialExpertsItem>> {
   const sp = new URLSearchParams();
 
   if (params?.sorting) {
@@ -23,12 +23,12 @@ export async function getAllRequestAssignedJudicialExpert(
 
   const query = sp.toString();
   const url = query
-    ? `/services/app/RequestAssignedJudicialExpert/GetAll?${query}`
-    : "/services/app/RequestAssignedJudicialExpert/GetAll";
+    ? `/services/app/RequestAssignedJudicialExpert/GetGroupedByRequest?${query}`
+    : "/services/app/RequestAssignedJudicialExpert/GetGroupedByRequest";
 
   const res = await apiClient.request<
-    | AbpResponse<PagedResult<RequestAssignedJudicialExpertItem>>
-    | PagedResult<RequestAssignedJudicialExpertItem>
+    | AbpResponse<PagedResult<RequestWithJudicialExpertsItem>>
+    | PagedResult<RequestWithJudicialExpertsItem>
   >(url, {
     method: "GET",
   });
@@ -40,8 +40,7 @@ export async function getAllRequestAssignedJudicialExpert(
     };
   }
 
-  const paged = res as
-    PagedResult<RequestAssignedJudicialExpertItem> | undefined;
+  const paged = res as PagedResult<RequestWithJudicialExpertsItem> | undefined;
   return {
     items: paged?.items ?? [],
     totalCount: paged?.totalCount ?? 0,

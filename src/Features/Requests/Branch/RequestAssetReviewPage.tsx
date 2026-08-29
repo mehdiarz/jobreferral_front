@@ -130,6 +130,9 @@ export function DepartmentRequestAssetReviewPage({
       assetReviewStatusCodes.propertyRejected,
     ],
     queryFn: async () => {
+      const isBranchOrIndependent =
+        departmentType.id === REQUEST_DEPARTMENT_TYPES.branch.id ||
+        departmentType.id === REQUEST_DEPARTMENT_TYPES.independentBranch.id;
       const apiFilters = Object.fromEntries(
         filters
           .filter((f) => f.value.trim())
@@ -143,6 +146,7 @@ export function DepartmentRequestAssetReviewPage({
       const response = await getAllRequests({
         ...apiFilters,
         currentDepartmentTypeName: departmentType.name,
+        ...(isBranchOrIndependent ? { hasBidFilter: true } : {}),
         skipCount: pagination.pageIndex * pagination.pageSize,
         maxResultCount: pagination.pageSize,
         sorting: "creationTime desc",

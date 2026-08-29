@@ -20,6 +20,14 @@ const sectionClass = "bg-gray-50 p-4 rounded-xl space-y-4";
 const sectionTitleClass =
   "font-bold text-sm text-blue-700 border-r-4 border-blue-700 pr-2";
 
+// ─── Formatters ──────────────────────────────────────────────────
+const formatNumber = (val?: string | number | null) => {
+  if (val === undefined || val === null || val === "") return "";
+  const clean = String(val).replace(/[^0-9]/g, "");
+  if (!clean) return "";
+  return clean.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+};
+
 function toOptions(items?: LookupValueDto[] | null) {
   return (items ?? []).map((item) => ({
     value: item.code,
@@ -63,6 +71,26 @@ export default function PropertyAppraisalReadOnlyModal({
         className={inputClass}
         readOnly
         value={String(appraisal[field] ?? "")}
+      />
+    </div>
+  );
+
+  const renderCurrencyField = (
+    label: string,
+    field: keyof PropertyAppraisalOutputDto,
+    span:
+      | "col-span-1"
+      | "md:col-span-2"
+      | "md:col-span-3"
+      | "md:col-span-4" = "col-span-1",
+  ) => (
+    <div className={span}>
+      <label className={labelClass}>{`${label} (ریال)`}</label>
+      <input
+        type="text"
+        className={inputClass}
+        readOnly
+        value={formatNumber(appraisal[field] as string | number)}
       />
     </div>
   );
@@ -170,21 +198,21 @@ export default function PropertyAppraisalReadOnlyModal({
           />
         </div>
         <div>
-          <label className={labelClass}>بهای واحد</label>
+          <label className={labelClass}>بهای واحد (ریال)</label>
           <input
-            type="number"
+            type="text"
             className={inputClass}
             readOnly
-            value={String(appraisal[unitPriceField] ?? "")}
+            value={formatNumber(appraisal[unitPriceField] as string | number)}
           />
         </div>
         <div>
-          <label className={labelClass}>مبلغ کل</label>
+          <label className={labelClass}>مبلغ کل (ریال)</label>
           <input
-            type="number"
+            type="text"
             className={inputClass}
             readOnly
-            value={String(appraisal[totalPriceField] ?? "")}
+            value={formatNumber(appraisal[totalPriceField] as string | number)}
           />
         </div>
       </div>
@@ -272,7 +300,7 @@ export default function PropertyAppraisalReadOnlyModal({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {renderField("نام متقاضی", "applicantName")}
               {renderField("نوع تسهیلات", "loanType")}
-              {renderField("میزان تسهیلات", "loanAmount", "number")}
+              {renderCurrencyField("میزان تسهیلات", "loanAmount")}
               {renderField("نام مالک", "ownerName")}
               {renderField(
                 "نشانی ملک",
@@ -466,10 +494,10 @@ export default function PropertyAppraisalReadOnlyModal({
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 border-t pt-4">
               {renderField("جمع کل مساحت", "totalArea", "number")}
-              {renderField("بهای کل", "totalUnitPrice", "number")}
-              {renderField("جمع کل مبلغ", "totalPrice", "number")}
-              {renderField("سرقفلی", "goodwillAdjustment", "number")}
-              {renderField("مبلغ نهایی (عدد)", "finalPrice", "number")}
+              {renderCurrencyField("بهای کل", "totalUnitPrice")}
+              {renderCurrencyField("جمع کل مبلغ", "totalPrice")}
+              {renderCurrencyField("سرقفلی", "goodwillAdjustment")}
+              {renderCurrencyField("مبلغ نهایی (عدد)", "finalPrice")}
               {renderField(
                 "مبلغ نهایی (حروف)",
                 "finalPriceInWords",
@@ -605,12 +633,11 @@ export default function PropertyAppraisalReadOnlyModal({
               )}
             {appraisal.isOccupiedByTenant === true && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {renderField(
+                {renderCurrencyField(
                   "پیش‌پرداخت اجاره",
                   "rentalAdvancePayment",
-                  "number",
                 )}
-                {renderField("اجاره ماهیانه", "monthlyRent", "number")}
+                {renderCurrencyField("اجاره ماهیانه", "monthlyRent")}
                 {renderSelect(
                   "نوع اجاره‌نامه",
                   "leaseTypeCode",
