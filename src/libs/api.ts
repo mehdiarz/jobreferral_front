@@ -38,6 +38,15 @@ export class ApiClient {
         }
         throw new Error("رمز شما منقضی شده است. لطفاً دوباره وارد شوید.");
       }
+      if (response.status === 403) {
+        if (typeof window !== "undefined") {
+          const forbiddenPath = `${getBasePath()}/403`;
+          if (window.location.pathname !== forbiddenPath) {
+            window.location.href = forbiddenPath;
+          }
+        }
+        throw new Error("Forbidden");
+      }
       const errorMessage =
         errorData?.error?.details ||
         errorData?.error?.message ||

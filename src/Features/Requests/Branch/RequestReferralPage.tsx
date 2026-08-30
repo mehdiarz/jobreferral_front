@@ -34,7 +34,6 @@ import { getAllDocumentTypes } from "../../../services/DocumentTypeCrud/getAll";
 import { createDocument } from "../../../services/DocumentCrud/create";
 import { startUpload } from "../../../services/FileService/start";
 import { completeBatchUpload } from "../../../services/FileService/completeBatch";
-import { downloadFile } from "../../../services/FileService/download";
 import { getUserById } from "../../../services/Users/getUserById";
 import type { RequestItem } from "../../../services/RequestCrud/types";
 
@@ -52,6 +51,11 @@ import type {
 import { generateAppraisalPdf } from "../../../utils/htmlPdfGenerator";
 import { getAllRequestSignatures } from "../../../services/RequestSignatureCrud/getAll";
 import type { RequestSignatureOutputDto } from "../../../services/RequestSignatureCrud/types";
+import { getAllDocuments } from "../../../services/DocumentCrud/getAll";
+import { getDocumentAllFiles } from "../../../services/FileService/GetDocumentAllFiles";
+import { downloadFile } from "../../../services/FileService/download";
+import type { DocumentItem } from "../../../services/DocumentCrud/types";
+import type { DocumentFile } from "../../../services/FileService/GetDocumentAllFiles";
 
 import {
   REQUEST_CHUNK_SIZE,
@@ -160,6 +164,15 @@ export function DepartmentRequestReferralPage({
     RequestSignatureOutputDto[]
   >([]);
 
+  // type جدید برای مدارک
+  interface DetailDocWithFiles {
+    doc: DocumentItem;
+    files: DocumentFile[];
+  }
+
+  // state های جدید در کامپوننت
+  const [detailDocs, setDetailDocs] = useState<DetailDocWithFiles[]>([]);
+
   const statusesQuery = useQuery({
     queryKey: ["request-statuses"],
     queryFn: () => getAllRequestStatus({ maxResultCount: 100 }),
@@ -196,7 +209,7 @@ export function DepartmentRequestReferralPage({
       const isBranchOrIndependent =
         departmentType.id === REQUEST_DEPARTMENT_TYPES.branch.id ||
         departmentType.id === REQUEST_DEPARTMENT_TYPES.independentBranch.id;
-
+      const isRegion = departmentType.id === REQUEST_DEPARTMENT_TYPES.region.id;
       return getAllRequests({
         ...Object.fromEntries(
           filters
@@ -209,7 +222,11 @@ export function DepartmentRequestReferralPage({
             ]),
         ),
         currentDepartmentTypeName: departmentType.name,
-        ...(isBranchOrIndependent ? { hasBidFilter: true } : {}),
+        ...(isBranchOrIndependent
+          ? { hasBidFilter: true }
+          : isRegion
+            ? { hasSidFilter: true }
+            : {}),
         skipCount: pagination.pageIndex * pagination.pageSize,
         maxResultCount: pagination.pageSize,
         sorting: "creationTime desc",
@@ -260,11 +277,32 @@ export function DepartmentRequestReferralPage({
       setIsAssetModalOpen(false);
       setIsOpen(true);
       setRequestSignatures([]);
+      setDetailDocs([]);
 
       try {
         await viewRequest(request.id);
         const detail = await getRequest(request.id);
         setSelectedRequest(detail);
+
+        try {
+          const allDocs = await getAllDocuments({
+            requestId: request.id,
+            maxResultCount: 5000,
+          });
+
+          const reqDocs = allDocs.items ?? [];
+          const docsWithFiles = await Promise.all(
+            reqDocs.map(async (doc: DocumentItem) => ({
+              doc,
+              files: await getDocumentAllFiles(doc.id),
+            })),
+          );
+
+          setDetailDocs(docsWithFiles);
+        } catch (error) {
+          console.error("Error loading documents:", error);
+          setDetailDocs([]);
+        }
         try {
           const signaturesResult = await getAllRequestSignatures({
             requestId: request.id,
@@ -741,8 +779,11 @@ export function DepartmentRequestReferralPage({
           selectedRequest ? (
             <RequestDetailsPanel
               request={selectedRequest}
-              documents={[]}
+              documents={detailDocs}
               getUserData={getUserCacheData}
+              onDownloadFile={(file) =>
+                downloadFile(file.filePath, file.documentId)
+              }
             >
               <RequestDetailSection
                 icon={<ClipboardList className="w-5 h-5" />}

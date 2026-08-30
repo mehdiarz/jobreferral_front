@@ -41,6 +41,11 @@ import { getAllExperts } from "../../../services/JudicialExperts/getAllExperts";
 import { getExpert } from "../../../services/JudicialExperts/get";
 import { getAllExpertiseZones } from "../../../services/ExpertiseZoneCrud/getAll";
 import type { ExpertItem } from "../../../services/JudicialExperts/types";
+import { getAllDocuments } from "../../../services/DocumentCrud/getAll";
+import { getDocumentAllFiles } from "../../../services/FileService/GetDocumentAllFiles";
+import { downloadFile } from "../../../services/FileService/download";
+import type { DocumentItem } from "../../../services/DocumentCrud/types";
+import type { DocumentFile } from "../../../services/FileService/GetDocumentAllFiles";
 
 import type { RequestItem } from "../../../services/RequestCrud/types";
 import {
@@ -184,6 +189,14 @@ export function DepartmentMainOfficeRequestAssetReviewPage({
   const [expandedRegions, setExpandedRegions] = useState<Set<number>>(
     new Set(),
   );
+  // type جدید برای مدارک
+  interface DetailDocWithFiles {
+    doc: DocumentItem;
+    files: DocumentFile[];
+  }
+
+  // state های جدید در کامپوننت
+  const [detailDocs, setDetailDocs] = useState<DetailDocWithFiles[]>([]);
 
   const userCacheRef = useRef<Map<number, { name: string; role: string }>>(
     new Map(),
@@ -266,7 +279,7 @@ export function DepartmentMainOfficeRequestAssetReviewPage({
       getAllExperts({
         skipCount: 0,
         maxResultCount: 1000,
-        IsCapital: true,
+        isCapital: true,
       }),
     staleTime: 10 * 60 * 1000,
   });
@@ -326,6 +339,7 @@ export function DepartmentMainOfficeRequestAssetReviewPage({
       setSelectedExperts([]);
       setExpertModalSelectedIds([]);
       setIsDetailOpen(true);
+      setDetailDocs([]);
 
       try {
         const existingAppraisals = await getPropertyAppraisalByRequestId(
@@ -340,6 +354,25 @@ export function DepartmentMainOfficeRequestAssetReviewPage({
         await viewRequest(req.id);
         const detail = await getRequest(req.id);
         setSelectedRequest(detail);
+        try {
+          const allDocs = await getAllDocuments({
+            requestId: req.id,
+            maxResultCount: 5000,
+          });
+
+          const reqDocs = allDocs.items ?? [];
+          const docsWithFiles = await Promise.all(
+            reqDocs.map(async (doc: DocumentItem) => ({
+              doc,
+              files: await getDocumentAllFiles(doc.id),
+            })),
+          );
+
+          setDetailDocs(docsWithFiles);
+        } catch (error) {
+          console.error("Error loading documents:", error);
+          setDetailDocs([]);
+        }
 
         const ids = new Set<number>();
         detail.requestHistoryOutputDtos?.forEach(
@@ -630,8 +663,11 @@ export function DepartmentMainOfficeRequestAssetReviewPage({
           return (
             <RequestDetailsPanel
               request={selectedRequest}
-              documents={[]}
+              documents={detailDocs}
               getUserData={getUserCacheData}
+              onDownloadFile={(file) =>
+                downloadFile(file.filePath, file.documentId)
+              }
             >
               {/* ارجاع به کارشناس دادگستری */}
               {!isStatusFive && (

@@ -303,12 +303,15 @@ export function DepartmentRequestViewPage({
       const isBranchOrIndependent =
         departmentType.id === REQUEST_DEPARTMENT_TYPES.branch.id ||
         departmentType.id === REQUEST_DEPARTMENT_TYPES.independentBranch.id;
+      const isRegion = departmentType.id === REQUEST_DEPARTMENT_TYPES.region.id;
 
       return getAllRequests({
         ...requestFilters,
         ...(isBranchOrIndependent
           ? { hasBidFilter: true }
-          : { currentDepartmentTypeName: departmentType.name }),
+          : isRegion
+            ? { hasSidFilter: true }
+            : { currentDepartmentTypeName: departmentType.name }),
         skipCount: pagination.pageIndex * pagination.pageSize,
         maxResultCount: pagination.pageSize,
         sorting: "creationTime desc",
@@ -1164,6 +1167,18 @@ export function DepartmentRequestViewPage({
     showToast,
   ]);
 
+  // ─── Helper function to check if edit button should show ──────
+  const canEditRequest = useCallback(
+    (request: RequestItem): boolean => {
+      // اگه currentDepartmentTypeId نامشخص یا null باشه، اجازه ویرایش بده
+      if (!request.currentDepartmentTypeId) return true;
+
+      // هر دپارتمانی فقط درخواست‌هایی که current اون‌ها خودش هست رو می‌تونه ویرایش کنه
+      return request.currentDepartmentTypeId === departmentType.id;
+    },
+    [departmentType.id],
+  );
+
   // ─── Columns Definition (Optimized with useCallback references) ──
   const columns = useMemo<ColumnDef<RequestItem, unknown>[]>(
     () => [
@@ -1220,17 +1235,18 @@ export function DepartmentRequestViewPage({
       {
         id: "actions",
         header: "عملیات",
-        cell: ({ row }) => (
-          <button
-            onClick={() => handleEdit(row.original)}
-            className="text-blue-600 hover:text-blue-800 cursor-pointer"
-          >
-            <Pencil className="w-4 h-4" />
-          </button>
-        ),
+        cell: ({ row }) =>
+          canEditRequest(row.original) ? (
+            <button
+              onClick={() => handleEdit(row.original)}
+              className="text-blue-600 hover:text-blue-800 cursor-pointer"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+          ) : null,
       },
     ],
-    [handleView, handleEdit, statuses],
+    [handleView, handleEdit, statuses, canEditRequest],
   );
 
   // ─── Filter Change Handler ────────────────────────────────────

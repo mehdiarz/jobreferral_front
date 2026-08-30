@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { ClipboardList, MessageSquareText } from "lucide-react";
+import { ClipboardList, MessageSquareText, Check } from "lucide-react";
 
 import { MainLayout } from "../../../baseComponents/MainLayout";
 import FormButton from "../../../baseComponents/FormButton";
@@ -30,6 +30,11 @@ import { getPropertyAppraisalLookups } from "../../../services/PropertyAppraisal
 import { getPropertyAppraisalByRequestId } from "../../../services/PropertyAppraisalCrud/getByRequestId";
 import { getAllRequestSignatures } from "../../../services/RequestSignatureCrud/getAll";
 import type { RequestSignatureOutputDto } from "../../../services/RequestSignatureCrud/types";
+import { getAllDocuments } from "../../../services/DocumentCrud/getAll";
+import { getDocumentAllFiles } from "../../../services/FileService/GetDocumentAllFiles";
+import { downloadFile } from "../../../services/FileService/download";
+import type { DocumentItem } from "../../../services/DocumentCrud/types";
+import type { DocumentFile } from "../../../services/FileService/GetDocumentAllFiles";
 
 import type { RequestItem } from "../../../services/RequestCrud/types";
 import type {
@@ -110,6 +115,18 @@ export function DepartmentRegionEngineeringRepresentativeReviewPage({
     RequestSignatureOutputDto[]
   >([]);
 
+  const [directActionRequest, setDirectActionRequest] =
+    useState<RequestItem | null>(null);
+  const [isDirectSubmitting, setIsDirectSubmitting] = useState(false);
+  // type جدید برای مدارک
+  interface DetailDocWithFiles {
+    doc: DocumentItem;
+    files: DocumentFile[];
+  }
+
+  // state های جدید در کامپوننت
+  const [detailDocs, setDetailDocs] = useState<DetailDocWithFiles[]>([]);
+
   const userCacheRef = useRef<Map<number, { name: string; role: string }>>(
     new Map(),
   );
@@ -154,6 +171,7 @@ export function DepartmentRegionEngineeringRepresentativeReviewPage({
       );
       const response = await getAllRequests({
         ...apiFilters,
+        hasSidFilter: true,
         currentDepartmentTypeName: departmentType.name,
         skipCount: pagination.pageIndex * pagination.pageSize,
         maxResultCount: pagination.pageSize,
@@ -192,7 +210,7 @@ export function DepartmentRegionEngineeringRepresentativeReviewPage({
       setAppraisals([]);
       setSelectedReadonlyAppraisal(null);
       setRequestSignatures([]);
-
+      setDetailDocs([]);
       setIsAppraisalReadOnlyOpen(false);
       setIsDetailOpen(true);
 
@@ -201,6 +219,26 @@ export function DepartmentRegionEngineeringRepresentativeReviewPage({
 
         const detail = await getRequest(req.id);
         setSelectedRequest(detail);
+
+        try {
+          const allDocs = await getAllDocuments({
+            requestId: req.id,
+            maxResultCount: 5000,
+          });
+
+          const reqDocs = allDocs.items ?? [];
+          const docsWithFiles = await Promise.all(
+            reqDocs.map(async (doc: DocumentItem) => ({
+              doc,
+              files: await getDocumentAllFiles(doc.id),
+            })),
+          );
+
+          setDetailDocs(docsWithFiles);
+        } catch (error) {
+          console.error("Error loading documents:", error);
+          setDetailDocs([]);
+        }
         try {
           const signaturesResult = await getAllRequestSignatures({
             requestId: req.id,
@@ -296,6 +334,35 @@ export function DepartmentRegionEngineeringRepresentativeReviewPage({
     [selectedRequest, comment, user, requestsQuery, showToast],
   );
 
+  const handleDirectAction = useCallback(
+    async (req: RequestItem) => {
+      setIsDirectSubmitting(true);
+      try {
+        const actionResult = await userAction({
+          requestId: req.id,
+          accepted: true,
+        });
+
+        showToast(
+          getUserActionSuccessMessage(
+            actionResult,
+            "درخواست با موفقیت تأیید شد",
+          ),
+          "success",
+          8000,
+        );
+        setDirectActionRequest(null);
+        await requestsQuery.refetch();
+      } catch (error: unknown) {
+        console.error("Error in direct action:", error);
+        showToast(getErrorMessage(error, "خطا در انجام عملیات"), "error");
+      } finally {
+        setIsDirectSubmitting(false);
+      }
+    },
+    [requestsQuery, showToast],
+  );
+
   const columns = useMemo<ColumnDef<RequestItem, unknown>[]>(
     () => [
       {
@@ -339,7 +406,19 @@ export function DepartmentRegionEngineeringRepresentativeReviewPage({
         id: "detail",
         header: "عملیات",
         cell: ({ row }) => (
-          <ViewDetailsButton onClick={() => handleView(row.original)} />
+          <div className="flex items-center gap-2">
+            <ViewDetailsButton onClick={() => handleView(row.original)} />
+
+            <button
+              type="button"
+              onClick={() => setDirectActionRequest(row.original)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-600/20 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 hover:text-emerald-800 cursor-pointer"
+              title="تأیید"
+            >
+              <Check className="h-3.5 w-3.5" />
+              <span>تأیید</span>
+            </button>
+          </div>
         ),
       },
     ],
@@ -406,8 +485,11 @@ export function DepartmentRegionEngineeringRepresentativeReviewPage({
           return (
             <RequestDetailsPanel
               request={selectedRequest}
-              documents={[]}
+              documents={detailDocs}
               getUserData={getUserCacheData}
+              onDownloadFile={(file) =>
+                downloadFile(file.filePath, file.documentId)
+              }
             >
               <RequestDetailSection
                 icon={<ClipboardList className="w-5 h-5" />}
@@ -580,6 +662,44 @@ export function DepartmentRegionEngineeringRepresentativeReviewPage({
           setIsAppraisalReadOnlyOpen(false);
           setSelectedReadonlyAppraisal(null);
         }}
+      />
+
+      {/* مودال تایید مستقیم از روی جدول */}
+      <Modal
+        isOpen={!!directActionRequest}
+        isRTL
+        header="تأیید درخواست"
+        onClose={() => {
+          if (!isDirectSubmitting) setDirectActionRequest(null);
+        }}
+        overlayLock={isDirectSubmitting}
+        footerButtons={
+          <div className="flex gap-2">
+            <FormButton
+              title="انصراف"
+              variant="secondary"
+              onClick={() => setDirectActionRequest(null)}
+              disabled={isDirectSubmitting}
+            />
+            <FormButton
+              title="بله، تأیید شود"
+              variant="success"
+              onClick={() =>
+                directActionRequest && handleDirectAction(directActionRequest)
+              }
+              isLoading={isDirectSubmitting}
+            />
+          </div>
+        }
+        renderContent={() => (
+          <div className="p-4 text-sm text-slate-700">
+            آیا از تأیید درخواست شماره{" "}
+            <span className="font-semibold text-slate-900">
+              {directActionRequest?.requestCode || directActionRequest?.id}
+            </span>{" "}
+            اطمینان دارید؟
+          </div>
+        )}
       />
     </MainLayout.Main>
   );

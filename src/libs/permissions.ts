@@ -4,7 +4,8 @@
  */
 
 import { getStoredRoles } from "./roles";
-import { ADMIN_ROLE } from "./roles";
+import { ADMIN_ROLE, FULL_ADMIN_ROLE } from "./roles";
+import { redirect } from "@tanstack/react-router";
 
 /** Parses permissions from localStorage (set after login / getPermissionsForRoleIds). */
 export function getStoredPermissions(): string[] {
@@ -28,7 +29,7 @@ export function hasPermission(
 ): boolean {
     if (!requiredPermissions?.length) return true;
     const roles = getStoredRoles();
-    if (roles.includes(ADMIN_ROLE)) return true;
+    if (roles.includes(ADMIN_ROLE) || roles.includes(FULL_ADMIN_ROLE)) return true;
     return requiredPermissions.every((p) => userPermissions.includes(p));
 }
 
@@ -42,6 +43,25 @@ export function hasAnyPermission(
 ): boolean {
     if (!requiredPermissions?.length) return true;
     const roles = getStoredRoles();
-    if (roles.includes(ADMIN_ROLE)) return true;
+    if (roles.includes(ADMIN_ROLE) || roles.includes(FULL_ADMIN_ROLE)) return true;
     return requiredPermissions.some((p) => userPermissions.includes(p));
+}
+
+/**
+ * Route guard for the client-side router. Backend authorization remains the
+ * source of truth; this guard prevents loading pages that are not visible to
+ * the current user and gives them a friendly 403 page instead.
+ */
+export function requirePermission(
+    requiredPermissions: string[] | string | undefined,
+): void {
+    const required = Array.isArray(requiredPermissions)
+        ? requiredPermissions
+        : requiredPermissions
+          ? [requiredPermissions]
+          : [];
+
+    if (hasAnyPermission(getStoredPermissions(), required)) return;
+
+    throw redirect({ to: "/403" });
 }

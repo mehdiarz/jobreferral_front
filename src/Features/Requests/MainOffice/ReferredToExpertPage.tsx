@@ -36,7 +36,10 @@ import { viewRequest } from "../../../services/RequestCrud/viewRequest";
 import { getAllExperts } from "../../../services/JudicialExperts/getAllExperts";
 import { getExpert } from "../../../services/JudicialExperts/get";
 import { getAllExpertiseZones } from "../../../services/ExpertiseZoneCrud/getAll";
-import type { ExpertItem } from "../../../services/JudicialExperts/types";
+import type {
+  ExpertItem,
+  JudicialExpertRegionOutputDto,
+} from "../../../services/JudicialExperts/types";
 import type {
   RequestWithJudicialExpertsItem,
   JudicialExpertItemDto,
@@ -59,6 +62,21 @@ type TableFilter = { key: string; value: string };
 interface ReferredToExpertPageProps {
   departmentType: RequestDepartmentTypeConfig;
 }
+
+type BranchInfo = {
+  branchName?: unknown;
+  title?: unknown;
+  id?: unknown;
+  branchCode?: unknown;
+  code?: unknown;
+};
+
+type RegionInfo = {
+  region?: unknown;
+  regionId?: unknown;
+  branchCodes?: unknown;
+  branches?: unknown[] | null;
+};
 
 // ─── Helper Functions ────────────────────────────────────────────
 function getErrorMessage(error: unknown, fallback: string) {
@@ -94,26 +112,30 @@ function getExpertCode(
   return safeText(expert?.code || expert?.id);
 }
 
-function getRegionTitle(region: any): string {
-  const value = region?.region as { title?: string } | null | undefined;
-  return safeText(value?.title || region?.regionId) || "-";
+function getRegionTitle(region: RegionInfo): string {
+  const regionValue =
+    region.region && typeof region.region === "object"
+      ? (region.region as { title?: unknown })
+      : undefined;
+  return safeText(regionValue?.title || region.regionId) || "-";
 }
 
-function getBranchTitles(region: any): string[] {
-  return (region?.branches ?? []).map((branch: any) => {
-    return safeText(branch?.branchName || branch?.title || branch?.id) || "-";
+function getBranchTitles(region: RegionInfo): string[] {
+  return (region.branches ?? []).map((rawBranch) => {
+    const branch = (rawBranch ?? {}) as BranchInfo;
+    return safeText(branch.branchName || branch.title || branch.id) || "-";
   });
 }
 
-function getBranchCodes(region: any): string[] {
-  const value = region as any;
-  if (Array.isArray(value?.branchCodes)) {
-    return value.branchCodes.map((code: unknown) => safeText(code));
+function getBranchCodes(region: RegionInfo): string[] {
+  if (Array.isArray(region.branchCodes)) {
+    return region.branchCodes.map((code) => safeText(code));
   }
-  if (Array.isArray(value?.branches)) {
-    return value.branches.map((branch: any) =>
-      safeText(branch?.branchCode || branch?.code || branch?.id || ""),
-    );
+  if (Array.isArray(region.branches)) {
+    return region.branches.map((rawBranch) => {
+      const branch = (rawBranch ?? {}) as BranchInfo;
+      return safeText(branch.branchCode || branch.code || branch.id || "");
+    });
   }
   return [];
 }
@@ -205,7 +227,7 @@ export function DepartmentReferredToExpertPage({
       getAllExperts({
         skipCount: 0,
         maxResultCount: 1000,
-        IsCapital: true,
+         isCapital: true,
       }),
     staleTime: 10 * 60 * 1000,
     enabled: replacementMode === "manual",
@@ -383,7 +405,7 @@ export function DepartmentReferredToExpertPage({
       if (!expert) return [];
       const zones = (expert as ExpertItem).expertiseZones;
       if (zones && zones.length > 0) {
-        return zones.map((z: any) => z.title ?? "").filter(Boolean);
+        return zones.map((z) => z.title ?? "").filter(Boolean);
       }
       const zoneIds = (expert as ExpertItem).expertiseZoneIds ?? [];
       if (zoneIds.length === 0) return [];
@@ -924,7 +946,7 @@ export function DepartmentReferredToExpertPage({
               ) : (
                 filteredExperts.map((expert) => {
                   const checked = expertModalSelectedIds.includes(expert.id);
-                  const zones = resolveExpertiseZoneTitles(expert as any);
+                  const zones = resolveExpertiseZoneTitles(expert);
 
                   return (
                     <div
@@ -1032,28 +1054,29 @@ export function DepartmentReferredToExpertPage({
 
           if (!fullExpertDetail && !selectedExpertDetail) return null;
 
-          const expert = fullExpertDetail || selectedExpertDetail;
-          const zones = resolveExpertiseZoneTitles(expert as any);
+          const expert = fullExpertDetail ?? selectedExpertDetail;
+          if (!expert) return null;
+          const zones = resolveExpertiseZoneTitles(expert);
 
           return (
             <div className="space-y-6">
               {/* هدر کارشناس */}
               <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-gradient-to-l from-blue-50 to-white p-5 shadow-sm">
                 <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-2xl font-bold text-white shadow-lg">
-                  {getExpertFullName(expert as any).charAt(0) || "؟"}
+                  {getExpertFullName(expert).charAt(0) || "؟"}
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-medium text-blue-600">
                     کارشناس رسمی دادگستری
                   </p>
                   <h3 className="mt-1 truncate text-xl font-bold text-slate-800">
-                    {getExpertFullName(expert as any) || "-"}
+                    {getExpertFullName(expert) || "-"}
                   </h3>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <span className="text-xs text-slate-500">
                       کد ملی:{" "}
                       <span dir="ltr" className="font-medium">
-                        {getExpertCode(expert as any) || "-"}
+                        {getExpertCode(expert) || "-"}
                       </span>
                     </span>
                     <span className="text-slate-300">|</span>
@@ -1172,7 +1195,7 @@ export function DepartmentReferredToExpertPage({
                 {((expert as ExpertItem).regions?.length ?? 0) > 0 ? (
                   <div className="space-y-3">
                     {(expert as ExpertItem).regions!.map(
-                      (region: any, index: number) => {
+                      (region: JudicialExpertRegionOutputDto, index: number) => {
                         const regionTitle = getRegionTitle(region);
                         const branches = getBranchTitles(region);
                         const branchCodes = getBranchCodes(region);

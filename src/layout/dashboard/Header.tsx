@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Menu, User, Settings, LogOut, ChevronDown } from "lucide-react";
+import { Menu, User, LayoutDashboard, LogOut, ChevronDown } from "lucide-react";
 import { useRouter } from "@tanstack/react-router";
 import { authActions } from "../../libs/store/authActions";
 import { useAuthStore } from "../../libs/store";
@@ -158,12 +158,16 @@ export default function Header() {
                 </button>
 
                 <button
+                  onClick={() => {
+                    setIsProfileOpen(false);
+                    router.navigate({ to: "/dashboard" });
+                  }}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm
                   text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50
                   transition-colors duration-150"
                 >
-                  <Settings className="w-4 h-4" />
-                  <span>تنظیمات</span>
+                  <LayoutDashboard className="w-4 h-4" />
+                  <span>صفحه اصلی</span>
                 </button>
 
                 <div className="my-2 border-t border-gray-100 dark:border-gray-700"></div>
@@ -286,12 +290,16 @@ export default function Header() {
                 </button>
 
                 <button
+                  onClick={() => {
+                    setIsProfileOpen(false);
+                    router.navigate({ to: "/dashboard" });
+                  }}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm
                   text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50
                   transition-colors duration-150"
                 >
-                  <Settings className="w-4 h-4" />
-                  <span>تنظیمات</span>
+                  <LayoutDashboard className="w-4 h-4" />
+                  <span>صفحه اصلی</span>
                 </button>
 
                 <div className="my-2 border-t border-gray-100 dark:border-gray-700"></div>

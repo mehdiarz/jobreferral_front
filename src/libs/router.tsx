@@ -13,6 +13,9 @@ import { SuspenseLoading } from "../baseComponents/SuspenseLoading";
 import AuthLayout from "../layout/Login/LoginLayout";
 import { authStore, authActions } from "./store/authActions";
 import LogoImage from "../assets/images/Logo.svg";
+import { requirePermission } from "./permissions";
+import { defaultMenuItems } from "../_shared/init.config";
+import AccessStatusPage from "../baseComponents/AccessStatusPage";
 
 /**
  * تابع کمکی برای چک کردن وضعیت احراز هویت
@@ -34,6 +37,46 @@ const checkAuth = () => {
   }
 };
 
+type PermissionNode = {
+  path?: unknown;
+  permissions?: unknown;
+  children?: unknown;
+};
+
+const findMenuPermissions = (
+  items: readonly unknown[],
+  path: string,
+): string[] | undefined => {
+  for (const rawItem of items) {
+    const item = (rawItem ?? {}) as PermissionNode;
+    const itemPath =
+      typeof item.path === "string" ? item.path.replace(/\/+$/, "") : "";
+    const currentPath = path.replace(/\/+$/, "") || "/";
+    if (
+      itemPath &&
+      (itemPath === currentPath || currentPath.endsWith(itemPath)) &&
+      Array.isArray(item.permissions)
+    ) {
+      return item.permissions.filter(
+        (permission): permission is string => typeof permission === "string",
+      );
+    }
+    if (Array.isArray(item.children)) {
+      const found = findMenuPermissions(item.children, path);
+      if (found) return found;
+    }
+  }
+  return undefined;
+};
+
+const requirePermissionForPath = (path: string) => {
+  // TanStack Router supplies the pathname without the configured basepath in
+  // normal browser navigation. The fallback also supports deployments where
+  // the basepath is included.
+  const permissions = findMenuPermissions(defaultMenuItems, path);
+  if (permissions) requirePermission(permissions);
+};
+
 // ----------------------------------------
 // Root Route
 // ----------------------------------------
@@ -48,6 +91,7 @@ const rootRoute = createRootRoute({
     console.error("Router error:", error);
     return <ErrorPage error={error} />;
   },
+  notFoundComponent: () => <AccessStatusPage status={404} />,
 });
 
 // ----------------------------------------
@@ -91,13 +135,28 @@ const loginRoute = createRoute({
   },
 });
 
+const forbiddenRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/403",
+  component: () => <AccessStatusPage status={403} />,
+});
+
+const notFoundRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/404",
+  component: () => <AccessStatusPage status={404} />,
+});
+
 // ----------------------------------------
 // Dashboard Layout Route (حامل منطق Auth)
 // ----------------------------------------
 const dashboardLayoutRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/dashboard",
-  beforeLoad: () => checkAuth(), // قبل از لود شدن هر زیرمجموعه‌ای، لاگین چک می‌شود
+  beforeLoad: ({ location }) => {
+    checkAuth();
+    requirePermissionForPath(location.pathname);
+  }, // احراز هویت و مجوز قبل از لود هر زیرمجموعه
   component: () => {
     const DashboardLayout = lazy(
       () => import("../layout/dashboard/DashboardLayout"),
@@ -108,6 +167,7 @@ const dashboardLayoutRoute = createRoute({
       </SuspenseLoading>
     );
   },
+  notFoundComponent: () => <AccessStatusPage status={404} />,
 });
 
 // ----------------------------------------
@@ -857,6 +917,8 @@ const profileRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
+  forbiddenRoute,
+  notFoundRoute,
   dashboardLayoutRoute.addChildren([
     dashboardIndexRoute,
     createUserRoute,

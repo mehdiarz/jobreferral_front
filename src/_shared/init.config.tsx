@@ -25,6 +25,7 @@ export const Permissions = {
   Pages_Branch_RequestsFeeCalculation: "Pages.Branch.requests-fee-calculation",
   Pages_Branch_RequestsView: "Pages.Branch.requests-view",
   Pages_Branch_RequestsReferral: "Pages.Branch.requests-referral",
+  Pages_Branch_ReferredToExpert: "Pages.Branch.requests-referred-to-expert",
 
   // Independent Branch Permissions
   Pages_IndependentBranch_RequestsIndependentCreate:
@@ -39,6 +40,8 @@ export const Permissions = {
     "Pages.IndependentBranch.requests-independent-view",
   Pages_IndependentBranch_RequestsIndependentReferral:
     "Pages.IndependentBranch.requests-independent-referral",
+  Pages_IndependentBranch_ReferredToExpert:
+    "Pages.IndependentBranch.requests-independent-referred-to-expert",
 
   // Region Permissions
   Pages_Region_RequestsRegionEngineeringRepresentativeReview:
@@ -56,6 +59,8 @@ export const Permissions = {
   Pages_Region_RequestsRegionReview: "Pages.Region.requests-region-review",
   Pages_Region_RequestsRegionView: "Pages.Region.requests-region-view",
   Pages_Region_RequestsRegionReferral: "Pages.Region.requests-region-referral",
+  Pages_Region_ReferredToExpert:
+    "Pages.Region.requests-region-referred-to-expert",
 
   // Main Office Permissions
   Pages_MainOffice_RequestsMainOfficeRealEstateUnitManagerReview:
@@ -74,6 +79,8 @@ export const Permissions = {
     "Pages.MainOffice.requests-main-office-view",
   Pages_MainOffice_RequestsMainOfficeReferral:
     "Pages.MainOffice.requests-main-office-referral",
+  Pages_MainOffice_ReferredToExpert:
+    "Pages.MainOffice.requests-main-office-referred-to-expert",
 } as const;
 
 export type PermissionName = (typeof Permissions)[keyof typeof Permissions];
@@ -230,7 +237,7 @@ export const defaultMenuItems = [
             id: "requests-referred-to-expert",
             title: "درخواست‌های ارجاعی به کارشناس های رسمی",
             path: "/dashboard/requests/branch/referred-to-expert",
-            permissions: [],
+            permissions: [Permissions.Pages_Branch_ReferredToExpert],
           },
         ],
       },
@@ -291,7 +298,7 @@ export const defaultMenuItems = [
             id: "requests-independent-referred-to-expert",
             title: "درخواست‌های ارجاعی به کارشناس های رسمی",
             path: "/dashboard/requests/independent/referred-to-expert",
-            permissions: [],
+            permissions: [Permissions.Pages_IndependentBranch_ReferredToExpert],
           },
         ],
       },
@@ -366,7 +373,7 @@ export const defaultMenuItems = [
             id: "requests-region-referred-to-expert",
             title: "درخواست‌های ارجاعی به کارشناس های رسمی",
             path: "/dashboard/requests/region/referred-to-expert",
-            permissions: [],
+            permissions: [Permissions.Pages_Region_ReferredToExpert],
           },
         ],
       },
@@ -441,7 +448,7 @@ export const defaultMenuItems = [
             id: "requests-main-office-referred-to-expert",
             title: "درخواست‌های ارجاعی به کارشناس های رسمی",
             path: "/dashboard/requests/main-office/referred-to-expert",
-            permissions: [],
+            permissions: [Permissions.Pages_MainOffice_ReferredToExpert],
           },
         ],
       },

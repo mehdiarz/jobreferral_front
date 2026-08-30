@@ -472,7 +472,14 @@ export const Sidebar = () => {
       >
         {/* Logo Section */}
         <div className="flex justify-center border-b border-gray-100 dark:border-slate-700/50 p-5">
-          <img src={LogoImage} className="mx-auto w-32" alt="Logo" />
+          <Link
+            to="/dashboard"
+            aria-label="بازگشت به داشبورد"
+            onClick={closeMobileSidebar}
+            className="block rounded-xl outline-none transition hover:opacity-85 focus-visible:ring-2 focus-visible:ring-blue-500"
+          >
+            <img src={LogoImage} className="mx-auto w-32" alt="Logo" />
+          </Link>
         </div>
 
         {/* Navigation */}

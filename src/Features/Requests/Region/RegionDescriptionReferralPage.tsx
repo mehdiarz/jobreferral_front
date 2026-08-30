@@ -30,6 +30,11 @@ import { getPropertyAppraisalLookups } from "../../../services/PropertyAppraisal
 import { getPropertyAppraisalByRequestId } from "../../../services/PropertyAppraisalCrud/getByRequestId";
 import { getAllRequestSignatures } from "../../../services/RequestSignatureCrud/getAll";
 import type { RequestSignatureOutputDto } from "../../../services/RequestSignatureCrud/types";
+import { getAllDocuments } from "../../../services/DocumentCrud/getAll";
+import { getDocumentAllFiles } from "../../../services/FileService/GetDocumentAllFiles";
+import { downloadFile } from "../../../services/FileService/download";
+import type { DocumentItem } from "../../../services/DocumentCrud/types";
+import type { DocumentFile } from "../../../services/FileService/GetDocumentAllFiles";
 
 import type { RequestItem } from "../../../services/RequestCrud/types";
 import type {
@@ -112,6 +117,15 @@ export function DepartmentRegionDescriptionReferralPage({
     RequestSignatureOutputDto[]
   >([]);
 
+  // type جدید برای مدارک
+  interface DetailDocWithFiles {
+    doc: DocumentItem;
+    files: DocumentFile[];
+  }
+
+  // state های جدید در کامپوننت
+  const [detailDocs, setDetailDocs] = useState<DetailDocWithFiles[]>([]);
+
   const userCacheRef = useRef<Map<number, { name: string; role: string }>>(
     new Map(),
   );
@@ -156,6 +170,7 @@ export function DepartmentRegionDescriptionReferralPage({
       );
       const response = await getAllRequests({
         ...apiFilters,
+        hasSidFilter: true,
         currentDepartmentTypeName: departmentType.name,
         skipCount: pagination.pageIndex * pagination.pageSize,
         maxResultCount: pagination.pageSize,
@@ -194,7 +209,7 @@ export function DepartmentRegionDescriptionReferralPage({
       setAppraisals([]);
       setSelectedReadonlyAppraisal(null);
       setRequestSignatures([]);
-
+      setDetailDocs([]);
       setIsAppraisalReadOnlyOpen(false);
       setIsDetailOpen(true);
 
@@ -203,6 +218,26 @@ export function DepartmentRegionDescriptionReferralPage({
 
         const detail = await getRequest(req.id);
         setSelectedRequest(detail);
+
+        try {
+          const allDocs = await getAllDocuments({
+            requestId: req.id,
+            maxResultCount: 5000,
+          });
+
+          const reqDocs = allDocs.items ?? [];
+          const docsWithFiles = await Promise.all(
+            reqDocs.map(async (doc: DocumentItem) => ({
+              doc,
+              files: await getDocumentAllFiles(doc.id),
+            })),
+          );
+
+          setDetailDocs(docsWithFiles);
+        } catch (error) {
+          console.error("Error loading documents:", error);
+          setDetailDocs([]);
+        }
 
         try {
           const signaturesResult = await getAllRequestSignatures({
@@ -424,8 +459,11 @@ export function DepartmentRegionDescriptionReferralPage({
           return (
             <RequestDetailsPanel
               request={selectedRequest}
-              documents={[]}
+              documents={detailDocs}
               getUserData={getUserCacheData}
+              onDownloadFile={(file) =>
+                downloadFile(file.filePath, file.documentId)
+              }
             >
               <RequestDetailSection
                 icon={<ClipboardList className="w-5 h-5" />}

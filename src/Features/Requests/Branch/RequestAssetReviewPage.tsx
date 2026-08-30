@@ -19,6 +19,11 @@ import { useAuthStore } from "../../../libs/store";
 import { getAllRequests } from "../../../services/RequestCrud/getAll";
 import { getRequest } from "../../../services/RequestCrud/get";
 import { viewRequest } from "../../../services/RequestCrud/viewRequest";
+import { getAllDocuments } from "../../../services/DocumentCrud/getAll";
+import { getDocumentAllFiles } from "../../../services/FileService/GetDocumentAllFiles";
+import { downloadFile } from "../../../services/FileService/download";
+import type { DocumentItem } from "../../../services/DocumentCrud/types";
+import type { DocumentFile } from "../../../services/FileService/GetDocumentAllFiles";
 import {
   getUserActionSuccessMessage,
   userAction,
@@ -90,6 +95,15 @@ export function DepartmentRequestAssetReviewPage({
     RequestSignatureOutputDto[]
   >([]);
 
+  // type جدید برای مدارک
+  interface DetailDocWithFiles {
+    doc: DocumentItem;
+    files: DocumentFile[];
+  }
+
+  // state های جدید در کامپوننت
+  const [detailDocs, setDetailDocs] = useState<DetailDocWithFiles[]>([]);
+
   const userCacheRef = useRef<Map<number, { name: string; role: string }>>(
     new Map(),
   );
@@ -133,6 +147,7 @@ export function DepartmentRequestAssetReviewPage({
       const isBranchOrIndependent =
         departmentType.id === REQUEST_DEPARTMENT_TYPES.branch.id ||
         departmentType.id === REQUEST_DEPARTMENT_TYPES.independentBranch.id;
+      const isRegion = departmentType.id === REQUEST_DEPARTMENT_TYPES.region.id;
       const apiFilters = Object.fromEntries(
         filters
           .filter((f) => f.value.trim())
@@ -146,7 +161,11 @@ export function DepartmentRequestAssetReviewPage({
       const response = await getAllRequests({
         ...apiFilters,
         currentDepartmentTypeName: departmentType.name,
-        ...(isBranchOrIndependent ? { hasBidFilter: true } : {}),
+        ...(isBranchOrIndependent
+          ? { hasBidFilter: true }
+          : isRegion
+            ? { hasSidFilter: true }
+            : {}),
         skipCount: pagination.pageIndex * pagination.pageSize,
         maxResultCount: pagination.pageSize,
         sorting: "creationTime desc",
@@ -195,7 +214,7 @@ export function DepartmentRequestAssetReviewPage({
     async (req: RequestItem) => {
       setSelectedRequest(null);
       setComment("");
-
+      setDetailDocs([]);
       setAppraisals([]);
       setSelectedReadonlyAppraisal(null);
       setIsAppraisalReadOnlyOpen(false);
@@ -216,6 +235,26 @@ export function DepartmentRequestAssetReviewPage({
 
         const detail = await getRequest(req.id);
         setSelectedRequest(detail);
+
+        try {
+          const allDocs = await getAllDocuments({
+            requestId: req.id,
+            maxResultCount: 5000,
+          });
+
+          const reqDocs = allDocs.items ?? [];
+          const docsWithFiles = await Promise.all(
+            reqDocs.map(async (doc: DocumentItem) => ({
+              doc,
+              files: await getDocumentAllFiles(doc.id),
+            })),
+          );
+
+          setDetailDocs(docsWithFiles);
+        } catch (error) {
+          console.error("Error loading documents:", error);
+          setDetailDocs([]);
+        }
 
         try {
           const signaturesResult = await getAllRequestSignatures({
@@ -431,8 +470,11 @@ export function DepartmentRequestAssetReviewPage({
           return (
             <RequestDetailsPanel
               request={selectedRequest}
-              documents={[]}
+              documents={detailDocs}
               getUserData={getUserCacheData}
+              onDownloadFile={(file) =>
+                downloadFile(file.filePath, file.documentId)
+              }
             >
               {appraisals.length > 0 && (
                 <RequestDetailSection

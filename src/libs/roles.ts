@@ -4,6 +4,7 @@
  */
 
 export const ADMIN_ROLE = "ADMIN";
+export const FULL_ADMIN_ROLE = "FullAdmin";
 
 /**
  * Returns true if the user has at least one of the required roles.
@@ -14,7 +15,7 @@ export function hasAnyRole(
     requiredRoles: string[] | undefined
 ): boolean {
     if (!requiredRoles?.length) return true;
-    if (userRoles.includes(ADMIN_ROLE)) return true;
+    if (userRoles.includes(ADMIN_ROLE) || userRoles.includes(FULL_ADMIN_ROLE)) return true;
     return requiredRoles.some((r) => userRoles.includes(r));
 }
 
