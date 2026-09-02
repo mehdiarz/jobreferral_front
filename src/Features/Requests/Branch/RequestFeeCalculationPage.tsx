@@ -28,7 +28,6 @@ import { getPropertyAppraisalLookups } from "../../../services/PropertyAppraisal
 import { getPropertyAppraisalByRequestId } from "../../../services/PropertyAppraisalCrud/getByRequestId";
 import { calculateBankFee } from "../../../services/FeeCalculationCrud/feeCalculation";
 import { calculateJudicialFee } from "../../../services/FeeCalculationCrud/feeCalculation";
-import { generateAppraisalPdf } from "../../../utils/htmlPdfGenerator";
 import { getAllRequestSignatures } from "../../../services/RequestSignatureCrud/getAll";
 import { createCalculatedFee } from "../../../services/CalculatedFeeCrud/create";
 import { getAllDocuments } from "../../../services/DocumentCrud/getAll";
@@ -64,6 +63,8 @@ import {
   REQUEST_STATUS_CODES,
   resolveRequestStatusTitle,
 } from "../requestStatuses";
+import { convertDocxToPdf } from "../../../services/AppraisalReport/convertDocxToPdf.ts";
+import { createBlobAppraisalDocx } from "../../../utils/wordGenerator.ts";
 
 // ─── Types ───────────────────────────────────────────────────────
 type TableFilter = { key: string; value: string };
@@ -162,18 +163,16 @@ export function DepartmentRequestFeeCalculationPage({
 
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
-  // Bank fee modal
+  // Bank fee modal state
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
   const [bankFa, setBankFa] = useState("");
   const [bankPv, setBankPv] = useState("");
-
   const [isCalculatingBank, setIsCalculatingBank] = useState(false);
 
-  // Judicial fee modal
+  // Judicial fee modal state
   const [isJudicialModalOpen, setIsJudicialModalOpen] = useState(false);
   const [judicialFa, setJudicialFa] = useState("");
   const [judicialPv, setJudicialPv] = useState("");
-
   const [isCalculatingJudicial, setIsCalculatingJudicial] = useState(false);
 
   // نتیجه موقت داخل مودال؛ تا زمانی که کاربر «ثبت نتیجه» نزند نهایی نیست.
@@ -184,7 +183,6 @@ export function DepartmentRequestFeeCalculationPage({
     useState<FeeCalculationResultDto | null>(null);
 
   // آخرین محاسبه‌ای که کاربر آن را ثبت کرده است.
-  // فقط همین مقادیر در زمان تأیید درخواست به CalculatedFee/Create می‌روند.
   const [savedBankCalculation, setSavedBankCalculation] = useState<{
     facilityAmount: number;
     propertyValue: number;
@@ -347,7 +345,6 @@ export function DepartmentRequestFeeCalculationPage({
         }
 
         try {
-          // سرویس همه فرم‌های ارزیابی ثبت‌شده برای درخواست را برمی‌گرداند.
           const requestAppraisals = await getPropertyAppraisalByRequestId(
             req.id,
           );
@@ -499,6 +496,48 @@ export function DepartmentRequestFeeCalculationPage({
     ],
   );
 
+  // تابع باز کردن مودال کارمزد بانک (بررسی همگام‌سازی از روی کارمزد کارشناس)
+  const handleOpenBankModal = useCallback(() => {
+    setBankCalculationPreview(null);
+
+    if (savedJudicialCalculation) {
+      // اگر کارمزد کارشناس قبلاً ثبت شده، مقادیر را قفل کن
+      setBankFa(formatWithCommas(savedJudicialCalculation.facilityAmount));
+      setBankPv(formatWithCommas(savedJudicialCalculation.propertyValue));
+    } else if (savedBankCalculation) {
+      // اگر کارمزد بانک قبلاً ثبت شده، مقادیر قبلی را نمایش بده
+      setBankFa(formatWithCommas(savedBankCalculation.facilityAmount));
+      setBankPv(formatWithCommas(savedBankCalculation.propertyValue));
+    } else if (judicialFa || judicialPv) {
+      // اگر مقادیری در مودال کارشناس وارد شده ولی ثبت نشده
+      setBankFa(judicialFa);
+      setBankPv(judicialPv);
+    }
+
+    setIsBankModalOpen(true);
+  }, [savedJudicialCalculation, savedBankCalculation, judicialFa, judicialPv]);
+
+  // تابع باز کردن مودال کارمزد کارشناس (بررسی همگام‌سازی از روی کارمزد بانک)
+  const handleOpenJudicialModal = useCallback(() => {
+    setJudicialCalculationPreview(null);
+
+    if (savedBankCalculation) {
+      // اگر کارمزد بانک قبلاً ثبت شده، مقادیر را قفل کن
+      setJudicialFa(formatWithCommas(savedBankCalculation.facilityAmount));
+      setJudicialPv(formatWithCommas(savedBankCalculation.propertyValue));
+    } else if (savedJudicialCalculation) {
+      // اگر کارمزد کارشناس قبلاً ثبت شده، مقادیر قبلی را نمایش بده
+      setJudicialFa(formatWithCommas(savedJudicialCalculation.facilityAmount));
+      setJudicialPv(formatWithCommas(savedJudicialCalculation.propertyValue));
+    } else if (bankFa || bankPv) {
+      // اگر مقادیری در مودال بانک وارد شده ولی ثبت نشده
+      setJudicialFa(bankFa);
+      setJudicialPv(bankPv);
+    }
+
+    setIsJudicialModalOpen(true);
+  }, [savedBankCalculation, savedJudicialCalculation, bankFa, bankPv]);
+
   const handleCalculateBank = useCallback(async () => {
     if (!hasValidPositiveAmount(bankFa) || !hasValidPositiveAmount(bankPv)) {
       showToast(
@@ -520,8 +559,6 @@ export function DepartmentRequestFeeCalculationPage({
       };
 
       const result = await calculateBankFee(body);
-
-      // فقط پیش‌نمایش است و هنوز برای درخواست ثبت نشده.
       setBankCalculationPreview(result);
 
       showToast(
@@ -560,8 +597,6 @@ export function DepartmentRequestFeeCalculationPage({
       };
 
       const result = await calculateJudicialFee(body);
-
-      // فقط پیش‌نمایش است و هنوز برای درخواست ثبت نشده.
       setJudicialCalculationPreview(result);
 
       showToast(
@@ -603,6 +638,10 @@ export function DepartmentRequestFeeCalculationPage({
       fee: bankCalculationPreview.bankFee ?? 0,
     });
 
+    // مقادیر را برای کارمزد کارشناس هم همگام می‌کنیم
+    setJudicialFa(bankFa);
+    setJudicialPv(bankPv);
+
     setIsBankModalOpen(false);
 
     showToast(
@@ -635,6 +674,10 @@ export function DepartmentRequestFeeCalculationPage({
       fee: judicialCalculationPreview.judicialFee ?? 0,
     });
 
+    // مقادیر را برای کارمزد بانک هم همگام می‌کنیم
+    setBankFa(judicialFa);
+    setBankPv(judicialPv);
+
     setIsJudicialModalOpen(false);
 
     showToast(
@@ -644,17 +687,14 @@ export function DepartmentRequestFeeCalculationPage({
   }, [judicialCalculationPreview, judicialFa, judicialPv, showToast]);
 
   const handleGeneratePdf = useCallback(async () => {
-    if (!selectedReadonlyAppraisal) {
-      showToast("فرم ارزیابی برای ایجاد PDF انتخاب نشده است.", "error");
-      return;
-    }
-
+    if (!selectedReadonlyAppraisal) return;
     setIsGeneratingPdf(true);
 
     try {
-      const pdfUrl = await generateAppraisalPdf(
+      // ۱. تولید فایل Word در حافظه (بدون اینکه دانلود شود یا کاربر متوجه شود)
+      const docxBlob = await createBlobAppraisalDocx(
         selectedReadonlyAppraisal,
-        lookups,
+        lookupsQuery.data ?? {},
         {
           requestCode: selectedRequest?.requestCode,
           date: selectedRequest?.creationTime
@@ -664,7 +704,31 @@ export function DepartmentRequestFeeCalculationPage({
         },
       );
 
+      // ۲. ایجاد شیء File از Blob برای ارسال به سرویس تبدیل
+      const docxFile = new File(
+        [docxBlob],
+        `AppraisalReport_${selectedReadonlyAppraisal.applicantName || "Report"}.docx`,
+        {
+          type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        },
+      );
+
+      // ۳. ارسال فایل Word به بک‌اند و دریافت مستقیم PDF Blob
+      const pdfBlob = await convertDocxToPdf({ file: docxFile });
+
+      // ۴. باز کردن مستقیم PDF در تب جدید یا دانلود آن
+      const pdfUrl = window.URL.createObjectURL(pdfBlob);
       window.open(pdfUrl, "_blank");
+
+      // دانلود مستقیم (در صورت نیاز به دانلود خودکار به جای تب جدید، می‌توانید کد زیر را فعال کنید):
+      /*
+      const anchor = document.createElement("a");
+      anchor.href = pdfUrl;
+      anchor.download = `AppraisalReport_${selectedReadonlyAppraisal.applicantName || "Report"}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      */
 
       showToast("گزارش PDF با موفقیت ایجاد شد", "success");
     } catch (error: unknown) {
@@ -673,7 +737,13 @@ export function DepartmentRequestFeeCalculationPage({
     } finally {
       setIsGeneratingPdf(false);
     }
-  }, [lookups, selectedReadonlyAppraisal, selectedRequest, showToast]);
+  }, [
+    selectedReadonlyAppraisal,
+    lookupsQuery.data,
+    selectedRequest,
+    requestSignatures,
+    showToast,
+  ]);
 
   const columns = useMemo<ColumnDef<RequestItem, unknown>[]>(
     () => [
@@ -724,6 +794,12 @@ export function DepartmentRequestFeeCalculationPage({
     ],
     [handleView, statuses],
   );
+
+  // آیا مقادیر در مودال بانک قفل هستند؟ (اگر کارمزد کارشناس ثبت شده باشد)
+  const isBankInputsReadOnly = Boolean(savedJudicialCalculation);
+
+  // آیا مقادیر در مودال کارشناس قفل هستند؟ (اگر کارمزد بانک ثبت شده باشد)
+  const isJudicialInputsReadOnly = Boolean(savedBankCalculation);
 
   return (
     <MainLayout.Main maxWidth="screen-xl">
@@ -793,36 +869,6 @@ export function DepartmentRequestFeeCalculationPage({
                 downloadFile(file.filePath, file.documentId)
               }
             >
-              {/* محاسبه کارمزد */}
-              {/*<RequestDetailSection*/}
-              {/*  icon={<Calculator className="w-5 h-5" />}*/}
-              {/*  title="محاسبه کارمزد"*/}
-              {/*  tone="blue"*/}
-              {/*>*/}
-              {/*  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">*/}
-              {/*    <button*/}
-              {/*      onClick={() => setIsBankModalOpen(true)}*/}
-              {/*      className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-center hover:bg-blue-100 transition-colors cursor-pointer"*/}
-              {/*    >*/}
-              {/*      <p className="font-bold text-blue-700">کارمزد بانک</p>*/}
-              {/*      <p className="text-xs text-blue-500 mt-1">*/}
-              {/*        کلیک برای محاسبه*/}
-              {/*      </p>*/}
-              {/*    </button>*/}
-              {/*    <button*/}
-              {/*      onClick={() => setIsJudicialModalOpen(true)}*/}
-              {/*      className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center hover:bg-emerald-100 transition-colors cursor-pointer"*/}
-              {/*    >*/}
-              {/*      <p className="font-bold text-emerald-700">*/}
-              {/*        کارمزد کارشناس دادگستری*/}
-              {/*      </p>*/}
-              {/*      <p className="text-xs text-emerald-500 mt-1">*/}
-              {/*        کلیک برای محاسبه*/}
-              {/*      </p>*/}
-              {/*    </button>*/}
-              {/*  </div>*/}
-              {/*</RequestDetailSection>*/}
-
               <RequestDetailSection
                 icon={<ClipboardList className="w-5 h-5" />}
                 title="فرم‌های ارزیابی ملک"
@@ -834,40 +880,21 @@ export function DepartmentRequestFeeCalculationPage({
                       appraisal.creatorDepartmentId,
                     );
 
-                    const isMainOffice =
-                      Number(appraisal.creatorDepartmentId) ===
-                      Number(REQUEST_DEPARTMENT_TYPES.mainOffice.id);
-
                     return (
                       <div
                         key={
                           appraisal.id ??
                           `${appraisal.creatorDepartmentId}-${index}`
                         }
-                        className={[
-                          "flex items-center justify-between gap-4 rounded-xl border p-4",
-                          isMainOffice
-                            ? "border-blue-200 bg-blue-50"
-                            : "border-blue-200 bg-blue-50",
-                        ].join(" ")}
+                        className="flex items-center justify-between gap-4 rounded-xl border border-blue-200 bg-blue-50 p-4"
                       >
                         <div className="min-w-0">
-                          <div
-                            className={[
-                              "text-sm font-medium",
-                              isMainOffice ? "text-blue-800" : "text-blue-800",
-                            ].join(" ")}
-                          >
+                          <div className="text-sm font-medium text-blue-800">
                             فرم ارزیابی ثبت‌شده توسط واحد{" "}
                             <span className="font-bold">{departmentName}</span>
                           </div>
 
-                          <div
-                            className={[
-                              "mt-1 text-xs",
-                              isMainOffice ? "text-blue-700" : "text-blue-700",
-                            ].join(" ")}
-                          >
+                          <div className="mt-1 text-xs text-blue-700">
                             این فرم فقط قابل مشاهده است.
                           </div>
                         </div>
@@ -1022,10 +1049,7 @@ export function DepartmentRequestFeeCalculationPage({
                         title={savedBankCalculation ? "محاسبه مجدد" : "محاسبه"}
                         variant="primary"
                         size="sm"
-                        onClick={() => {
-                          setBankCalculationPreview(null);
-                          setIsBankModalOpen(true);
-                        }}
+                        onClick={handleOpenBankModal}
                       />
                     </div>
                   </div>
@@ -1087,10 +1111,7 @@ export function DepartmentRequestFeeCalculationPage({
                         }
                         variant="primary"
                         size="sm"
-                        onClick={() => {
-                          setJudicialCalculationPreview(null);
-                          setIsJudicialModalOpen(true);
-                        }}
+                        onClick={handleOpenJudicialModal}
                       />
                     </div>
                   </div>
@@ -1105,7 +1126,11 @@ export function DepartmentRequestFeeCalculationPage({
                 <FormTextarea
                   id="cmt"
                   name="cmt"
-                  label="توضیحات کارشناس"
+                  label={
+                    departmentType.id === REQUEST_DEPARTMENT_TYPES.branch.id
+                      ? "یادداشت / نظر کارشناس شعبه"
+                      : "یادداشت / نظر کارشناس شعبه مستقل"
+                  }
                   value={comment}
                   onChange={setComment}
                   rows={3}
@@ -1141,17 +1166,25 @@ export function DepartmentRequestFeeCalculationPage({
             />
           </div>
         }
-
         renderContent={() => (
           <div className="space-y-4">
+            {isBankInputsReadOnly && (
+              <div className="rounded-lg bg-amber-50 p-2.5 text-xs text-amber-800 border border-amber-200">
+                مقادیر از محاسبه کارشناس دادگستری همگام‌سازی شده و غیرقابل تغییر
+                می‌باشند.
+              </div>
+            )}
             <FormInput
               id="bank-fa"
               name="bank-fa"
               label="مبلغ تسهیلات (ریال)"
               value={bankFa}
+              disabled={isBankInputsReadOnly}
               onChange={(value) => {
-                setBankFa(formatNumber(value));
-                setBankCalculationPreview(null);
+                if (!isBankInputsReadOnly) {
+                  setBankFa(formatNumber(value));
+                  setBankCalculationPreview(null);
+                }
               }}
               dir="ltr"
             />
@@ -1161,9 +1194,12 @@ export function DepartmentRequestFeeCalculationPage({
               name="bank-pv"
               label="ارزش ملک (ریال)"
               value={bankPv}
+              disabled={isBankInputsReadOnly}
               onChange={(value) => {
-                setBankPv(formatNumber(value));
-                setBankCalculationPreview(null);
+                if (!isBankInputsReadOnly) {
+                  setBankPv(formatNumber(value));
+                  setBankCalculationPreview(null);
+                }
               }}
               dir="ltr"
             />
@@ -1216,17 +1252,25 @@ export function DepartmentRequestFeeCalculationPage({
             />
           </div>
         }
-
         renderContent={() => (
           <div className="space-y-4">
+            {isJudicialInputsReadOnly && (
+              <div className="rounded-lg bg-amber-50 p-2.5 text-xs text-amber-800 border border-amber-200">
+                مقادیر از محاسبه کارمزد بانک همگام‌سازی شده و غیرقابل تغییر
+                می‌باشند.
+              </div>
+            )}
             <FormInput
               id="judicial-fa"
               name="judicial-fa"
               label="مبلغ تسهیلات (ریال)"
               value={judicialFa}
+              disabled={isJudicialInputsReadOnly}
               onChange={(value) => {
-                setJudicialFa(formatNumber(value));
-                setJudicialCalculationPreview(null);
+                if (!isJudicialInputsReadOnly) {
+                  setJudicialFa(formatNumber(value));
+                  setJudicialCalculationPreview(null);
+                }
               }}
               dir="ltr"
             />
@@ -1236,9 +1280,12 @@ export function DepartmentRequestFeeCalculationPage({
               name="judicial-pv"
               label="ارزش ملک (ریال)"
               value={judicialPv}
+              disabled={isJudicialInputsReadOnly}
               onChange={(value) => {
-                setJudicialPv(formatNumber(value));
-                setJudicialCalculationPreview(null);
+                if (!isJudicialInputsReadOnly) {
+                  setJudicialPv(formatNumber(value));
+                  setJudicialCalculationPreview(null);
+                }
               }}
               dir="ltr"
             />

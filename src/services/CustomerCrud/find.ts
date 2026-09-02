@@ -1,23 +1,17 @@
 import { apiClient } from "../../libs/api";
-import type { CustomerItem } from "./types";
+import type { CustomerItem, FindCustomerParams } from "./types";
 
 interface FindCustomerResponse {
-  result: {
-    customers: CustomerItem[];
+  result?: {
+    customers?: CustomerItem[] | null;
   };
-  success: boolean;
-}
-
-export interface FindCustomerParams {
-  cifNumber?: string | null;
-  nationalCode?: string | null;
+  customers?: CustomerItem[] | null;
+  success?: boolean;
 }
 
 export async function findCustomer(
   params: FindCustomerParams,
 ): Promise<CustomerItem[]> {
-  console.log("📤 FindCustomer params:", params);
-
   const res = await apiClient.request<FindCustomerResponse>(
     "/services/app/CustomerCrud/FindCustomer",
     {
@@ -29,9 +23,5 @@ export async function findCustomer(
     },
   );
 
-  console.log("📥 FindCustomer raw response:", res);
-  console.log("📥 result:", res?.result);
-  console.log("📥 customers:", res?.result?.customers);
-
-  return res?.result?.customers ?? [];
+  return res?.result?.customers ?? res?.customers ?? [];
 }

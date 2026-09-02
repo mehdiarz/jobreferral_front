@@ -20,6 +20,7 @@ import type { DocumentFile } from "../services/FileService/GetDocumentAllFiles";
 import type { RequestCommentItem } from "../services/RequestCommentCrud/types";
 import type { RequestItem } from "../services/RequestCrud/types";
 import { isoToPersianDateTime } from "../utils/persianToISO";
+import { toPersianDigits } from "../utils/numberUtils.ts";
 
 export interface RequestDetailDocument {
   doc: DocumentItem;
@@ -180,7 +181,7 @@ export default function RequestDetailsPanel({
                 {request.title || "بدون عنوان"}
               </h2>
               <p className="mt-1 text-xs text-slate-800">
-                شماره پرونده: {request.loanNumber || "-"}
+                شماره پرونده: {toPersianDigits(request.loanNumber) || "-"}
               </p>
             </div>
           </div>
@@ -228,7 +229,7 @@ export default function RequestDetailsPanel({
           <DetailItem
             icon={<UserRound className="h-4 w-4" />}
             label="درخواست‌کننده"
-            value={customerDisplay}
+            value={toPersianDigits(customerDisplay)}
           />
         </div>
         {request.description && (
@@ -245,7 +246,7 @@ export default function RequestDetailsPanel({
         <RequestDetailSection
           icon={<Clock3 className="h-4.5 w-4.5" />}
           title="تاریخچه اقدامات"
-          count={`${histories.length} اقدام`}
+          count={`${toPersianDigits(histories.length)} اقدام`}
         >
           <div className="space-y-3">
             {histories.map((history, index) => {
@@ -267,7 +268,7 @@ export default function RequestDetailsPanel({
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                       <p className="font-medium text-slate-700">
-                        {history.description || "-"}
+                        {toPersianDigits(history.description) || "-"}
                       </p>
                       <span
                         className="shrink-0 text-[11px] text-slate-400"
@@ -281,7 +282,9 @@ export default function RequestDetailsPanel({
                     {history.reviewerUserId && (
                       <p className="mt-1.5 text-xs text-slate-500">
                         {userData.name}
-                        {userData.role !== "-" ? ` — ${userData.role}` : ""}
+                        {userData.role !== "-"
+                          ? ` — ${toPersianDigits(userData.role)}`
+                          : ""}
                       </p>
                     )}
                   </div>

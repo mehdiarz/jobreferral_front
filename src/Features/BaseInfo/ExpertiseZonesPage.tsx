@@ -304,7 +304,7 @@ export default function ExpertiseZonesPage() {
 
   return (
     <MainLayout.Main maxWidth="screen-xl">
-      <PageTitle title="حدود صلاحیت کارشناسان دادگستری" />
+      <PageTitle title="ثبت حدود صلاحیت کارشناسان دادگستری / نوع وثیقه" />
 
       <div className="rounded-lg bg-white p-4 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

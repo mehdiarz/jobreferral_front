@@ -48,7 +48,6 @@ import type {
   PropertyAppraisalLookupsDto,
   PropertyAppraisalOutputDto,
 } from "../../../services/PropertyAppraisalCrud/types";
-import { generateAppraisalPdf } from "../../../utils/htmlPdfGenerator";
 import { getAllRequestSignatures } from "../../../services/RequestSignatureCrud/getAll";
 import type { RequestSignatureOutputDto } from "../../../services/RequestSignatureCrud/types";
 import { getAllDocuments } from "../../../services/DocumentCrud/getAll";
@@ -77,6 +76,8 @@ import {
   isoToPersianDateTime,
   persianToISO,
 } from "../../../utils/persianToISO";
+import { convertDocxToPdf } from "../../../services/AppraisalReport/convertDocxToPdf.ts";
+import { createBlobAppraisalDocx } from "../../../utils/wordGenerator.ts";
 
 type UploadItem = {
   id: string;
@@ -592,26 +593,70 @@ export function DepartmentRequestReferralPage({
   ]);
 
   const handleGeneratePdf = useCallback(async () => {
+    // اگر در مودال فرم فعال هستیم از assetForm و اگر در مودال فقط‌خواندنی هستیم از selectedReadonlyAppraisal استفاده می‌کنیم
+    const appraisalData = isAssetModalOpen
+      ? assetForm
+      : selectedReadonlyAppraisal;
+
+    if (!appraisalData) {
+      showToast("اطلاعات فرم ارزیابی یافت نشد", "error");
+      return;
+    }
+
     setIsGeneratingPdf(true);
+
     try {
-      const pdfUrl = await generateAppraisalPdf(assetForm, lookups, {
-        requestCode: selectedRequest?.requestCode,
-        date: selectedRequest?.creationTime
-          ? isoToPersian(selectedRequest.creationTime)
-          : "",
-        signatures: requestSignatures,
-      });
+      // ۱. تولید فایل Word در حافظه
+      const docxBlob = await createBlobAppraisalDocx(
+        appraisalData,
+        lookupsQuery.data ?? {},
+        {
+          requestCode: selectedRequest?.requestCode,
+          date: selectedRequest?.creationTime
+            ? isoToPersian(selectedRequest.creationTime)
+            : "",
+          signatures: requestSignatures,
+        },
+      );
 
-      window.open(pdfUrl, "_blank");
+      // ۲. ایجاد شیء File از Blob
+      const docxFile = new File(
+        [docxBlob],
+        `AppraisalReport_${appraisalData.applicantName || "Report"}.docx`,
+        {
+          type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        },
+      );
 
-      showToast("گزارش PDF با موفقیت ایجاد شد", "success");
+      // ۳. ارسال فایل Word به بک‌اند و دریافت Blob پی‌دی‌اف
+      const pdfBlob = await convertDocxToPdf({ file: docxFile });
+
+      // ۴. دانلود مستقیم یا باز کردن در تب جدید
+      const pdfUrl = window.URL.createObjectURL(pdfBlob);
+      const anchor = document.createElement("a");
+      anchor.href = pdfUrl;
+      anchor.download = `AppraisalReport_${appraisalData.applicantName || "Report"}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      window.URL.revokeObjectURL(pdfUrl);
+
+      showToast("گزارش PDF با موفقیت ایجاد و دانلود شد", "success");
     } catch (error: unknown) {
       console.error("Error generating appraisal PDF:", error);
       showToast(getErrorMessage(error, "خطا در ایجاد فایل PDF"), "error");
     } finally {
       setIsGeneratingPdf(false);
     }
-  }, [assetForm, lookups, selectedRequest, showToast]);
+  }, [
+    isAssetModalOpen,
+    assetForm,
+    selectedReadonlyAppraisal,
+    lookupsQuery.data,
+    selectedRequest,
+    requestSignatures,
+    showToast,
+  ]);
 
   const confirmDeleteFile = useCallback(() => {
     if (fileToDelete) {
@@ -1026,13 +1071,26 @@ export function DepartmentRequestReferralPage({
               </RequestDetailSection>
               <RequestDetailSection
                 icon={<MessageSquareText className="h-5 w-5" />}
-                title="توضیحات"
+                title="توضیحات تکمیلی"
                 tone="amber"
               >
                 <FormTextarea
                   id="referral-comment"
                   name="referral-comment"
-                  label="توضیحات کارشناس"
+                  label={
+                    departmentType.id === REQUEST_DEPARTMENT_TYPES.branch.id
+                      ? "یادداشت / نظر کارشناس شعبه"
+                      : departmentType.id ===
+                          REQUEST_DEPARTMENT_TYPES.independentBranch.id
+                        ? "یادداشت / نظر کارشناس شعبه مستقل"
+                        : departmentType.id ===
+                            REQUEST_DEPARTMENT_TYPES.region.id
+                          ? "یادداشت / نظر کارشناس منطقه"
+                          : departmentType.id ===
+                              REQUEST_DEPARTMENT_TYPES.mainOffice.id
+                            ? "یادداشت / نظر کارشناس ستاد"
+                            : "یادداشت / نظر کارشناس"
+                  }
                   value={comment}
                   onChange={setComment}
                   rows={3}
@@ -1088,6 +1146,8 @@ export function DepartmentRequestReferralPage({
         isOpen={isAppraisalReadOnlyOpen}
         appraisal={selectedReadonlyAppraisal}
         lookups={lookups}
+        isGeneratingPdf={isGeneratingPdf}
+        onGeneratePdf={handleGeneratePdf}
         signatures={requestSignatures}
         onClose={() => {
           setIsAppraisalReadOnlyOpen(false);

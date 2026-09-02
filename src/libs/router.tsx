@@ -295,18 +295,18 @@ const attachmentTypesRoute = createRoute({
 //   },
 // });
 
-const collateralTypesRoute = createRoute({
-  getParentRoute: () => dashboardLayoutRoute,
-  path: "/base-info/collateral-types",
-  component: () => {
-    const Page = lazy(() => import("../Features/BaseInfo/CollateralTypesPage"));
-    return (
-      <SuspenseLoading>
-        <Page />
-      </SuspenseLoading>
-    );
-  },
-});
+// const collateralTypesRoute = createRoute({
+//   getParentRoute: () => dashboardLayoutRoute,
+//   path: "/base-info/collateral-types",
+//   component: () => {
+//     const Page = lazy(() => import("../Features/BaseInfo/CollateralTypesPage"));
+//     return (
+//       <SuspenseLoading>
+//         <Page />
+//       </SuspenseLoading>
+//     );
+//   },
+// });
 
 const creditLimitAuthoritiesRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
@@ -930,7 +930,7 @@ const routeTree = rootRoute.addChildren([
     requestTypesRoute,
     attachmentTypesRoute,
     // customersRoute,
-    collateralTypesRoute,
+    // collateralTypesRoute,
     creditLimitAuthoritiesRoute,
     departmentTypeRoute,
     departmentGradeRoute,

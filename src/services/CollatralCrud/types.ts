@@ -1,3 +1,10 @@
+export interface ExpertiseZoneItem {
+  id?: number;
+  code?: string | null;
+  title?: string | null;
+  [key: string]: any;
+}
+
 export interface CollatralItem {
   id: number;
   collatralTypeId?: number | null;
@@ -6,25 +13,34 @@ export interface CollatralItem {
   lastName?: string | null;
   nationalCode?: string | null;
   personTypeId?: number | null;
+  expertiseZoneCodes?: string[] | null;
+  expertiseZones?: ExpertiseZoneItem[] | null;
+  creationTime?: string;
+  lastModificationTime?: string | null;
+  isDeleted?: boolean;
+  deletionTime?: string | null;
 }
 
 export interface CreateCollatralBody {
-  collatralTypeId: number;
+  id?: number;
+  collatralTypeId?: number | null; // اختیاری شد
   requestId: number;
-  firstName: string;
-  lastName: string;
-  nationalCode: string;
-  personTypeId: number;
+  firstName?: string | null;
+  lastName?: string | null;
+  nationalCode?: string | null;
+  personTypeId?: number; // پیش‌فرض 1
+  expertiseZoneCodes?: string[] | null;
 }
 
 export interface EditCollatralBody {
   id: number;
-  collatralTypeId: number;
+  collatralTypeId?: number | null; // اختیاری شد
   requestId: number;
-  firstName: string;
-  lastName: string;
-  nationalCode: string;
-  personTypeId: number;
+  firstName?: string | null;
+  lastName?: string | null;
+  nationalCode?: string | null;
+  personTypeId?: number; // پیش‌فرض 1
+  expertiseZoneCodes?: string[] | null;
 }
 
 export interface GetAllCollatralsParams {

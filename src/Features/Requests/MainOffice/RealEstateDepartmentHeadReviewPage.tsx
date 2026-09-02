@@ -27,7 +27,6 @@ import { createRequestComment } from "../../../services/RequestCommentCrud/creat
 import { getUserById } from "../../../services/Users/getUserById";
 import { getPropertyAppraisalLookups } from "../../../services/PropertyAppraisalCrud/getLookups";
 import { getPropertyAppraisalByRequestId } from "../../../services/PropertyAppraisalCrud/getByRequestId";
-import { generateAppraisalPdf } from "../../../utils/htmlPdfGenerator";
 import { getAllRequestSignatures } from "../../../services/RequestSignatureCrud/getAll";
 import type { RequestSignatureOutputDto } from "../../../services/RequestSignatureCrud/types";
 import { getAllDocuments } from "../../../services/DocumentCrud/getAll";
@@ -69,6 +68,8 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 // ─── Read-Only Property Appraisal Modal ─────────────────────────
 import PropertyAppraisalReadOnlyModal from "../../../baseComponents/PropertyAppraisalReadOnlyModal";
+import { createBlobAppraisalDocx } from "../../../utils/wordGenerator.ts";
+import { convertDocxToPdf } from "../../../services/AppraisalReport/convertDocxToPdf.ts";
 
 // ─── Main Component ──────────────────────────────────────────────
 interface RealEstateDepartmentHeadReviewPageProps {
@@ -375,10 +376,12 @@ export function DepartmentRealEstateDepartmentHeadReviewPage({
   const handleGeneratePdf = useCallback(async () => {
     if (!selectedReadonlyAppraisal) return;
     setIsGeneratingPdf(true);
+
     try {
-      const pdfUrl = await generateAppraisalPdf(
+      // ۱. تولید فایل Word در حافظه (بدون اینکه دانلود شود یا کاربر متوجه شود)
+      const docxBlob = await createBlobAppraisalDocx(
         selectedReadonlyAppraisal,
-        lookups,
+        lookupsQuery.data ?? {},
         {
           requestCode: selectedRequest?.requestCode,
           date: selectedRequest?.creationTime
@@ -387,7 +390,33 @@ export function DepartmentRealEstateDepartmentHeadReviewPage({
           signatures: requestSignatures,
         },
       );
+
+      // ۲. ایجاد شیء File از Blob برای ارسال به سرویس تبدیل
+      const docxFile = new File(
+        [docxBlob],
+        `AppraisalReport_${selectedReadonlyAppraisal.applicantName || "Report"}.docx`,
+        {
+          type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        },
+      );
+
+      // ۳. ارسال فایل Word به بک‌اند و دریافت مستقیم PDF Blob
+      const pdfBlob = await convertDocxToPdf({ file: docxFile });
+
+      // ۴. باز کردن مستقیم PDF در تب جدید یا دانلود آن
+      const pdfUrl = window.URL.createObjectURL(pdfBlob);
       window.open(pdfUrl, "_blank");
+
+      // دانلود مستقیم (در صورت نیاز به دانلود خودکار به جای تب جدید، می‌توانید کد زیر را فعال کنید):
+      /*
+      const anchor = document.createElement("a");
+      anchor.href = pdfUrl;
+      anchor.download = `AppraisalReport_${selectedReadonlyAppraisal.applicantName || "Report"}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      */
+
       showToast("گزارش PDF با موفقیت ایجاد شد", "success");
     } catch (error: unknown) {
       console.error("Error generating appraisal PDF:", error);
@@ -395,7 +424,13 @@ export function DepartmentRealEstateDepartmentHeadReviewPage({
     } finally {
       setIsGeneratingPdf(false);
     }
-  }, [selectedReadonlyAppraisal, lookups, selectedRequest, showToast]);
+  }, [
+    selectedReadonlyAppraisal,
+    lookupsQuery.data,
+    selectedRequest,
+    requestSignatures,
+    showToast,
+  ]);
 
   const handleDirectAction = useCallback(
     async (req: RequestItem) => {
@@ -723,7 +758,7 @@ export function DepartmentRealEstateDepartmentHeadReviewPage({
                 <FormTextarea
                   id="cmt"
                   name="cmt"
-                  label="توضیحات کارشناس"
+                  label="یادداشت / نظر ریاست اداره املاک ستاد"
                   value={comment}
                   onChange={setComment}
                   rows={3}

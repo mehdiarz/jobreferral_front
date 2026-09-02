@@ -3,6 +3,7 @@ export interface CustomerItem {
   personalTypeId?: number | null;
   cifNumber?: string | null;
   name?: string | null;
+  mobileNumber?: string | null;
   creationTime?: string;
   lastModificationTime?: string | null;
   nationalCode?: string | null;
@@ -12,15 +13,15 @@ export interface CustomerItem {
 
 export interface CreateCustomerBody {
   personalTypeId: number;
-  cifNumber: string;
-  name: string;
+  cifNumber?: string | null;
+  name?: string | null;
+  mobileNumber?: string | null;
+  nationalCode?: string | null;
 }
 
 export interface EditCustomerBody {
   id: number;
-  personalTypeId: number;
-  cifNumber: string;
-  name: string;
+  mobileNumber?: string | null;
 }
 
 export interface GetAllCustomersParams {
@@ -29,9 +30,12 @@ export interface GetAllCustomersParams {
   maxResultCount?: number;
 }
 
-export interface FindCustomerResponse {
-  result: {
-    customers: CustomerItem[];
-  };
-  success: boolean;
+export interface FindCustomerParams {
+  cifNumber?: string | null;
+  nationalCode?: string | null;
+}
+
+export interface FindCustomerFromTsiParams {
+  personcode?: string | null;
+  persontype?: number;
 }

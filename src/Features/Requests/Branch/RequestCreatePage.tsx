@@ -13,6 +13,8 @@ import {
   Upload,
   UserRound,
   UsersRound,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 
@@ -37,7 +39,8 @@ import type { DocumentTypeItem } from "../../../services/DocumentTypeCrud/types"
 import { isoToPersian } from "../../../utils/persianToISO";
 import { createDocument } from "../../../services/DocumentCrud/create";
 import { completeBatchUpload } from "../../../services/FileService/completeBatch";
-import { findCustomer } from "../../../services/CustomerCrud/find";
+// import { findCustomer } from "../../../services/CustomerCrud/find";
+import { findCustomerFromTsi } from "../../../services/CustomerCrud/FindCustomerFromTsi";
 import type { CustomerItem } from "../../../services/CustomerCrud/types";
 import { createRequestComment } from "../../../services/RequestCommentCrud/create";
 import {
@@ -52,11 +55,18 @@ import {
   REQUEST_DEPARTMENT_TYPES,
   type RequestDepartmentTypeConfig,
 } from "../requestDepartmentTypes";
+import { scheduleNextRequestStep } from "../requestFlowNavigation";
+import { isValidNationalIdentity } from "../../../utils/createRequestValidator.ts";
+import { onlyDigits } from "../../../utils/iranValidators.ts";
+import { toPersianDigits } from "../../../utils/numberUtils.ts";
+import ModalTemplate from "../../../baseComponents/Modal";
+import FormMultiSelectModal from "../../../baseComponents/FormMultiSelectModal.tsx";
 
 // ─── Types ───
 type CollateralForm = {
   personTypeId: number | null;
   collatralTypeId: number | null;
+  expertiseZoneCodes: string[];
   firstName: string;
   lastName: string;
   nationalCode: string;
@@ -94,7 +104,8 @@ type UploadedFile = {
 
 const emptyCollateral: CollateralForm = {
   personTypeId: null,
-  collatralTypeId: null,
+  collatralTypeId: 0,
+  expertiseZoneCodes: [],
   firstName: "",
   lastName: "",
   nationalCode: "",
@@ -148,6 +159,23 @@ export function DepartmentRequestCreatePage({
   const [expertComment, setExpertComment] = useState("");
 
   const [fileToDelete, setFileToDelete] = useState<string | null>(null);
+  const [collateralZoneModalState, setCollateralZoneModalState] = useState<{
+    collateralIndex: number;
+    selectedCodes: string[];
+  } | null>(null);
+
+  const [isNationalCodeNoticeOpen, setIsNationalCodeNoticeOpen] =
+    useState(false);
+
+  const [hasShownNationalCodeNotice, setHasShownNationalCodeNotice] =
+    useState(false);
+
+  const handleNationalCodeFocus = () => {
+    if (hasShownNationalCodeNotice) return;
+
+    setHasShownNationalCodeNotice(true);
+    setIsNationalCodeNoticeOpen(true);
+  };
 
   const userName = fullName || user?.username || "";
   const branchName = user?.branchName || "";
@@ -157,7 +185,7 @@ export function DepartmentRequestCreatePage({
     documentTypes,
     requestTypeOptions,
     personalTypeOptions,
-    collateralTypeOptions,
+    expertiseZones,
     documentTypeOptions,
   } = useRequestReferenceData();
 
@@ -316,46 +344,54 @@ export function DepartmentRequestCreatePage({
   };
 
   const handleFindCustomer = async () => {
-    const nationalCode = requestForm.requesterName.trim();
+    const nationalCode = onlyDigits(requestForm.requesterName);
+
     if (!nationalCode) {
-      showToast("لطفاً کد ملی را وارد کنید", "error");
+      showToast("لطفاً کد ملی یا شناسه ملی را وارد کنید", "error");
+      return;
+    }
+
+    if (nationalCode.length < 10 || nationalCode.length > 11) {
+      showToast("کد ملی باید ۱۰ رقم و شناسه ملی باید ۱۱ رقم باشد", "error");
+      return;
+    }
+
+    if (!isValidNationalIdentity(nationalCode)) {
+      showToast("فرمت کد ملی / شناسه ملی وارد شده معتبر نمی‌باشد", "error");
       return;
     }
 
     setIsSearchingCustomer(true);
     try {
-      console.log("🔍 Searching with nationalCode:", nationalCode);
+      const customers = await findCustomerFromTsi({ nationalCode });
 
-      const customers = await findCustomer({ nationalCode });
-
-      console.log("📦 Raw response:", customers);
-      console.log("📦 First customer:", customers[0]);
-      console.log(
-        "📦 First customer nationalCode:",
-        (customers[0] as any)?.nationalCode,
-      );
-
-      if (customers.length === 0) {
+      if (!customers || customers.length === 0) {
         setCustomerId(null);
         setCustomerInfo(null);
-        showToast("مشتری با این کد ملی یافت نشد", "warning");
+        showToast("مشتری با این مشخصات یافت نشد", "warning");
       } else if (customers.length === 1) {
         const c = customers[0];
-        console.log("✅ Single customer:", c);
         setCustomerId(c.id);
         setCustomerInfo({
           cif: c.cifNumber || "-",
           name: c.name || "-",
           nationalCode: (c as any)?.nationalCode || nationalCode,
         });
-        showToast("مشتری یافت شد", "success");
+
+        // خودکار پر کردن نوع شخص از مشتری
+        if (c.personalTypeId) {
+          setRequestForm((prev) => ({
+            ...prev,
+            personalTypeId: c.personalTypeId ?? null,
+          }));
+        }
+
+        showToast("مشتری یافت و با موفقیت انتخاب شد", "success");
       } else {
-        console.log("👥 Multiple customers:", customers);
         setFoundCustomers(customers);
         setIsCustomerModalOpen(true);
       }
     } catch (error: unknown) {
-      console.error("❌ Error:", error);
       showToast(getErrorMessage(error, "خطا در استعلام"), "error");
     } finally {
       setIsSearchingCustomer(false);
@@ -363,12 +399,6 @@ export function DepartmentRequestCreatePage({
   };
 
   const handleSelectCustomer = (customer: CustomerItem) => {
-    console.log("🎯 Selected customer:", customer);
-    console.log(
-      "🎯 nationalCode from customer:",
-      (customer as any)?.nationalCode,
-    );
-
     setCustomerId(customer.id);
     setCustomerInfo({
       cif: customer.cifNumber || "",
@@ -376,6 +406,15 @@ export function DepartmentRequestCreatePage({
       nationalCode:
         (customer as any)?.nationalCode || requestForm.requesterName,
     });
+
+    // خودکار پر کردن نوع شخص از مشتری
+    if (customer.personalTypeId) {
+      setRequestForm((prev) => ({
+        ...prev,
+        personalTypeId: customer.personalTypeId ?? null,
+      }));
+    }
+
     setIsCustomerModalOpen(false);
     showToast("مشتری انتخاب شد", "success");
   };
@@ -486,6 +525,24 @@ export function DepartmentRequestCreatePage({
     setCollaterals((p) =>
       p.map((c, idx) => (idx === i ? { ...c, [f]: v } : c)),
     );
+  const getSelectedExpertiseZoneTitles = (codes: string[]) =>
+    expertiseZones
+      .filter((zone) => Boolean(zone.code) && codes.includes(zone.code!))
+      .map((zone) => zone.title || zone.code!)
+      .join("، ");
+  const toggleModalExpertiseZone = (code: string) =>
+    setCollateralZoneModalState((previous) =>
+      !previous
+        ? previous
+        : {
+            ...previous,
+            selectedCodes: previous.selectedCodes.includes(code)
+              ? previous.selectedCodes.filter(
+                  (selectedCode) => selectedCode !== code,
+                )
+              : [...previous.selectedCodes, code],
+          },
+    );
 
   // ─── Submit ───
   const handleSubmit = async () => {
@@ -515,6 +572,12 @@ export function DepartmentRequestCreatePage({
       return;
     }
 
+    const nationalCode = onlyDigits(requestForm.requesterName);
+    if (!isValidNationalIdentity(nationalCode)) {
+      showToast("کد ملی / شناسه ملی نامعتبر است", "error");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const body = {
@@ -532,6 +595,8 @@ export function DepartmentRequestCreatePage({
         // currentApprovalStepId: 0,
         // requestStatusCode: 0,
       };
+
+      console.log(body);
       // 1. Create Request
       const requestRes = await createRequest(body);
       const requestId = extractEntityId(requestRes, "درخواست");
@@ -547,14 +612,19 @@ export function DepartmentRequestCreatePage({
 
       // 2. Create Collaterals
       for (const col of collaterals) {
-        if (col.personTypeId && col.collatralTypeId && col.firstName) {
+        if (
+          col.personTypeId &&
+          col.expertiseZoneCodes.length > 0 &&
+          col.firstName
+        ) {
           await createCollatral({
-            collatralTypeId: col.collatralTypeId,
             requestId,
             firstName: col.firstName,
             lastName: col.lastName,
+            collatralTypeId: 0,
             nationalCode: col.nationalCode,
             personTypeId: col.personTypeId,
+            expertiseZoneCodes: col.expertiseZoneCodes,
           });
         }
       }
@@ -594,6 +664,7 @@ export function DepartmentRequestCreatePage({
       }
 
       showToast("درخواست با موفقیت ثبت شد", "success");
+      scheduleNextRequestStep({ nextStateCode: 2 }, departmentType);
       setRequestForm(emptyRequest);
       setCollaterals([{ ...emptyCollateral }]);
       setUploadedFiles([]);
@@ -843,7 +914,7 @@ export function DepartmentRequestCreatePage({
             <div>
               <p className="text-xs text-slate-800">فرم ثبت پرونده</p>
               <h2 className="mt-1 text-lg font-bold">
-                درخواست جدید شعبه {branchName || "-"}
+                درخواست جدید شعبه {toPersianDigits(branchName) || "-"}
               </h2>
             </div>
           </div>
@@ -854,7 +925,7 @@ export function DepartmentRequestCreatePage({
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 ring-1 ring-white/20">
               <CalendarDays className="h-3.5 w-3.5" />
-              {today}
+              {toPersianDigits(today)}
             </span>
           </div>
         </div>
@@ -913,7 +984,7 @@ export function DepartmentRequestCreatePage({
                 id="branchName"
                 name="branchName"
                 label="شعبه"
-                value={branchName}
+                value={toPersianDigits(branchName)}
                 dir="rtl"
                 disabled
                 onChange={() => {}}
@@ -935,7 +1006,7 @@ export function DepartmentRequestCreatePage({
                 id="todayDate"
                 name="todayDate"
                 label="تاریخ ثبت"
-                value={today}
+                value={toPersianDigits(today)}
                 dir="ltr"
                 disabled
                 onChange={() => {}}
@@ -962,82 +1033,51 @@ export function DepartmentRequestCreatePage({
                 <FormInput
                   id="requesterName"
                   name="requesterName"
-                  label="درخواست کننده (کد ملی/شناسه ملی)"
+                  label="درخواست‌کننده (کد/شناسه ملی)"
                   value={requestForm.requesterName}
-                  onChange={(v) => {
-                    setRequestForm((p) => ({ ...p, requesterName: v }));
+                  onFocus={handleNationalCodeFocus}
+                  onChange={(value) => {
+                    const cleanValue = onlyDigits(value).slice(0, 11);
+
+                    setRequestForm((prev) => ({
+                      ...prev,
+                      requesterName: cleanValue,
+                    }));
+
                     setCustomerInfo(null);
                     setCustomerId(null);
                   }}
                   dir="rtl"
+                  maxLength={11}
+                  required
+                  className="pl-24"
                 />
+
                 <button
                   type="button"
                   onClick={handleFindCustomer}
                   disabled={
-                    !requestForm.requesterName.trim() || isSearchingCustomer
+                    onlyDigits(requestForm.requesterName).length < 10 ||
+                    isSearchingCustomer
                   }
-                  className="absolute bottom-2 left-2 flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl bg-blue-50 text-blue-600 transition-colors hover:bg-blue-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-                  title="استعلام"
+                  className={`absolute bottom-2 left-2 flex h-8 items-center gap-1.5 rounded-md px-2.5 transition-colors ${
+                    onlyDigits(requestForm.requesterName).length >= 10
+                      ? "cursor-pointer bg-blue-600 text-white hover:bg-blue-700"
+                      : "cursor-not-allowed bg-slate-100 text-slate-400"
+                  }`}
+                  title="استعلام مشتری"
                 >
                   {isSearchingCustomer ? (
-                    <span className="inline-block w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></span>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
                   ) : (
-                    <Search className="h-4 w-4" />
+                    <>
+                      <Search className="h-4 w-4" />
+                      <span className="text-xs font-semibold">استعلام</span>
+                    </>
                   )}
                 </button>
               </div>
             </FluidCol>
-
-            {/* نمایش نتیجه استعلام - فقط وقتی customerInfo داریم */}
-            {customerInfo && (
-              <FluidCol colSpan="col-span-12">
-                <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-                  <div className="flex items-center gap-2 flex-1">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
-                      <CheckCircle2 className="h-5 w-5" />
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3 text-sm">
-                      <span className="text-gray-500">نام مشتری:</span>
-                      <span className="font-medium text-gray-800">
-                        {customerInfo.name}
-                      </span>
-                      <span className="text-gray-300">|</span>
-                      <span className="text-gray-500">شماره مشتری:</span>
-                      <span className="font-medium text-gray-800" dir="ltr">
-                        {customerInfo.cif}
-                      </span>
-                      <span className="text-gray-500">کد ملی:</span>
-                      <span className="font-medium text-gray-800" dir="ltr">
-                        {customerInfo.nationalCode}
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCustomerInfo(null);
-                      setCustomerId(null);
-                    }}
-                    className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500"
-                    title="حذف"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </FluidCol>
-            )}
-
-            {/* اگه مشتری پیدا نشد */}
-            {!customerInfo &&
-              !isSearchingCustomer &&
-              requestForm.requesterName.trim() && (
-                <FluidCol colSpan="col-span-12">
-                  <div className="text-xs text-gray-400 -mt-2">
-                    برای استعلام، روی ذره‌بین کلیک کنید
-                  </div>
-                </FluidCol>
-              )}
             <FluidCol colSpan="col-span-12 md:col-span-4">
               <FormInput
                 id="amount"
@@ -1054,6 +1094,45 @@ export function DepartmentRequestCreatePage({
           </FluidGrid>
         </FormSection>
 
+        {/* نمایش نتیجه استعلام - فقط وقتی customerInfo داریم */}
+        {customerInfo && (
+          <FluidCol colSpan="col-span-12">
+            <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <div className="flex items-center gap-2 flex-1">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                  <CheckCircle2 className="h-5 w-5" />
+                </div>
+                <div className="flex flex-wrap items-center gap-3 text-sm">
+                  <span className="text-gray-500">نام مشتری:</span>
+                  <span className="font-medium text-gray-800">
+                    {customerInfo.name}
+                  </span>
+                  <span className="text-gray-300">|</span>
+                  <span className="text-gray-500">شماره مشتری:</span>
+                  <span className="font-medium text-gray-800" dir="ltr">
+                    {toPersianDigits(customerInfo.cif)}
+                  </span>
+                  <span className="text-gray-500">کد ملی:</span>
+                  <span className="font-medium text-gray-800" dir="ltr">
+                    {toPersianDigits(customerInfo.nationalCode)}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomerInfo(null);
+                  setCustomerId(null);
+                }}
+                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                title="حذف"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          </FluidCol>
+        )}
+
         {/* وثیقه گذاران */}
         <FormSection
           title="وثیقه‌گذاران"
@@ -1066,7 +1145,7 @@ export function DepartmentRequestCreatePage({
                   <Plus className="w-4 h-4" /> افزودن
                 </span>
               }
-              variant="success"
+              variant="primary"
               onClick={addCollateral}
             />
           }
@@ -1074,22 +1153,25 @@ export function DepartmentRequestCreatePage({
           {collaterals.map((col, i) => (
             <div
               key={i}
-              className="relative mb-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 pt-5 last:mb-0"
+              className="relative mb-6 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/40 p-5 pt-6 last:mb-0"
             >
-              <span className="absolute right-4 top-0 -translate-y-1/2 rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500 shadow-sm ring-1 ring-slate-200">
-                وثیقه‌گذار {i + 1}
+              <span className="absolute right-4 top-0 -translate-y-1/2 rounded-full bg-white dark:bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-600 dark:text-slate-300 shadow-sm ring-1 ring-slate-200 dark:ring-slate-700">
+                وثیقه‌گذار {toPersianDigits(i + 1)}
               </span>
+
               {collaterals.length > 1 && (
                 <button
                   type="button"
                   onClick={() => removeCollateral(i)}
-                  className="absolute left-3 top-3 z-10 flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl text-red-500 hover:bg-red-50"
+                  className="absolute left-3 top-3 z-10 flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition"
                   title="حذف"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
               )}
-              <FluidGrid className="gap-4">
+
+              <FluidGrid className="gap-y-3">
+                {/* ردیف اول: نوع شخص + نوع وثیقه */}
                 <FluidCol colSpan="col-span-12 md:col-span-6">
                   <FormSelect<number>
                     id={`cp-${i}`}
@@ -1100,24 +1182,29 @@ export function DepartmentRequestCreatePage({
                       updateCollateral(i, "personTypeId", v ? Number(v) : null)
                     }
                     options={personalTypeOptions}
+                    required
                   />
                 </FluidCol>
+
                 <FluidCol colSpan="col-span-12 md:col-span-6">
-                  <FormSelect<number>
-                    id={`cc-${i}`}
-                    name={`cc-${i}`}
+                  <FormMultiSelectModal
+                    id={`cz-${i}`}
                     label="نوع وثیقه"
-                    value={col.collatralTypeId ?? ""}
-                    onChange={(v) =>
-                      updateCollateral(
-                        i,
-                        "collatralTypeId",
-                        v ? Number(v) : null,
-                      )
+                    required
+                    selectedCount={col.expertiseZoneCodes.length}
+                    displayText={getSelectedExpertiseZoneTitles(
+                      col.expertiseZoneCodes,
+                    )}
+                    onClick={() =>
+                      setCollateralZoneModalState({
+                        collateralIndex: i,
+                        selectedCodes: [...col.expertiseZoneCodes],
+                      })
                     }
-                    options={collateralTypeOptions}
                   />
                 </FluidCol>
+
+                {/* ردیف دوم: مشخصات هویتی */}
                 <FluidCol colSpan="col-span-12 md:col-span-4">
                   <FormInput
                     id={`cfn-${i}`}
@@ -1128,6 +1215,7 @@ export function DepartmentRequestCreatePage({
                     dir="rtl"
                   />
                 </FluidCol>
+
                 <FluidCol colSpan="col-span-12 md:col-span-4">
                   <FormInput
                     id={`cln-${i}`}
@@ -1138,6 +1226,7 @@ export function DepartmentRequestCreatePage({
                     dir="rtl"
                   />
                 </FluidCol>
+
                 <FluidCol colSpan="col-span-12 md:col-span-4">
                   <FormInput
                     id={`cnc-${i}`}
@@ -1224,7 +1313,11 @@ export function DepartmentRequestCreatePage({
 
         {/* توضیحات کارشناس */}
         <FormSection
-          title="یادداشت کارشناس"
+          title={
+            departmentType.id === REQUEST_DEPARTMENT_TYPES.branch.id
+              ? "یادداشت کارشناس شعبه"
+              : "یادداشت کارشناس شعبه مستقل"
+          }
           description="نکات کارشناسی، موارد نیازمند بررسی یا توضیحات داخلی خود درباره این درخواست را ثبت کنید. این یادداشت به‌عنوان نظر کارشناس در روند بررسی درخواست نمایش داده می‌شود."
           icon={<MessageSquareText className="h-5 w-5" />}
         >
@@ -1342,6 +1435,161 @@ export function DepartmentRequestCreatePage({
         }
         renderContent={() => <p>آیا از حذف این فایل اطمینان دارید؟</p>}
       />
+
+      <ModalTemplate
+        isOpen={!!collateralZoneModalState}
+        isRTL
+        header="انتخاب انواع وثیقه"
+        onClose={() => setCollateralZoneModalState(null)}
+        overlayLock={false}
+        className="max-w-2xl"
+        footerButtons={
+          <div className="flex gap-2">
+            <FormButton
+              title="تأیید انتخاب"
+              variant="primary"
+              onClick={() => {
+                if (collateralZoneModalState) {
+                  updateCollateral(
+                    collateralZoneModalState.collateralIndex,
+                    "expertiseZoneCodes",
+                    collateralZoneModalState.selectedCodes,
+                  );
+                }
+                setCollateralZoneModalState(null);
+              }}
+            />
+            <FormButton
+              title="انصراف"
+              variant="secondary"
+              onClick={() => setCollateralZoneModalState(null)}
+            />
+          </div>
+        }
+        renderContent={() => {
+          const selectableZones = expertiseZones.filter((zone) =>
+            Boolean(zone.code),
+          );
+          const selectedCount =
+            collateralZoneModalState?.selectedCodes.length ?? 0;
+
+          return (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between rounded-xl bg-blue-50 dark:bg-slate-700/50 px-4 py-3 text-sm text-blue-900 dark:text-blue-200">
+                <span>یک یا چند مورد را انتخاب کنید:</span>
+                <span className="font-bold">
+                  {toPersianDigits(selectedCount)} مورد انتخاب شده
+                </span>
+              </div>
+
+              {selectableZones.length === 0 ? (
+                <p className="py-6 text-center text-sm text-gray-500">
+                  موردی یافت نشد.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[50vh] overflow-y-auto p-1">
+                  {selectableZones.map((zone) => {
+                    const checked =
+                      collateralZoneModalState?.selectedCodes.includes(
+                        zone.code!,
+                      ) ?? false;
+
+                    return (
+                      <label
+                        key={zone.id}
+                        className={`flex cursor-pointer items-center justify-between rounded-xl border p-3.5 text-sm font-medium transition-all ${
+                          checked
+                            ? "border-blue-600 bg-blue-50/80 text-blue-900 dark:border-blue-500 dark:bg-blue-950/40 dark:text-blue-200 shadow-sm"
+                            : "border-gray-200 bg-white hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700/60 text-gray-700 dark:text-gray-200"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() =>
+                              toggleModalExpertiseZone(zone.code!)
+                            }
+                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span>{zone.title || zone.code}</span>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        }}
+      />
+
+      {isNationalCodeNoticeOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="national-code-notice-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setIsNationalCodeNoticeOpen(false);
+            }
+          }}
+        >
+          <div
+            dir="rtl"
+            className="w-full max-w-md rounded-lg border border-slate-200 bg-white shadow-xl"
+          >
+            <div className="flex items-start gap-3 border-b border-slate-100 p-5">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <h2
+                  id="national-code-notice-title"
+                  className="text-sm font-bold text-slate-800"
+                >
+                  توجه در ثبت اطلاعات درخواست‌کننده
+                </h2>
+
+                <p className="mt-2 text-sm leading-7 text-slate-600">
+                  وارد کردن کد ملی شخص حقیقی یا شناسه ملی شخص حقوقی و انجام
+                  استعلام مشتری الزامی است.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsNationalCodeNoticeOpen(false)}
+                className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                title="بستن"
+                aria-label="بستن پیام"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 px-5 py-3">
+              <p className="text-xs leading-6 text-slate-500">
+                کد ملی باید ۱۰ رقم و شناسه ملی باید ۱۱ رقم باشد. پس از ورود
+                اطلاعات، دکمه «استعلام» را انتخاب کنید.
+              </p>
+            </div>
+
+            <div className="flex justify-end p-4">
+              <button
+                type="button"
+                autoFocus
+                onClick={() => setIsNationalCodeNoticeOpen(false)}
+                className="cursor-pointer rounded-md bg-blue-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+              >
+                متوجه شدم
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </MainLayout.Main>
   );
 }

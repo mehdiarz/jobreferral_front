@@ -41,7 +41,10 @@ import type {
   PropertyAppraisalOutputDto,
   PropertyAppraisalLookupsDto,
 } from "../../../services/PropertyAppraisalCrud/types";
-import { isoToPersianDateTime } from "../../../utils/persianToISO";
+import {
+  isoToPersian,
+  isoToPersianDateTime,
+} from "../../../utils/persianToISO";
 import { persianToISO } from "../../../utils/persianToISO";
 import {
   REQUEST_DEPARTMENT_TYPES,
@@ -53,6 +56,8 @@ import {
   REQUEST_STATUS_CODES,
   resolveRequestStatusTitle,
 } from "../requestStatuses";
+import { createBlobAppraisalDocx } from "../../../utils/wordGenerator.ts";
+import { convertDocxToPdf } from "../../../services/AppraisalReport/convertDocxToPdf.ts";
 
 // ─── Types ───────────────────────────────────────────────────────
 type TableFilter = { key: string; value: string };
@@ -125,6 +130,7 @@ export function DepartmentRegionDescriptionReferralPage({
 
   // state های جدید در کامپوننت
   const [detailDocs, setDetailDocs] = useState<DetailDocWithFiles[]>([]);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const userCacheRef = useRef<Map<number, { name: string; role: string }>>(
     new Map(),
@@ -348,6 +354,65 @@ export function DepartmentRegionDescriptionReferralPage({
     },
     [comment, requestsQuery, selectedRequest, showToast, user],
   );
+
+  const handleGeneratePdf = useCallback(async () => {
+    if (!selectedReadonlyAppraisal) return;
+    setIsGeneratingPdf(true);
+
+    try {
+      // ۱. تولید فایل Word در حافظه (بدون اینکه دانلود شود یا کاربر متوجه شود)
+      const docxBlob = await createBlobAppraisalDocx(
+        selectedReadonlyAppraisal,
+        lookupsQuery.data ?? {},
+        {
+          requestCode: selectedRequest?.requestCode,
+          date: selectedRequest?.creationTime
+            ? isoToPersian(selectedRequest.creationTime)
+            : "",
+          signatures: requestSignatures,
+        },
+      );
+
+      // ۲. ایجاد شیء File از Blob برای ارسال به سرویس تبدیل
+      const docxFile = new File(
+        [docxBlob],
+        `AppraisalReport_${selectedReadonlyAppraisal.applicantName || "Report"}.docx`,
+        {
+          type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        },
+      );
+
+      // ۳. ارسال فایل Word به بک‌اند و دریافت مستقیم PDF Blob
+      const pdfBlob = await convertDocxToPdf({ file: docxFile });
+
+      // ۴. باز کردن مستقیم PDF در تب جدید یا دانلود آن
+      const pdfUrl = window.URL.createObjectURL(pdfBlob);
+      window.open(pdfUrl, "_blank");
+
+      // دانلود مستقیم (در صورت نیاز به دانلود خودکار به جای تب جدید، می‌توانید کد زیر را فعال کنید):
+      /*
+      const anchor = document.createElement("a");
+      anchor.href = pdfUrl;
+      anchor.download = `AppraisalReport_${selectedReadonlyAppraisal.applicantName || "Report"}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      */
+
+      showToast("گزارش PDF با موفقیت ایجاد شد", "success");
+    } catch (error: unknown) {
+      console.error("Error generating appraisal PDF:", error);
+      showToast(getErrorMessage(error, "خطا در ایجاد فایل PDF"), "error");
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  }, [
+    selectedReadonlyAppraisal,
+    lookupsQuery.data,
+    selectedRequest,
+    requestSignatures,
+    showToast,
+  ]);
 
   const columns = useMemo<ColumnDef<RequestItem, unknown>[]>(
     () => [
@@ -617,7 +682,7 @@ export function DepartmentRegionDescriptionReferralPage({
                 <FormTextarea
                   id="cmt"
                   name="cmt"
-                  label="توضیحات کارشناس"
+                  label="یادداشت / نظر کارشناس منطقه"
                   value={comment}
                   onChange={setComment}
                   rows={3}
@@ -632,6 +697,8 @@ export function DepartmentRegionDescriptionReferralPage({
         isOpen={isAppraisalReadOnlyOpen}
         appraisal={selectedReadonlyAppraisal}
         lookups={lookups}
+        isGeneratingPdf={isGeneratingPdf}
+        onGeneratePdf={handleGeneratePdf}
         signatures={requestSignatures}
         onClose={() => {
           setIsAppraisalReadOnlyOpen(false);

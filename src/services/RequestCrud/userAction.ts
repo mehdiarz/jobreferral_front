@@ -1,4 +1,5 @@
 import { apiClient } from "../../libs/api";
+import { scheduleNextRequestStep } from "../../Features/Requests/requestFlowNavigation";
 
 export interface UserActionBody {
   accepted?: boolean | null;
@@ -66,5 +67,7 @@ export async function userAction(
     },
   );
 
-  return response?.result ?? null;
+  const result = response?.result ?? null;
+  if (body.accepted === true) scheduleNextRequestStep(result);
+  return result;
 }

@@ -37,6 +37,12 @@ export interface CollatralOutputDto {
   id: number;
   personTypeId?: number | null;
   collatralTypeId?: number | null;
+  expertiseZoneCodes?: string[] | null;
+  expertiseZones?: Array<{
+    id?: number;
+    code?: string | null;
+    title?: string | null;
+  }> | null;
   firstName?: string | null;
   lastName?: string | null;
   nationalCode?: string | null;

@@ -5,6 +5,7 @@ import { getAllDepartments } from "../../../services/DepartmentCrud/getAll";
 import { getAllPersonalTypes } from "../../../services/PersonalTypeCrud/getAll";
 import { getAllCollatralTypes } from "../../../services/CollatralTypeCrud/getAll";
 import { getAllDocumentTypes } from "../../../services/DocumentTypeCrud/getAll";
+import { getAllExpertiseZones } from "../../../services/ExpertiseZoneCrud/getAll";
 import type { RequestOption } from "./requestShared";
 
 // Reference lists are used by dropdowns; never fall back to the API's default
@@ -16,6 +17,7 @@ export const requestReferenceQueryKeys = {
   departments: ["departments"] as const,
   personalTypes: ["personal-types"] as const,
   collateralTypes: ["collateral-types"] as const,
+  expertiseZones: ["expertise-zones"] as const,
   documentTypes: ["document-types"] as const,
 };
 
@@ -53,6 +55,12 @@ export function useRequestReferenceData(enabled = true) {
     select: (data) => data.items,
     enabled,
   });
+  const expertiseZonesQuery = useQuery({
+    queryKey: requestReferenceQueryKeys.expertiseZones,
+    queryFn: () => getAllExpertiseZones({ maxResultCount: REFERENCE_DATA_LIMIT }),
+    select: (data) => data.items,
+    enabled,
+  });
   const documentTypesQuery = useQuery({
     queryKey: requestReferenceQueryKeys.documentTypes,
     queryFn: () => getAllDocumentTypes({ maxResultCount: REFERENCE_DATA_LIMIT }),
@@ -86,6 +94,7 @@ export function useRequestReferenceData(enabled = true) {
     departments: departmentsQuery.data ?? [],
     personalTypes: personalTypesQuery.data ?? [],
     collateralTypes: collateralTypesQuery.data ?? [],
+    expertiseZones: expertiseZonesQuery.data ?? [],
     documentTypes: documentTypesQuery.data ?? [],
     requestTypeOptions,
     departmentOptions,

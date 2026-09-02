@@ -24,6 +24,7 @@ import FormButton from "../../../baseComponents/FormButton";
 import PageTitle from "../../../baseComponents/PageTitle";
 import DataTable from "../../../baseComponents/DataTable";
 import Modal from "../../../baseComponents/Modal";
+import FormMultiSelectModal from "../../../baseComponents/FormMultiSelectModal";
 import RequestDetailsPanel, {
   RequestDetailSection,
   ViewDetailsButton,
@@ -51,9 +52,10 @@ import { getPropertyAppraisalByRequestId } from "../../../services/PropertyAppra
 import type { PropertyAppraisalOutputDto } from "../../../services/PropertyAppraisalCrud/types";
 import { getPropertyAppraisalLookups } from "../../../services/PropertyAppraisalCrud/getLookups";
 import PropertyAppraisalReadOnlyModal from "../../../baseComponents/PropertyAppraisalReadOnlyModal";
-import { generateAppraisalPdf } from "../../../utils/htmlPdfGenerator";
 import { getAllRequestSignatures } from "../../../services/RequestSignatureCrud/getAll";
 import type { RequestSignatureOutputDto } from "../../../services/RequestSignatureCrud/types";
+import { createBlobAppraisalDocx } from "../../../utils/wordGenerator.ts";
+import { convertDocxToPdf } from "../../../services/AppraisalReport/convertDocxToPdf";
 
 import type {
   RequestItem,
@@ -115,6 +117,7 @@ interface CollateralFormData {
   id?: number;
   personTypeId: number | null;
   collatralTypeId: number | null;
+  expertiseZoneCodes: string[];
   firstName: string;
   lastName: string;
   nationalCode: string;
@@ -158,7 +161,7 @@ const EMPTY_EDIT_FORM: EditFormData = {
 function isCollateralEmpty(collateral: CollateralFormData): boolean {
   return (
     !collateral.personTypeId &&
-    !collateral.collatralTypeId &&
+    collateral.expertiseZoneCodes.length === 0 &&
     !collateral.firstName.trim() &&
     !collateral.lastName.trim() &&
     !collateral.nationalCode.trim()
@@ -168,7 +171,7 @@ function isCollateralEmpty(collateral: CollateralFormData): boolean {
 function isCollateralValid(collateral: CollateralFormData): boolean {
   return Boolean(
     collateral.personTypeId &&
-    collateral.collatralTypeId &&
+    collateral.expertiseZoneCodes.length > 0 &&
     collateral.firstName.trim(),
   );
 }
@@ -224,6 +227,10 @@ export function DepartmentRequestViewPage({
   const [editCollaterals, setEditCollaterals] = useState<CollateralFormData[]>(
     [],
   );
+  const [collateralZoneModalState, setCollateralZoneModalState] = useState<{
+    collateralIndex: number;
+    selectedCodes: string[];
+  } | null>(null);
   const [editCustomerId, setEditCustomerId] = useState<number | null>(null);
   const [editCustomerNationalCode, setEditCustomerNationalCode] = useState("");
   const [editCustomerInfo, setEditCustomerInfo] = useState<{
@@ -341,7 +348,7 @@ export function DepartmentRequestViewPage({
     documentTypes,
     requestTypeOptions: typeOpts,
     personalTypeOptions: persTypeOpts,
-    collateralTypeOptions: collTypeOpts,
+    expertiseZones,
     documentTypeOptions: docTypeOpts,
   } = useRequestReferenceData(referenceQueriesEnabled);
 
@@ -522,6 +529,7 @@ export function DepartmentRequestViewPage({
       setEditCustomerId(null);
       setEditCustomerNationalCode("");
       setEditCustomerInfo(null);
+      setCollateralZoneModalState(null);
       setIsEditOpen(true);
 
       try {
@@ -564,7 +572,12 @@ export function DepartmentRequestViewPage({
             ? collaterals.map((c): CollateralFormData => ({
                 id: c.id,
                 personTypeId: c.personTypeId ?? null,
-                collatralTypeId: c.collatralTypeId ?? null,
+                collatralTypeId: 0,
+                expertiseZoneCodes:
+                  c.expertiseZoneCodes ??
+                  (c.expertiseZones ?? [])
+                    .map((zone) => zone.code)
+                    .filter((code): code is string => Boolean(code)),
                 firstName: c.firstName ?? "",
                 lastName: c.lastName ?? "",
                 nationalCode: c.nationalCode ?? "",
@@ -572,7 +585,8 @@ export function DepartmentRequestViewPage({
             : [
                 {
                   personTypeId: null,
-                  collatralTypeId: null,
+                  collatralTypeId: 0, // Add this line
+                  expertiseZoneCodes: [],
                   firstName: "",
                   lastName: "",
                   nationalCode: "",
@@ -651,7 +665,7 @@ export function DepartmentRequestViewPage({
     (
       index: number,
       field: keyof CollateralFormData,
-      value: string | number | null,
+      value: string | number | string[] | null,
     ) => {
       setEditCollaterals((prev) =>
         prev.map((item, i) =>
@@ -659,7 +673,7 @@ export function DepartmentRequestViewPage({
             ? {
                 ...item,
                 [field]:
-                  field === "personTypeId" || field === "collatralTypeId"
+                  field === "personTypeId"
                     ? value
                       ? Number(value)
                       : null
@@ -677,7 +691,8 @@ export function DepartmentRequestViewPage({
       ...prev,
       {
         personTypeId: null,
-        collatralTypeId: null,
+        collatralTypeId: 0,
+        expertiseZoneCodes: [],
         firstName: "",
         lastName: "",
         nationalCode: "",
@@ -688,6 +703,24 @@ export function DepartmentRequestViewPage({
   const handleRemoveCollateral = useCallback((index: number) => {
     setEditCollaterals((prev) => prev.filter((_, i) => i !== index));
   }, []);
+  const getSelectedExpertiseZoneTitles = (codes: string[]) =>
+    expertiseZones
+      .filter((zone) => Boolean(zone.code) && codes.includes(zone.code!))
+      .map((zone) => zone.title || zone.code!)
+      .join("، ");
+  const toggleModalExpertiseZone = (code: string) =>
+    setCollateralZoneModalState((previous) =>
+      !previous
+        ? previous
+        : {
+            ...previous,
+            selectedCodes: previous.selectedCodes.includes(code)
+              ? previous.selectedCodes.filter(
+                  (selectedCode) => selectedCode !== code,
+                )
+              : [...previous.selectedCodes, code],
+          },
+    );
 
   // ─── Edit Form Field Handlers ──────────────────────────────────
   const handleEditFormChange = useCallback(
@@ -1049,12 +1082,13 @@ export function DepartmentRequestViewPage({
 
       activeCollaterals.forEach((collateral) => {
         const body = {
-          collatralTypeId: collateral.collatralTypeId!,
           requestId: selectedRequest.id,
           firstName: collateral.firstName.trim(),
           lastName: collateral.lastName.trim(),
           nationalCode: collateral.nationalCode.trim(),
           personTypeId: collateral.personTypeId!,
+          expertiseZoneCodes: collateral.expertiseZoneCodes,
+          collatralTypeId: 0,
         };
 
         collateralOperations.push(
@@ -1140,8 +1174,10 @@ export function DepartmentRequestViewPage({
   const handleGeneratePdf = useCallback(async () => {
     if (!selectedReadonlyAppraisal) return;
     setIsGeneratingPdf(true);
+
     try {
-      const pdfUrl = await generateAppraisalPdf(
+      // ۱. تولید فایل Word در حافظه (بدون اینکه دانلود شود یا کاربر متوجه شود)
+      const docxBlob = await createBlobAppraisalDocx(
         selectedReadonlyAppraisal,
         lookupsQuery.data ?? {},
         {
@@ -1152,7 +1188,33 @@ export function DepartmentRequestViewPage({
           signatures: requestSignatures,
         },
       );
+
+      // ۲. ایجاد شیء File از Blob برای ارسال به سرویس تبدیل
+      const docxFile = new File(
+        [docxBlob],
+        `AppraisalReport_${selectedReadonlyAppraisal.applicantName || "Report"}.docx`,
+        {
+          type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        },
+      );
+
+      // ۳. ارسال فایل Word به بک‌اند و دریافت مستقیم PDF Blob
+      const pdfBlob = await convertDocxToPdf({ file: docxFile });
+
+      // ۴. باز کردن مستقیم PDF در تب جدید یا دانلود آن
+      const pdfUrl = window.URL.createObjectURL(pdfBlob);
       window.open(pdfUrl, "_blank");
+
+      // دانلود مستقیم (در صورت نیاز به دانلود خودکار به جای تب جدید، می‌توانید کد زیر را فعال کنید):
+      /*
+      const anchor = document.createElement("a");
+      anchor.href = pdfUrl;
+      anchor.download = `AppraisalReport_${selectedReadonlyAppraisal.applicantName || "Report"}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      */
+
       showToast("گزارش PDF با موفقیت ایجاد شد", "success");
     } catch (error: unknown) {
       console.error("Error generating appraisal PDF:", error);
@@ -1164,6 +1226,7 @@ export function DepartmentRequestViewPage({
     selectedReadonlyAppraisal,
     lookupsQuery.data,
     selectedRequest,
+    requestSignatures,
     showToast,
   ]);
 
@@ -1647,15 +1710,20 @@ export function DepartmentRequestViewPage({
                         }
                         options={persTypeOpts}
                       />
-                      <FormSelect<number>
-                        id={`ec-ct-${i}`}
-                        name={`ec-ct-${i}`}
+                      <FormMultiSelectModal
+                        id={`ec-z-${i}`}
                         label="نوع وثیقه"
-                        value={col.collatralTypeId ?? ""}
-                        onChange={(v) =>
-                          handleCollateralFieldChange(i, "collatralTypeId", v)
+                        required
+                        selectedCount={col.expertiseZoneCodes.length}
+                        displayText={getSelectedExpertiseZoneTitles(
+                          col.expertiseZoneCodes,
+                        )}
+                        onClick={() =>
+                          setCollateralZoneModalState({
+                            collateralIndex: i,
+                            selectedCodes: [...col.expertiseZoneCodes],
+                          })
                         }
-                        options={collTypeOpts}
                       />
                       <FormInput
                         id={`ec-fn-${i}`}
@@ -1881,6 +1949,94 @@ export function DepartmentRequestViewPage({
             </FormSection>
           </div>
         )}
+      />
+
+      <Modal
+        isOpen={!!collateralZoneModalState}
+        isRTL
+        header="انتخاب انواع وثیقه"
+        onClose={() => setCollateralZoneModalState(null)}
+        overlayLock={false}
+        className="max-w-2xl"
+        footerButtons={
+          <div className="flex gap-2">
+            <FormButton
+              title="تأیید انتخاب"
+              variant="primary"
+              onClick={() => {
+                if (collateralZoneModalState) {
+                  handleCollateralFieldChange(
+                    collateralZoneModalState.collateralIndex,
+                    "expertiseZoneCodes",
+                    collateralZoneModalState.selectedCodes,
+                  );
+                }
+                setCollateralZoneModalState(null);
+              }}
+            />
+            <FormButton
+              title="انصراف"
+              variant="secondary"
+              onClick={() => setCollateralZoneModalState(null)}
+            />
+          </div>
+        }
+        renderContent={() => {
+          const selectableZones = expertiseZones.filter((zone) =>
+            Boolean(zone.code),
+          );
+          const selectedCount =
+            collateralZoneModalState?.selectedCodes.length ?? 0;
+
+          return (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between rounded-xl bg-blue-50 dark:bg-slate-700/50 px-4 py-3 text-sm text-blue-900 dark:text-blue-200">
+                <span>یک یا چند مورد را انتخاب کنید:</span>
+                <span className="font-bold">
+                  {selectedCount} مورد انتخاب شده
+                </span>
+              </div>
+
+              {selectableZones.length === 0 ? (
+                <p className="py-6 text-center text-sm text-gray-500">
+                  موردی یافت نشد.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[50vh] overflow-y-auto p-1">
+                  {selectableZones.map((zone) => {
+                    const checked =
+                      collateralZoneModalState?.selectedCodes.includes(
+                        zone.code!,
+                      ) ?? false;
+
+                    return (
+                      <label
+                        key={zone.id}
+                        className={`flex cursor-pointer items-center justify-between rounded-xl border p-3.5 text-sm font-medium transition-all ${
+                          checked
+                            ? "border-blue-600 bg-blue-50/80 text-blue-900 dark:border-blue-500 dark:bg-blue-950/40 dark:text-blue-200 shadow-sm"
+                            : "border-gray-200 bg-white hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700/60 text-gray-700 dark:text-gray-200"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() =>
+                              toggleModalExpertiseZone(zone.code!)
+                            }
+                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span>{zone.title || zone.code}</span>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        }}
       />
 
       {/* مودال تأیید حذف فایل */}

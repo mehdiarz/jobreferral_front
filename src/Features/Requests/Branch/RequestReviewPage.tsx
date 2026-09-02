@@ -507,13 +507,26 @@ export function DepartmentRequestReviewPage({
             >
               <RequestDetailSection
                 icon={<MessageSquareText className="h-4.5 w-4.5" />}
-                title="افزودن توضیح"
+                title="توضیحات تکمیلی"
                 tone="amber"
               >
                 <FormTextarea
                   id="review-comment"
                   name="review-comment"
-                  label="توضیحات کارشناس"
+                  label={
+                    departmentType.id === REQUEST_DEPARTMENT_TYPES.branch.id
+                      ? "یادداشت / نظر کارشناس شعبه"
+                      : departmentType.id ===
+                          REQUEST_DEPARTMENT_TYPES.independentBranch.id
+                        ? "یادداشت / نظر کارشناس شعبه مستقل"
+                        : departmentType.id ===
+                            REQUEST_DEPARTMENT_TYPES.region.id
+                          ? "یادداشت / نظر کارشناس منطقه"
+                          : departmentType.id ===
+                              REQUEST_DEPARTMENT_TYPES.mainOffice.id
+                            ? "یادداشت / نظر کارشناس ستاد"
+                            : "یادداشت / نظر کارشناس"
+                  }
                   value={comment}
                   onChange={(v) => setComment(v)}
                   rows={3}

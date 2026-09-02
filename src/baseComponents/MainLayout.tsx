@@ -46,13 +46,17 @@ const maxWidthClasses: Record<MaxWidthOption, string> = {
 };
 
 export const MainLayout = {
-  Main: ({ children, maxWidth = "7xl", className = "" }: MainLayoutMainProps) => {
+  Main: ({
+    children,
+    maxWidth = "7xl",
+    className = "",
+  }: MainLayoutMainProps) => {
     const maxWidthClass = maxWidthClasses[maxWidth];
     return (
       <main
         dir="rtl"
         className={`
-          w-full h-full mx-auto px-4 sm:px-6 lg:px-8 
+          w-full min-h-full mx-auto px-4 sm:px-6 lg:px-8 
           ${maxWidthClass}
           pt-6 pb-10
           bg-white dark:bg-slate-800

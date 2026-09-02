@@ -127,7 +127,7 @@ export const defaultMenuItems = [
       },
       {
         id: "expertise-zones",
-        title: "حدود صلاحیت کارشناس",
+        title: "حدود صلاحیت کارشناس/ ثبت نوع وثیقه",
         path: "/dashboard/base-info/expertise-zones",
         permissions: [Permissions.Pages_BaseInfo_ExpertiseZones],
       },
@@ -149,12 +149,12 @@ export const defaultMenuItems = [
         path: "/dashboard/base-info/attachment-types",
         permissions: [Permissions.Pages_BaseInfo_AttachmentTypes],
       },
-      {
-        id: "collateral-types",
-        title: "ثبت نوع وثیقه",
-        path: "/dashboard/base-info/collateral-types",
-        permissions: [Permissions.Pages_BaseInfo_CollateralTypes],
-      },
+      // {
+      //   id: "collateral-types",
+      //   title: "ثبت نوع وثیقه",
+      //   path: "/dashboard/base-info/collateral-types",
+      //   permissions: [Permissions.Pages_BaseInfo_CollateralTypes],
+      // },
       {
         id: "department-grades",
         title: "رتبه‌های دپارتمان",

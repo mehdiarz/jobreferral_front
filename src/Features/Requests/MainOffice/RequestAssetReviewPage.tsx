@@ -13,6 +13,7 @@ import {
   Award,
   FileText,
   Building2,
+  CheckCircle2,
 } from "lucide-react";
 
 import { MainLayout } from "../../../baseComponents/MainLayout";
@@ -197,6 +198,7 @@ export function DepartmentMainOfficeRequestAssetReviewPage({
 
   // state های جدید در کامپوننت
   const [detailDocs, setDetailDocs] = useState<DetailDocWithFiles[]>([]);
+  const [isEasyToSellConfirmed, setIsEasyToSellConfirmed] = useState(false);
 
   const userCacheRef = useRef<Map<number, { name: string; role: string }>>(
     new Map(),
@@ -340,6 +342,7 @@ export function DepartmentMainOfficeRequestAssetReviewPage({
       setExpertModalSelectedIds([]);
       setIsDetailOpen(true);
       setDetailDocs([]);
+      setIsEasyToSellConfirmed(false);
 
       try {
         const existingAppraisals = await getPropertyAppraisalByRequestId(
@@ -649,6 +652,7 @@ export function DepartmentMainOfficeRequestAssetReviewPage({
                 variant="success"
                 onClick={() => handleAction(true)}
                 isLoading={isSubmitting}
+                disabled={!isEasyToSellConfirmed}
               />
             )}
           </div>
@@ -669,6 +673,35 @@ export function DepartmentMainOfficeRequestAssetReviewPage({
                 downloadFile(file.filePath, file.documentId)
               }
             >
+              {/* سکشن وضعیت سهل‌البیع بودن ملک */}
+              {!isStatusFive && (
+                <RequestDetailSection
+                  icon={<CheckCircle2 className="w-5 h-5" />}
+                  title="بررسی وضعیت سهل‌البیع بودن ملک"
+                  tone="blue"
+                >
+                  <label className="flex items-center gap-3 p-4 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl cursor-pointer transition-colors select-none">
+                    <input
+                      type="checkbox"
+                      className="w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                      checked={isEasyToSellConfirmed}
+                      onChange={(e) =>
+                        setIsEasyToSellConfirmed(e.target.checked)
+                      }
+                    />
+                    <div>
+                      <span className="font-semibold text-slate-800 text-sm">
+                        ملک سهل‌البیع می‌باشد
+                      </span>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        با تأیید سهل‌البیع بودن ملک، امکان «ارجاع به کارشناس
+                        دادگستری» و «تأیید نهایی درخواست» فعال خواهد شد.
+                      </p>
+                    </div>
+                  </label>
+                </RequestDetailSection>
+              )}
+
               {/* ارجاع به کارشناس دادگستری */}
               {!isStatusFive && (
                 <RequestDetailSection
@@ -676,7 +709,14 @@ export function DepartmentMainOfficeRequestAssetReviewPage({
                   title="ارجاع به کارشناس دادگستری"
                   tone="blue"
                 >
-                  <div className="space-y-4">
+                  <div
+                    className={`space-y-4 transition-all duration-200 ${
+                      !isEasyToSellConfirmed
+                        ? "opacity-40 pointer-events-none select-none grayscale"
+                        : ""
+                    }`}
+                    aria-disabled={!isEasyToSellConfirmed}
+                  >
                     <div className="grid grid-cols-2 gap-3">
                       <label
                         className={`flex cursor-pointer items-center gap-2 rounded-xl border p-4 transition-all ${
@@ -863,7 +903,7 @@ export function DepartmentMainOfficeRequestAssetReviewPage({
                 <FormTextarea
                   id="cmt"
                   name="cmt"
-                  label="توضیحات کارشناس"
+                  label="یادداشت / نظر کارشناس ستاد"
                   value={comment}
                   onChange={setComment}
                   rows={3}

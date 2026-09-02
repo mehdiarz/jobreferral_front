@@ -1,7 +1,7 @@
 ﻿import { useMemo, useRef, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { ClipboardList, MessageSquareText } from "lucide-react";
+import { ClipboardList, MessageSquareText, CheckCircle2 } from "lucide-react";
 
 import { MainLayout } from "../../../baseComponents/MainLayout";
 import FormButton from "../../../baseComponents/FormButton";
@@ -103,6 +103,7 @@ export function DepartmentRequestAssetReviewPage({
 
   // state های جدید در کامپوننت
   const [detailDocs, setDetailDocs] = useState<DetailDocWithFiles[]>([]);
+  const [isEasyToSellConfirmed, setIsEasyToSellConfirmed] = useState(false);
 
   const userCacheRef = useRef<Map<number, { name: string; role: string }>>(
     new Map(),
@@ -219,6 +220,7 @@ export function DepartmentRequestAssetReviewPage({
       setSelectedReadonlyAppraisal(null);
       setIsAppraisalReadOnlyOpen(false);
       setRequestSignatures([]);
+      setIsEasyToSellConfirmed(false);
       setIsDetailOpen(true);
 
       try {
@@ -456,6 +458,7 @@ export function DepartmentRequestAssetReviewPage({
                 variant="success"
                 onClick={() => handleAction(true)}
                 isLoading={isSubmitting}
+                disabled={!isEasyToSellConfirmed}
               />
             )}
           </div>
@@ -510,6 +513,35 @@ export function DepartmentRequestAssetReviewPage({
                       </div>
                     ))}
                   </div>
+                </RequestDetailSection>
+              )}
+
+              {/* سکشن وضعیت سهل‌البیع بودن ملک */}
+              {!isStatusFive && (
+                <RequestDetailSection
+                  icon={<CheckCircle2 className="w-5 h-5" />}
+                  title="بررسی وضعیت سهل‌البیع بودن ملک"
+                  tone="blue"
+                >
+                  <label className="flex items-center gap-3 p-4 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl cursor-pointer transition-colors select-none">
+                    <input
+                      type="checkbox"
+                      className="w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                      checked={isEasyToSellConfirmed}
+                      onChange={(e) =>
+                        setIsEasyToSellConfirmed(e.target.checked)
+                      }
+                    />
+                    <div>
+                      <span className="font-semibold text-slate-800 text-sm">
+                        ملک سهل‌البیع می‌باشد
+                      </span>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        با علامت زدن این گزینه، سهل‌البیع بودن ملک تأیید شده و
+                        دکمه «تأیید درخواست» فعال می‌شود.
+                      </p>
+                    </div>
+                  </label>
                 </RequestDetailSection>
               )}
 
@@ -595,7 +627,20 @@ export function DepartmentRequestAssetReviewPage({
                 <FormTextarea
                   id="cmt"
                   name="cmt"
-                  label="توضیحات کارشناس شعبه"
+                  label={
+                    departmentType.id === REQUEST_DEPARTMENT_TYPES.branch.id
+                      ? "یادداشت / نظر کارشناس شعبه"
+                      : departmentType.id ===
+                          REQUEST_DEPARTMENT_TYPES.independentBranch.id
+                        ? "یادداشت / نظر کارشناس شعبه مستقل"
+                        : departmentType.id ===
+                            REQUEST_DEPARTMENT_TYPES.region.id
+                          ? "یادداشت / نظر کارشناس منطقه"
+                          : departmentType.id ===
+                              REQUEST_DEPARTMENT_TYPES.mainOffice.id
+                            ? "یادداشت / نظر کارشناس ستاد"
+                            : "یادداشت / نظر کارشناس"
+                  }
                   value={comment}
                   onChange={setComment}
                   rows={3}
