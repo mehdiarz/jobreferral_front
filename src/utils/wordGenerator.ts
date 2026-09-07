@@ -11,6 +11,8 @@ import { isoToPersianDateTimeForPdf } from "./persianToISO";
 
 const DOCX_PATH = `${import.meta.env.BASE_URL}templates/appraisal-template.docx`;
 
+// const DOCX_PATH = `templates/appraisal-template.docx`;
+
 // ==================== سمبل‌های چک‌باکس ====================
 
 export const CHECK_SYMBOLS = {

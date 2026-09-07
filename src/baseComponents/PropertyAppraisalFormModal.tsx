@@ -77,6 +77,8 @@ function PriceRow({
   totalPriceField,
   form,
   onChange,
+  validationErrors,
+  onClearError,
 }: {
   title: string;
   areaField: keyof PropertyAppraisalInputDto;
@@ -87,47 +89,99 @@ function PriceRow({
     field: keyof PropertyAppraisalInputDto,
     value: string | boolean | number,
   ) => void;
+  validationErrors?: Record<string, string>;
+  onClearError?: (field: string) => void;
 }) {
+  const areaError = validationErrors?.[String(areaField)];
+  const unitPriceError = validationErrors?.[String(unitPriceField)];
+  const totalPriceError = validationErrors?.[String(totalPriceField)];
+
   return (
     <div className="border border-gray-200 rounded-lg p-3">
       <p className="text-xs font-bold text-gray-700 mb-2">{title}</p>
       <div className="grid grid-cols-3 gap-3">
-        <div>
-          <label className={labelClass}>مساحت</label>
+        <div data-field={String(areaField)}>
+          <label className={labelClass}>
+            مساحت <span className="text-red-500 font-bold">*</span>
+          </label>
           <input
             type="number"
-            className={inputClass}
+            className={`${inputClass} ${
+              areaError
+                ? "border-red-500 bg-red-50 focus:border-red-500 focus:ring-red-500"
+                : ""
+            }`}
             value={String(form[areaField] ?? "")}
-            onChange={(e) => onChange(areaField, Number(e.target.value))}
+            onChange={(e) => {
+              onChange(areaField, Number(e.target.value));
+              if (areaError && onClearError) {
+                onClearError(String(areaField));
+              }
+            }}
           />
+          {areaError && (
+            <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
+              <span className="inline-block h-1 w-1 rounded-full bg-red-600"></span>
+              {areaError}
+            </p>
+          )}
         </div>
-        <div>
-          <label className={labelClass}>بهای واحد (ریال)</label>
+        <div data-field={String(unitPriceField)}>
+          <label className={labelClass}>
+            بهای واحد (ریال) <span className="text-red-500 font-bold">*</span>
+          </label>
           <input
             type="text"
-            className={inputClass}
+            className={`${inputClass} ${
+              unitPriceError
+                ? "border-red-500 bg-red-50 focus:border-red-500 focus:ring-red-500"
+                : ""
+            }`}
             value={formatNumber(form[unitPriceField] as string | number)}
-            onChange={(e) =>
-              onChange(unitPriceField, parseFormattedNumber(e.target.value))
-            }
+            onChange={(e) => {
+              onChange(unitPriceField, parseFormattedNumber(e.target.value));
+              if (unitPriceError && onClearError) {
+                onClearError(String(unitPriceField));
+              }
+            }}
           />
+          {unitPriceError && (
+            <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
+              <span className="inline-block h-1 w-1 rounded-full bg-red-600"></span>
+              {unitPriceError}
+            </p>
+          )}
         </div>
-        <div>
-          <label className={labelClass}>مبلغ کل (ریال)</label>
+        <div data-field={String(totalPriceField)}>
+          <label className={labelClass}>
+            مبلغ کل (ریال) <span className="text-red-500 font-bold">*</span>
+          </label>
           <input
             type="text"
-            className={inputClass}
+            className={`${inputClass} ${
+              totalPriceError
+                ? "border-red-500 bg-red-50 focus:border-red-500 focus:ring-red-500"
+                : ""
+            }`}
             value={formatNumber(form[totalPriceField] as string | number)}
-            onChange={(e) =>
-              onChange(totalPriceField, parseFormattedNumber(e.target.value))
-            }
+            onChange={(e) => {
+              onChange(totalPriceField, parseFormattedNumber(e.target.value));
+              if (totalPriceError && onClearError) {
+                onClearError(String(totalPriceField));
+              }
+            }}
           />
+          {totalPriceError && (
+            <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
+              <span className="inline-block h-1 w-1 rounded-full bg-red-600"></span>
+              {totalPriceError}
+            </p>
+          )}
         </div>
       </div>
     </div>
   );
 }
-
 // ─── Main Export ─────────────────────────────────────────────────
 export default function PropertyAppraisalFormModal({
   isOpen,
@@ -136,9 +190,11 @@ export default function PropertyAppraisalFormModal({
   isSaving,
   isGeneratingPdf = false,
   signatures = [],
+  validationErrors = {},
   onChange,
   onSave,
   onGeneratePdf,
+  onClearError,
   onClose,
 }: {
   isOpen: boolean;
@@ -147,12 +203,14 @@ export default function PropertyAppraisalFormModal({
   isSaving: boolean;
   isGeneratingPdf?: boolean;
   signatures?: RequestSignatureOutputDto[];
+  validationErrors?: Record<string, string>;
   onChange: (
     field: keyof PropertyAppraisalInputDto,
     value: string | boolean | number,
   ) => void;
   onSave: () => void;
   onGeneratePdf?: () => void;
+  onClearError?: (field: string) => void;
   onClose: () => void;
 }) {
   const renderField = (
@@ -164,22 +222,42 @@ export default function PropertyAppraisalFormModal({
       | "md:col-span-2"
       | "md:col-span-3"
       | "md:col-span-4" = "col-span-1",
-  ) => (
-    <div className={span}>
-      <label className={labelClass}>{label}</label>
-      <input
-        type={type}
-        className={inputClass}
-        value={String(form[field] ?? "")}
-        onChange={(e) =>
-          onChange(
-            field,
-            type === "number" ? Number(e.target.value) : e.target.value,
-          )
-        }
-      />
-    </div>
-  );
+    required = false,
+  ) => {
+    const error = validationErrors?.[String(field)];
+    return (
+      <div className={span} data-field={String(field)}>
+        <label className={labelClass}>
+          {label}
+          {required && <span className="text-red-500 mr-1 font-bold">*</span>}
+        </label>
+        <input
+          type={type}
+          className={`${inputClass} ${
+            error
+              ? "border-red-500 bg-red-50 focus:border-red-500 focus:ring-red-500"
+              : ""
+          }`}
+          value={String(form[field] ?? "")}
+          onChange={(e) => {
+            onChange(
+              field,
+              type === "number" ? Number(e.target.value) : e.target.value,
+            );
+            if (error && onClearError) {
+              onClearError(String(field));
+            }
+          }}
+        />
+        {error && (
+          <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
+            <span className="inline-block h-1 w-1 rounded-full bg-red-600"></span>
+            {error}
+          </p>
+        )}
+      </div>
+    );
+  };
 
   const renderCurrencyField = (
     label: string,
@@ -189,17 +267,39 @@ export default function PropertyAppraisalFormModal({
       | "md:col-span-2"
       | "md:col-span-3"
       | "md:col-span-4" = "col-span-1",
-  ) => (
-    <div className={span}>
-      <label className={labelClass}>{`${label} (ریال)`}</label>
-      <input
-        type="text"
-        className={inputClass}
-        value={formatNumber(form[field] as string | number)}
-        onChange={(e) => onChange(field, parseFormattedNumber(e.target.value))}
-      />
-    </div>
-  );
+    required = false,
+  ) => {
+    const error = validationErrors?.[String(field)];
+    return (
+      <div className={span} data-field={String(field)}>
+        <label className={labelClass}>
+          {`${label} (ریال)`}
+          {required && <span className="text-red-500 mr-1 font-bold">*</span>}
+        </label>
+        <input
+          type="text"
+          className={`${inputClass} ${
+            error
+              ? "border-red-500 bg-red-50 focus:border-red-500 focus:ring-red-500"
+              : ""
+          }`}
+          value={formatNumber(form[field] as string | number)}
+          onChange={(e) => {
+            onChange(field, parseFormattedNumber(e.target.value));
+            if (error && onClearError) {
+              onClearError(String(field));
+            }
+          }}
+        />
+        {error && (
+          <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
+            <span className="inline-block h-1 w-1 rounded-full bg-red-600"></span>
+            {error}
+          </p>
+        )}
+      </div>
+    );
+  };
 
   const renderSelect = (
     label: string,
@@ -210,23 +310,45 @@ export default function PropertyAppraisalFormModal({
       | "md:col-span-2"
       | "md:col-span-3"
       | "md:col-span-4" = "col-span-1",
-  ) => (
-    <div className={span}>
-      <label className={labelClass}>{label}</label>
-      <select
-        className={inputClass}
-        value={String(form[field] ?? "")}
-        onChange={(e) => onChange(field, e.target.value)}
-      >
-        <option value="">انتخاب کنید...</option>
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
+    required = false,
+  ) => {
+    const error = validationErrors?.[String(field)];
+    return (
+      <div className={span} data-field={String(field)}>
+        <label className={labelClass}>
+          {label}
+          {required && <span className="text-red-500 mr-1 font-bold">*</span>}
+        </label>
+        <select
+          className={`${inputClass} ${
+            error
+              ? "border-red-500 bg-red-50 focus:border-red-500 focus:ring-red-500"
+              : ""
+          }`}
+          value={String(form[field] ?? "")}
+          onChange={(e) => {
+            onChange(field, e.target.value);
+            if (error && onClearError) {
+              onClearError(String(field));
+            }
+          }}
+        >
+          <option value="">انتخاب کنید...</option>
+          {options.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        {error && (
+          <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
+            <span className="inline-block h-1 w-1 rounded-full bg-red-600"></span>
+            {error}
+          </p>
+        )}
+      </div>
+    );
+  };
 
   const renderTextarea = (
     label: string,
@@ -237,57 +359,126 @@ export default function PropertyAppraisalFormModal({
       | "md:col-span-2"
       | "md:col-span-3"
       | "md:col-span-4" = "md:col-span-2",
-  ) => (
-    <div className={span}>
-      <label className={labelClass}>{label}</label>
-      <textarea
-        className={inputClass}
-        rows={rows}
-        value={String(form[field] ?? "")}
-        onChange={(e) => onChange(field, e.target.value)}
-      />
-    </div>
-  );
+    required = false,
+  ) => {
+    const error = validationErrors?.[String(field)];
+    return (
+      <div className={span} data-field={String(field)}>
+        <label className={labelClass}>
+          {label}
+          {required && <span className="text-red-500 mr-1 font-bold">*</span>}
+        </label>
+        <textarea
+          className={`${inputClass} ${
+            error
+              ? "border-red-500 bg-red-50 focus:border-red-500 focus:ring-red-500"
+              : ""
+          }`}
+          rows={rows}
+          value={String(form[field] ?? "")}
+          onChange={(e) => {
+            onChange(field, e.target.value);
+            if (error && onClearError) {
+              onClearError(String(field));
+            }
+          }}
+        />
+        {error && (
+          <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
+            <span className="inline-block h-1 w-1 rounded-full bg-red-600"></span>
+            {error}
+          </p>
+        )}
+      </div>
+    );
+  };
 
   const renderSelectBoolean = (
     label: string,
     field: keyof PropertyAppraisalInputDto,
-  ) => (
-    <div>
-      <label className={labelClass}>{label}</label>
-      <select
-        className={inputClass}
-        value={
-          form[field] === true ? "true" : form[field] === false ? "false" : ""
-        }
-        onChange={(e) =>
-          onChange(
-            field,
-            e.target.value === "true"
-              ? true
-              : e.target.value === "false"
-                ? false
-                : "",
-          )
-        }
-      >
-        <option value="">انتخاب کنید...</option>
-        <option value="true">دارد</option>
-        <option value="false">ندارد</option>
-      </select>
-    </div>
-  );
+    required = false,
+  ) => {
+    const error = validationErrors?.[String(field)];
+    return (
+      <div data-field={String(field)}>
+        <label className={labelClass}>
+          {label}
+          {required && <span className="text-red-500 mr-1 font-bold">*</span>}
+        </label>
+        <select
+          className={`${inputClass} ${
+            error
+              ? "border-red-500 bg-red-50 focus:border-red-500 focus:ring-red-500"
+              : ""
+          }`}
+          value={
+            form[field] === true ? "true" : form[field] === false ? "false" : ""
+          }
+          onChange={(e) => {
+            onChange(
+              field,
+              e.target.value === "true"
+                ? true
+                : e.target.value === "false"
+                  ? false
+                  : "",
+            );
+            if (error && onClearError) {
+              onClearError(String(field));
+            }
+          }}
+        >
+          <option value="">انتخاب کنید...</option>
+          <option value="true">دارد</option>
+          <option value="false">ندارد</option>
+        </select>
+        {error && (
+          <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
+            <span className="inline-block h-1 w-1 rounded-full bg-red-600"></span>
+            {error}
+          </p>
+        )}
+      </div>
+    );
+  };
 
   const renderCheckbox = (
     label: string,
     field: keyof PropertyAppraisalInputDto,
-  ) => (
-    <CheckboxField
-      label={label}
-      checked={Boolean(form[field])}
-      onChange={(checked) => onChange(field, checked)}
-    />
-  );
+  ) => {
+    const error = validationErrors?.[String(field)];
+    return (
+      <div data-field={String(field)}>
+        <CheckboxField
+          label={label}
+          checked={Boolean(form[field])}
+          onChange={(checked) => {
+            onChange(field, checked);
+            if (error && onClearError) {
+              onClearError(String(field));
+            }
+          }}
+        />
+        {error && (
+          <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
+            <span className="inline-block h-1 w-1 rounded-full bg-red-600"></span>
+            {error}
+          </p>
+        )}
+      </div>
+    );
+  };
+
+  // const renderCheckbox = (
+  //   label: string,
+  //   field: keyof PropertyAppraisalInputDto,
+  // ) => (
+  //   <CheckboxField
+  //     label={label}
+  //     checked={Boolean(form[field])}
+  //     onChange={(checked) => onChange(field, checked)}
+  //   />
+  // );
 
   const renderSignatureRow = (signature: RequestSignatureOutputDto) => (
     <div
@@ -375,26 +566,47 @@ export default function PropertyAppraisalFormModal({
           <div className={sectionClass}>
             <h4 className={sectionTitleClass}>مشخصات ملک و متقاضی</h4>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {renderField("نام متقاضی", "applicantName")}
-              {renderField("نوع تسهیلات", "loanType")}
-              {renderCurrencyField("میزان تسهیلات", "loanAmount")}
-              {renderField("نام مالک", "ownerName")}
+              {renderField(
+                "نام متقاضی",
+                "applicantName",
+                "text",
+                "col-span-1",
+                true,
+              )}
+              {renderField(
+                "نوع تسهیلات",
+                "loanType",
+                "text",
+                "col-span-1",
+                true,
+              )}
+              {renderCurrencyField(
+                "میزان تسهیلات",
+                "loanAmount",
+                "col-span-1",
+                true,
+              )}
+              {renderField("نام مالک", "ownerName", "text", "col-span-1", true)}
               {renderField(
                 "نشانی ملک",
                 "ownerAddress",
                 "text",
                 "md:col-span-2",
+                true,
               )}
               {renderSelect(
                 "متصرف ملک",
                 "propertyOccupierCode",
                 toOptions(lookups.propertyOccupiers),
+                "col-span-1",
+                true,
               )}
               {renderTextarea(
                 "توضیحات متصرف",
                 "propertyOccupierDescription",
                 2,
                 "md:col-span-2",
+                true,
               )}
             </div>
           </div>
@@ -403,22 +615,47 @@ export default function PropertyAppraisalFormModal({
           <div className={sectionClass}>
             <h4 className={sectionTitleClass}>اطلاعات ثبتی و سند</h4>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {renderField("شماره ملک", "propertyNumber")}
-              {renderField("مفروز و مجزی از", "seperatedFrom")}
-              {renderField("قطعه تفکیکی", "separationPiece")}
+              {renderField(
+                "شماره ملک",
+                "propertyNumber",
+                "text",
+                "col-span-1",
+                true,
+              )}
+              {renderField(
+                "مفروز و مجزی از",
+                "seperatedFrom",
+                "text",
+                "col-span-1",
+                true,
+              )}
+              {renderField(
+                "قطعه تفکیکی",
+                "separationPiece",
+                "text",
+                "col-span-1",
+                true,
+              )}
               {renderField("شماره ثبت", "registrationNumber")}
               {renderField("صفحه", "page")}
               {renderField("شماره دفتر", "officeNumber")}
-              {renderField("بخش", "part")}
-              {renderField("شهر", "city")}
+              {renderField("بخش", "part", "text", "col-span-1", true)}
+              {renderField("شهر", "city", "text", "col-span-1", true)}
             </div>
             <div className="border-t pt-4 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {renderSelectBoolean(
                   "پلاک فوق سند قطعی مالکیت",
                   "hasDefinitiveOwnershipDocument",
+                  true,
                 )}
-                {renderField("شماره ورقه مالکیت", "titleDeedNumber")}
+                {renderField(
+                  "شماره ورقه مالکیت",
+                  "titleDeedNumber",
+                  "text",
+                  "col-span-1",
+                  true,
+                )}
                 {renderField("کدپستی", "postalCode")}
               </div>
               {form.hasDefinitiveOwnershipDocument === true && (
@@ -427,9 +664,23 @@ export default function PropertyAppraisalFormModal({
                     "نوع سند",
                     "definitiveOwnershipDocumentTypeCode",
                     toOptions(lookups.definitiveOwnershipDocumentTypes),
+                    "col-span-1",
+                    true,
                   )}
-                  {renderField("تعداد جلد/برگه", "pageCount", "number")}
-                  {renderField("تعداد دانگ", "dong", "number")}
+                  {renderField(
+                    "تعداد جلد/برگه",
+                    "pageCount",
+                    "number",
+                    "col-span-1",
+                    true,
+                  )}
+                  {renderField(
+                    "تعداد دانگ",
+                    "dong",
+                    "number",
+                    "col-span-1",
+                    true,
+                  )}
                 </div>
               )}
             </div>
@@ -439,24 +690,48 @@ export default function PropertyAppraisalFormModal({
           <div className={sectionClass}>
             <h4 className={sectionTitleClass}>مشخصات ملک و کاربری</h4>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {renderField("منطقه شهرداری", "municipalArea")}
+              {renderField(
+                "منطقه شهرداری",
+                "municipalArea",
+                "text",
+                "col-span-1",
+                true,
+              )}
               {renderField("تلفن ملک", "ownerPhone")}
-              {renderField("نوع ملک", "propertyType")}
+              {renderField(
+                "نوع ملک",
+                "propertyType",
+                "text",
+                "col-span-1",
+                true,
+              )}
               {renderField(
                 "کاربری طبق پایان کار",
                 "useAccordingToTheCompletionOfTheWork",
+                "text",
+                "col-span-1",
+                true,
               )}
               {renderSelect(
                 "نوع پایان کار",
                 "typeOfWorkCompletionCode",
                 toOptions(lookups.typeOfWorkCompletions),
+                "col-span-1",
+                true,
               )}
-              {renderField("نوع استفاده از ملک", "typeOfUseOfTheProperty")}
+              {renderField(
+                "نوع استفاده از ملک",
+                "typeOfUseOfTheProperty",
+                "text",
+                "col-span-1",
+                true,
+              )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
               {renderSelectBoolean(
                 "مطابقت مساحت با سند",
                 "hasMatchingTheAreaWithTheDocument",
+                true,
               )}
               {form.hasMatchingTheAreaWithTheDocument === false &&
                 renderTextarea(
@@ -464,6 +739,7 @@ export default function PropertyAppraisalFormModal({
                   "explanationInCaseOfDisagreement",
                   3,
                   "md:col-span-2",
+                  true,
                 )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-4">
@@ -477,6 +753,8 @@ export default function PropertyAppraisalFormModal({
                 "موضوع ارزیابی",
                 "evaluationTopicCode",
                 toOptions(lookups.evaluationTopics),
+                "col-span-1",
+                true,
               )}
             </div>
           </div>
@@ -492,6 +770,8 @@ export default function PropertyAppraisalFormModal({
                 totalPriceField="landTotalPrice"
                 form={form}
                 onChange={onChange}
+                validationErrors={validationErrors}
+                onClearError={onClearError}
               />
               <PriceRow
                 title="قدرالسهم"
@@ -500,6 +780,8 @@ export default function PropertyAppraisalFormModal({
                 totalPriceField="landShareTotalPrice"
                 form={form}
                 onChange={onChange}
+                validationErrors={validationErrors}
+                onClearError={onClearError}
               />
               <PriceRow
                 title="زیرزمین"
@@ -508,6 +790,8 @@ export default function PropertyAppraisalFormModal({
                 totalPriceField="basementTotalPrice"
                 form={form}
                 onChange={onChange}
+                validationErrors={validationErrors}
+                onClearError={onClearError}
               />
               <PriceRow
                 title="همکف"
@@ -516,6 +800,8 @@ export default function PropertyAppraisalFormModal({
                 totalPriceField="groundFloorTotalPrice"
                 form={form}
                 onChange={onChange}
+                validationErrors={validationErrors}
+                onClearError={onClearError}
               />
               <PriceRow
                 title="نیم‌طبقه"
@@ -524,6 +810,8 @@ export default function PropertyAppraisalFormModal({
                 totalPriceField="mezzanineTotalPrice"
                 form={form}
                 onChange={onChange}
+                validationErrors={validationErrors}
+                onClearError={onClearError}
               />
               <PriceRow
                 title="طبقه اول"
@@ -532,6 +820,8 @@ export default function PropertyAppraisalFormModal({
                 totalPriceField="floor1TotalPrice"
                 form={form}
                 onChange={onChange}
+                validationErrors={validationErrors}
+                onClearError={onClearError}
               />
               <PriceRow
                 title="طبقه دوم"
@@ -540,6 +830,8 @@ export default function PropertyAppraisalFormModal({
                 totalPriceField="floor2TotalPrice"
                 form={form}
                 onChange={onChange}
+                validationErrors={validationErrors}
+                onClearError={onClearError}
               />
               <PriceRow
                 title="طبقه سوم"
@@ -548,6 +840,8 @@ export default function PropertyAppraisalFormModal({
                 totalPriceField="floor3TotalPrice"
                 form={form}
                 onChange={onChange}
+                validationErrors={validationErrors}
+                onClearError={onClearError}
               />
               <PriceRow
                 title="طبقه چهارم"
@@ -556,6 +850,8 @@ export default function PropertyAppraisalFormModal({
                 totalPriceField="floor4TotalPrice"
                 form={form}
                 onChange={onChange}
+                validationErrors={validationErrors}
+                onClearError={onClearError}
               />
               <PriceRow
                 title="طبقه پنجم"
@@ -564,6 +860,8 @@ export default function PropertyAppraisalFormModal({
                 totalPriceField="floor5TotalPrice"
                 form={form}
                 onChange={onChange}
+                validationErrors={validationErrors}
+                onClearError={onClearError}
               />
               <PriceRow
                 title="سایر طبقات"
@@ -572,6 +870,8 @@ export default function PropertyAppraisalFormModal({
                 totalPriceField="otherFloorsTotalPrice"
                 form={form}
                 onChange={onChange}
+                validationErrors={validationErrors}
+                onClearError={onClearError}
               />
               <PriceRow
                 title="محوطه‌سازی"
@@ -580,6 +880,8 @@ export default function PropertyAppraisalFormModal({
                 totalPriceField="landscapingTotalPrice"
                 form={form}
                 onChange={onChange}
+                validationErrors={validationErrors}
+                onClearError={onClearError}
               />
               <PriceRow
                 title="تأسیسات"
@@ -588,19 +890,48 @@ export default function PropertyAppraisalFormModal({
                 totalPriceField="facilitiesTotalPrice"
                 form={form}
                 onChange={onChange}
+                validationErrors={validationErrors}
+                onClearError={onClearError}
               />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 border-t pt-4">
-              {renderField("جمع کل مساحت", "totalArea", "number")}
-              {renderCurrencyField("بهای کل", "totalUnitPrice")}
-              {renderCurrencyField("جمع کل مبلغ", "totalPrice")}
-              {renderCurrencyField("سرقفلی", "goodwillAdjustment")}
-              {renderCurrencyField("مبلغ نهایی (عدد)", "finalPrice")}
+              {renderField(
+                "جمع کل مساحت",
+                "totalArea",
+                "number",
+                "col-span-1",
+                true,
+              )}
+              {renderCurrencyField(
+                "بهای کل",
+                "totalUnitPrice",
+                "col-span-1",
+                true,
+              )}
+              {renderCurrencyField(
+                "جمع کل مبلغ",
+                "totalPrice",
+                "col-span-1",
+                true,
+              )}
+              {renderCurrencyField(
+                "سرقفلی",
+                "goodwillAdjustment",
+                "col-span-1",
+                true,
+              )}
+              {renderCurrencyField(
+                "مبلغ نهایی (عدد)",
+                "finalPrice",
+                "col-span-1",
+                true,
+              )}
               {renderField(
                 "مبلغ نهایی (حروف)",
                 "finalPriceInWords",
                 "text",
                 "md:col-span-2",
+                true,
               )}
             </div>
           </div>
@@ -609,21 +940,38 @@ export default function PropertyAppraisalFormModal({
           <div className={sectionClass}>
             <h4 className={sectionTitleClass}>توضیحات تکمیلی ملک</h4>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {renderField("تعداد طبقات", "totalFloors", "number")}
-              {renderField("تعداد واحدها به تفکیک کاربری", "usageBreakdown")}
+              {renderField(
+                "تعداد طبقات",
+                "totalFloors",
+                "number",
+                "col-span-1",
+                true,
+              )}
+              {renderField(
+                "تعداد واحدها به تفکیک کاربری",
+                "usageBreakdown",
+                "text",
+                "col-span-1",
+                true,
+              )}
               {renderSelect(
                 "نوع سازه",
                 "structureTypeCode",
                 toOptions(lookups.structureTypes),
               )}
               {renderField("سایر (نوع سازه)", "structureTypeOther")}
-              {renderField("نماسازی", "facadeType")}
-              {renderField("نحوه محاسبه قدمت بنا", "buildingAgeCalculation")}
+              {renderField("نماسازی", "facadeType", "text", "col-span-1", true)}
+              {renderField(
+                "نحوه محاسبه قدمت بنا",
+                "buildingAgeCalculation",
+                "text",
+                "col-span-1",
+                true,
+              )}
               {renderField("سیستم گرمایشی", "heatingSystem")}
               {renderField("سیستم سرمایشی", "coolingSystem")}
             </div>
           </div>
-
           {/* بخش ۶: انشعابات */}
           <div className={sectionClass}>
             <h4 className={sectionTitleClass}>انشعابات و مجوزها</h4>
@@ -679,15 +1027,41 @@ export default function PropertyAppraisalFormModal({
               {renderCheckbox("آسانسور", "hasElevator")}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              {renderField("تعداد پارکینگ", "parkingCount", "number")}
-              {renderField("تعداد انباری", "storageCount", "number")}
-              {renderField("مساحت انباری", "storageArea", "number")}
-              {renderField("تعداد آسانسور", "elevatorCount", "number")}
+              {renderField(
+                "تعداد پارکینگ",
+                "parkingCount",
+                "number",
+                "col-span-1",
+                true,
+              )}
+              {renderField(
+                "تعداد انباری",
+                "storageCount",
+                "number",
+                "col-span-1",
+                true,
+              )}
+              {renderField(
+                "مساحت انباری",
+                "storageArea",
+                "number",
+                "col-span-1",
+                true,
+              )}
+              {renderField(
+                "تعداد آسانسور",
+                "elevatorCount",
+                "number",
+                "col-span-1",
+                true,
+              )}
             </div>
             {renderTextarea(
               "امتیازات مشاعی/اختصاصی دیگر",
               "otherPrivileges",
               2,
+              "md:col-span-2",
+              true,
             )}
           </div>
 

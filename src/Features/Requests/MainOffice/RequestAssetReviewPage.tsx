@@ -47,6 +47,7 @@ import { getDocumentAllFiles } from "../../../services/FileService/GetDocumentAl
 import { downloadFile } from "../../../services/FileService/download";
 import type { DocumentItem } from "../../../services/DocumentCrud/types";
 import type { DocumentFile } from "../../../services/FileService/GetDocumentAllFiles";
+import { downloadBatchAsZipByRequestId } from "../../../services/FileService/DownloadBatchAsZipByRequestId.ts";
 
 import type { RequestItem } from "../../../services/RequestCrud/types";
 import {
@@ -82,6 +83,7 @@ type SelectedRequest = RequestItem & {
 type JudicialExpert = Partial<ExpertItem> & {
   id: number;
   nationalCode?: string;
+  expertiseZoneCodes?: string[] | null;
 };
 
 type ExpertRegion = NonNullable<ExpertItem["regions"]>[number];
@@ -290,7 +292,8 @@ export function DepartmentMainOfficeRequestAssetReviewPage({
     queryKey: ["expertise-zones"],
     queryFn: () => getAllExpertiseZones({ maxResultCount: 1000 }),
     staleTime: 10 * 60 * 1000,
-    select: (data) => (data?.items ?? []) as { id: number; title: string }[],
+    select: (data) =>
+      (data?.items ?? []) as { id: number; title: string; code?: string }[],
   });
 
   const lookupsQuery = useQuery({
@@ -520,19 +523,30 @@ export function DepartmentMainOfficeRequestAssetReviewPage({
   const resolveExpertiseZoneTitles = useCallback(
     (expert: ExpertItem | JudicialExpert | null): string[] => {
       if (!expert) return [];
+
+      // اول بررسی expertiseZones (آبجکت‌های کامل)
       const zones = expert.expertiseZones;
       if (zones && zones.length > 0) {
         return zones.map((z) => z.title ?? "").filter(Boolean);
       }
-      const zoneIds = expert.expertiseZoneIds ?? [];
-      if (zoneIds.length === 0) return [];
-      const zoneOptions = expertiseZonesQuery.data ?? [];
-      return zoneIds
-        .map((id) => {
-          const zone = zoneOptions.find((z) => String(z.id) === String(id));
-          return zone?.title ?? "";
-        })
-        .filter(Boolean);
+
+      // بعد بررسی expertiseZoneCodes
+      const zoneCodes = expert.expertiseZoneCodes;
+      if (Array.isArray(zoneCodes) && zoneCodes.length > 0) {
+        const zoneOptions = expertiseZonesQuery.data ?? [];
+        return zoneCodes
+          .map((code) => {
+            const zone = zoneOptions.find(
+              (z) =>
+                String(z.code) === String(code) ||
+                String(z.id) === String(code),
+            );
+            return zone?.title ?? "";
+          })
+          .filter(Boolean);
+      }
+
+      return [];
     },
     [expertiseZonesQuery.data],
   );
@@ -671,6 +685,9 @@ export function DepartmentMainOfficeRequestAssetReviewPage({
               getUserData={getUserCacheData}
               onDownloadFile={(file) =>
                 downloadFile(file.filePath, file.documentId)
+              }
+              onDownloadAllFiles={() =>
+                downloadBatchAsZipByRequestId(selectedRequest.id)
               }
             >
               {/* سکشن وضعیت سهل‌البیع بودن ملک */}

@@ -227,7 +227,7 @@ export function DepartmentReferredToExpertPage({
       getAllExperts({
         skipCount: 0,
         maxResultCount: 1000,
-         isCapital: true,
+        isCapital: true,
       }),
     staleTime: 10 * 60 * 1000,
     enabled: replacementMode === "manual",
@@ -238,7 +238,8 @@ export function DepartmentReferredToExpertPage({
     queryFn: () => getAllExpertiseZones({ maxResultCount: 1000 }),
     staleTime: 10 * 60 * 1000,
     enabled: replacementMode === "manual",
-    select: (data) => (data?.items ?? []) as { id: number; title: string }[],
+    select: (data) =>
+      (data?.items ?? []) as { id: number; title: string; code?: string }[],
   });
 
   // ─── Cancel Mutation ───────────────────────────────────────────
@@ -403,19 +404,30 @@ export function DepartmentReferredToExpertPage({
   const resolveExpertiseZoneTitles = useCallback(
     (expert: ExpertItem | JudicialExpertItemDto | null): string[] => {
       if (!expert) return [];
+
+      // اول بررسی expertiseZones (آبجکت‌های کامل)
       const zones = (expert as ExpertItem).expertiseZones;
       if (zones && zones.length > 0) {
         return zones.map((z) => z.title ?? "").filter(Boolean);
       }
-      const zoneIds = (expert as ExpertItem).expertiseZoneIds ?? [];
-      if (zoneIds.length === 0) return [];
-      const zoneOptions = expertiseZonesQuery.data ?? [];
-      return zoneIds
-        .map((id) => {
-          const zone = zoneOptions.find((z) => String(z.id) === String(id));
-          return zone?.title ?? "";
-        })
-        .filter(Boolean);
+
+      // بعد بررسی expertiseZoneCodes
+      const zoneCodes = (expert as ExpertItem).expertiseZoneCodes;
+      if (Array.isArray(zoneCodes) && zoneCodes.length > 0) {
+        const zoneOptions = expertiseZonesQuery.data ?? [];
+        return zoneCodes
+          .map((code) => {
+            const zone = zoneOptions.find(
+              (z) =>
+                String(z.code) === String(code) ||
+                String(z.id) === String(code),
+            );
+            return zone?.title ?? "";
+          })
+          .filter(Boolean);
+      }
+
+      return [];
     },
     [expertiseZonesQuery.data],
   );
@@ -1195,7 +1207,10 @@ export function DepartmentReferredToExpertPage({
                 {((expert as ExpertItem).regions?.length ?? 0) > 0 ? (
                   <div className="space-y-3">
                     {(expert as ExpertItem).regions!.map(
-                      (region: JudicialExpertRegionOutputDto, index: number) => {
+                      (
+                        region: JudicialExpertRegionOutputDto,
+                        index: number,
+                      ) => {
                         const regionTitle = getRegionTitle(region);
                         const branches = getBranchTitles(region);
                         const branchCodes = getBranchCodes(region);

@@ -40,6 +40,7 @@ interface RequestDetailsPanelProps {
   getUserData?: (userId: number) => RequestDetailUser;
   getPersonTypeTitle?: (personTypeId?: number | null) => string;
   onDownloadFile?: (file: DocumentFile) => void;
+  onDownloadAllFiles?: () => void;
   children?: ReactNode;
 }
 
@@ -154,6 +155,7 @@ export default function RequestDetailsPanel({
   getUserData = (userId) => ({ name: `کاربر ${userId}`, role: "-" }),
   getPersonTypeTitle,
   onDownloadFile,
+  onDownloadAllFiles,
   children,
 }: RequestDetailsPanelProps) {
   const histories = request.requestHistoryOutputDtos ?? [];
@@ -303,31 +305,51 @@ export default function RequestDetailsPanel({
           tone="green"
         >
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {collaterals.map((collateral, index) => (
-              <div
-                key={collateral.id}
-                className="flex items-center gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-3.5"
-              >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 font-bold text-emerald-700">
-                  {index + 1}
+            {collaterals.map((collateral, index) => {
+              // استخراج تایتل‌ها چه از آبجکت‌های expertiseZones و چه از کدهای ذخیره‌شده
+              const zones = collateral.expertiseZones ?? [];
+
+              return (
+                <div
+                  key={collateral.id}
+                  className="flex items-start gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-3.5"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 font-bold text-emerald-700">
+                    {index + 1}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-slate-800">
+                      {[collateral.firstName, collateral.lastName]
+                        .filter(Boolean)
+                        .join(" ") || "-"}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      کد ملی: {toPersianDigits(collateral.nationalCode) || "-"}
+                    </p>
+
+                    {/* نمایش انواع وثیقه */}
+                    {zones.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {zones.map((zone) => (
+                          <span
+                            key={zone.id ?? zone.code}
+                            className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-100/60 px-2 py-0.5 text-[11px] font-medium text-emerald-800"
+                          >
+                            {zone.title || zone.code}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {getPersonTypeTitle && (
+                    <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[11px] text-slate-500 shadow-sm">
+                      {getPersonTypeTitle(collateral.personTypeId)}
+                    </span>
+                  )}
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold text-slate-800">
-                    {[collateral.firstName, collateral.lastName]
-                      .filter(Boolean)
-                      .join(" ") || "-"}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    کد ملی: {collateral.nationalCode || "-"}
-                  </p>
-                </div>
-                {getPersonTypeTitle && (
-                  <span className="rounded-full bg-white px-2.5 py-1 text-[11px] text-slate-500 shadow-sm">
-                    {getPersonTypeTitle(collateral.personTypeId)}
-                  </span>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </RequestDetailSection>
       )}
@@ -380,6 +402,21 @@ export default function RequestDetailsPanel({
           title="مدارک پیوست"
           count={`${files.length} فایل`}
         >
+          {/* اضافه کردن دکمه دانلود همه در بالای لیست */}
+          {onDownloadAllFiles && (
+            <button
+              type="button"
+              onClick={onDownloadAllFiles}
+              className="group mb-4 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-600 shadow-sm transition-all hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 hover:shadow"
+            >
+              <Download className="h-3.5 w-3.5 transition-transform group-hover:translate-y-0.5" />
+              <span>دانلود همه فایلها</span>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500 group-hover:bg-blue-100 group-hover:text-blue-600">
+                ZIP
+              </span>
+            </button>
+          )}
+
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             {files.map((file) => (
               <div

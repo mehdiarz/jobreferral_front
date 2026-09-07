@@ -13,36 +13,42 @@ export async function getAllExperts(
   const firstName = params.firstName?.trim();
   const lastName = params.lastName?.trim();
   const code = params.code?.trim();
-  const expertiseZoneTitle = params.expertiseZoneTitle?.trim();
   const licenseNumber = params.licenseNumber?.trim();
   const sorting = params.sorting?.trim();
 
-  if (firstName) {
-    searchParams.set("FirstName", firstName);
-  }
-
-  if (lastName) {
-    searchParams.set("LastName", lastName);
-  }
-
-  if (code) {
-    searchParams.set("Code", code);
-  }
-
-  if (expertiseZoneTitle) {
-    searchParams.set("ExpertiseZoneTitle", expertiseZoneTitle);
-  }
-
-  if (licenseNumber) {
-    searchParams.set("LicenseNumber", licenseNumber);
-  }
+  if (firstName) searchParams.set("FirstName", firstName);
+  if (lastName) searchParams.set("LastName", lastName);
+  if (code) searchParams.set("Code", code);
+  if (licenseNumber) searchParams.set("LicenseNumber", licenseNumber);
+  if (sorting) searchParams.set("Sorting", sorting);
 
   if (typeof params.isCapital === "boolean") {
     searchParams.set("IsCapital", String(params.isCapital));
   }
 
-  if (sorting) {
-    searchParams.set("Sorting", sorting);
+  // مدیریت آرایه‌ای بودن ExpertiseZoneTitle
+  if (params.expertiseZoneTitle) {
+    if (Array.isArray(params.expertiseZoneTitle)) {
+      params.expertiseZoneTitle
+        .map((t) => t.trim())
+        .filter(Boolean)
+        .forEach((title) => searchParams.append("ExpertiseZoneTitle", title));
+    } else if (params.expertiseZoneTitle.trim()) {
+      searchParams.append(
+        "ExpertiseZoneTitle",
+        params.expertiseZoneTitle.trim(),
+      );
+    }
+  }
+
+  // پشتیبانی از ExpertiseZoneCodes (آرایه)
+  if (params.expertiseZoneCodes && Array.isArray(params.expertiseZoneCodes)) {
+    params.expertiseZoneCodes
+      .map((c) => c.trim())
+      .filter(Boolean)
+      .forEach((zoneCode) =>
+        searchParams.append("ExpertiseZoneCodes", zoneCode),
+      );
   }
 
   if (params.skipCount !== undefined) {
@@ -65,7 +71,7 @@ export async function getAllExperts(
   );
 
   return {
-    items: response.result.items ?? [],
-    totalCount: response.result.totalCount ?? 0,
+    items: response.result?.items ?? [],
+    totalCount: response.result?.totalCount ?? 0,
   };
 }

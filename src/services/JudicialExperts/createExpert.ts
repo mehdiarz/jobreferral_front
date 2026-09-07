@@ -11,7 +11,7 @@ export async function createExpert(
       body: JSON.stringify({
         id: 0,
         ...body,
-        expertiseZoneIds: body.expertiseZoneIds ?? [],
+        expertiseZoneCodes: body.expertiseZoneCodes ?? [],
         regions: body.regions ?? [],
       }),
     },

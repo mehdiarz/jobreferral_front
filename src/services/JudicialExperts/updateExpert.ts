@@ -8,7 +8,7 @@ export async function updateExpert(body: EditExpertBody): Promise<ExpertItem> {
       method: "POST",
       body: JSON.stringify({
         ...body,
-        expertiseZoneIds: body.expertiseZoneIds ?? [],
+        expertiseZoneCodes: body.expertiseZoneCodes ?? [],
         regions: body.regions ?? [],
       }),
     },

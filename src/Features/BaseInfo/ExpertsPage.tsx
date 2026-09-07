@@ -45,6 +45,7 @@ type ZoneItem = {
   title?: string;
   name?: string;
   caption?: string;
+  code?: string;
 };
 type RegionItem = {
   id?: number | string;
@@ -255,17 +256,23 @@ const getExpertRegionSelection = (expert: Expert): RegionBranchSelection[] => {
   });
 };
 
-const makePayload = (form: ExpertForm): CreateExpertBody => {
-  const expertiseZoneIds = form.expertiseZoneIds
-    .map((id) => Number(id))
-    .filter((id) => Number.isFinite(id));
+const makePayload = (
+  form: ExpertForm,
+  zoneOptions: SelectOption[],
+): CreateExpertBody => {
+  const expertiseZoneCodes = form.expertiseZoneIds
+    .map((id) => {
+      const zone = zoneOptions.find((opt) => opt.id === id);
+      return zone?.code || ""; // استفاده از code به جای id
+    })
+    .filter((code) => code !== "");
 
   const p: Record<string, unknown> = {
     firstName: form.firstName,
     lastName: form.lastName,
     code: form.code,
     rank: Number(form.rank ?? 0),
-    expertiseZoneIds,
+    expertiseZoneCodes,
     licenseNumber: form.licenseNumber,
     phoneNumber: form.phoneNumber,
     mobileNumber: form.mobileNumber,
@@ -339,7 +346,8 @@ export default function ExpertsPage() {
           (z as ZoneItem)?.caption ??
           "",
       );
-      if (id && t) r.push({ id, title: t });
+      const code = safeText((z as ZoneItem & { code?: string })?.code ?? "");
+      if (id && t) r.push({ id, title: t, code });
     }
     return r;
   }, [zonesQuery.data]);
@@ -507,10 +515,7 @@ export default function ExpertsPage() {
 
         console.log("📥 Expert detail:", expertDetail);
 
-        // ✅ ابتدا به unknown و سپس به Expert تبدیل می‌کنیم
         const detail = expertDetail as unknown as Expert;
-
-        // ✅ برای دسترسی داینامیک به فیلدهای احتمالی API
         const detailRecord = expertDetail as unknown as Record<string, unknown>;
 
         const regionSelections = getExpertRegionSelection(detail);
@@ -525,27 +530,48 @@ export default function ExpertsPage() {
           issueDate = safeText(detail.licenseIssueDate);
         }
 
-        const rawZoneIds = detailRecord.expertiseZoneIds;
+        // ✅ دریافت zone codes یا zone objects
+        const rawZoneCodes = detailRecord.expertiseZoneCodes;
         const rawZones = detailRecord.expertiseZones;
 
-        const zoneIds: string[] =
-          Array.isArray(rawZoneIds) && rawZoneIds.length > 0
-            ? rawZoneIds.map((zoneId) => safeOptionId(zoneId)).filter(Boolean)
-            : Array.isArray(rawZones)
-              ? rawZones
-                  .map((zone) => {
-                    if (!zone || typeof zone !== "object") {
-                      return "";
-                    }
+        let zoneIds: string[] = [];
 
-                    const zoneRecord = zone as Record<string, unknown>;
+        if (Array.isArray(rawZoneCodes) && rawZoneCodes.length > 0) {
+          // اگر codes داشتیم، باید به ids تبدیل کنیم
+          zoneIds = rawZoneCodes
+            .map((zoneCode) => {
+              const zone = zoneOptions.find(
+                (opt) => opt.code === safeOptionId(zoneCode),
+              );
+              return zone?.id || "";
+            })
+            .filter(Boolean);
+        } else if (Array.isArray(rawZones) && rawZones.length > 0) {
+          // اگر zone objects داشتیم
+          zoneIds = rawZones
+            .map((zone) => {
+              if (!zone || typeof zone !== "object") return "";
+              const zoneRecord = zone as Record<string, unknown>;
+              const zoneCode = safeOptionId(
+                zoneRecord.code ?? zoneRecord.expertiseZoneCode,
+              );
+              const zoneId = safeOptionId(
+                zoneRecord.id ?? zoneRecord.expertiseZoneId,
+              );
 
-                    return safeOptionId(
-                      zoneRecord.id ?? zoneRecord.expertiseZoneId,
-                    );
-                  })
-                  .filter(Boolean)
-              : [];
+              // اول سعی کن با code پیدا کنی
+              const zoneByCode = zoneOptions.find(
+                (opt) => opt.code === zoneCode,
+              );
+              if (zoneByCode) return zoneByCode.id;
+
+              // اگر پیدا نشد با id
+              const zoneById = zoneOptions.find((opt) => opt.id === zoneId);
+              return zoneById?.id || zoneId;
+            })
+            .filter(Boolean);
+        }
+
         setZoneModalSelectedIds(zoneIds);
 
         setFormData({
@@ -568,7 +594,7 @@ export default function ExpertsPage() {
         showToast("خطا در دریافت اطلاعات کارشناس", "error");
       }
     },
-    [showToast],
+    [showToast, zoneOptions], // 👈 zoneOptions رو اضافه کن
   );
 
   const closeFormModal = useCallback(() => {
@@ -649,7 +675,7 @@ export default function ExpertsPage() {
       rank: String(rank),
     };
 
-    const payload = makePayload(normalizedFormData);
+    const payload = makePayload(normalizedFormData, zoneOptions);
 
     if (formMode === "create") {
       createMutation.mutate(payload);

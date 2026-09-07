@@ -56,6 +56,7 @@ import { getAllRequestSignatures } from "../../../services/RequestSignatureCrud/
 import type { RequestSignatureOutputDto } from "../../../services/RequestSignatureCrud/types";
 import { createBlobAppraisalDocx } from "../../../utils/wordGenerator.ts";
 import { convertDocxToPdf } from "../../../services/AppraisalReport/convertDocxToPdf";
+import { downloadBatchAsZipByRequestId } from "../../../services/FileService/DownloadBatchAsZipByRequestId.ts";
 
 import type {
   RequestItem,
@@ -1382,6 +1383,9 @@ export function DepartmentRequestViewPage({
               }
               onDownloadFile={(file) =>
                 downloadFile(file.filePath, file.documentId)
+              }
+              onDownloadAllFiles={() =>
+                downloadBatchAsZipByRequestId(selectedRequest.id)
               }
             >
               {allAppraisals.length > 0 && (

@@ -1,3 +1,6 @@
+import { getApiBaseUrl, getBasePath } from "../../libs/appConfig";
+import { authStore, authActions } from "../../libs/store/authActions";
+
 export interface ConvertDocxToPdfParams {
   file: File | Blob;
 }
@@ -17,24 +20,46 @@ export async function convertDocxToPdf(
     params.file instanceof File ? params.file.name : "AppraisalReport.docx",
   );
 
-  // گرفتن توکن از localStorage یا هرجایی که ذخیره کردید
-  const token =
-    localStorage.getItem("accessToken") || localStorage.getItem("token") || "";
+  // گرفتن baseUrl از config دقیقاً مثل apiClient
+  const baseUrl = getApiBaseUrl();
+  const url = `${baseUrl}/services/app/AppraisalReport/ConvertDocxToPdf`;
+
+  // گرفتن توکن از authStore دقیقاً مثل apiClient
+  const token = authStore.state.token;
 
   // استفاده از fetch مستقیم تا مرورگر خودش هدر multipart/form-data به همراه boundary را تنظیم کند
-  const response = await fetch(
-    "/job-referral-api/services/app/AppraisalReport/ConvertDocxToPdf",
-    {
-      method: "POST",
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        // توجه: به هیچ وجه 'Content-Type' را دستی وارد نکنید!
-      },
-      body: formData,
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      ...(token && { Authorization: `Bearer ${token}` }),
+      // توجه: به هیچ وجه 'Content-Type' را دستی وارد نکنید!
     },
-  );
+    body: formData,
+  });
 
   if (!response.ok) {
+    // مدیریت خطا دقیقاً مثل apiClient
+    if (response.status === 401) {
+      authActions.logout();
+      if (typeof window !== "undefined") {
+        setTimeout(
+          () => (window.location.href = `${getBasePath()}/login`),
+          2000,
+        );
+      }
+      throw new Error("رمز شما منقضی شده است. لطفاً دوباره وارد شوید.");
+    }
+
+    if (response.status === 403) {
+      if (typeof window !== "undefined") {
+        const forbiddenPath = `${getBasePath()}/403`;
+        if (window.location.pathname !== forbiddenPath) {
+          window.location.href = forbiddenPath;
+        }
+      }
+      throw new Error("Forbidden");
+    }
+
     let errorDetail = "";
     try {
       errorDetail = await response.text();

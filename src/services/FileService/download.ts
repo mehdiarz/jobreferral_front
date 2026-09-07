@@ -31,11 +31,33 @@ export async function downloadFile(
 
   if (!response.ok) throw new Error("Download failed");
 
+  // 1. استخراج نام فایل از هدر Content-Disposition
+  let filename = "downloaded_file";
+  const disposition = response.headers.get("content-disposition");
+
+  if (disposition) {
+    // بررسی فرمت استاندارد filename*=UTF-8''... برای پشتیبانی از حروف فارسی
+    const utf8FilenameMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+    if (utf8FilenameMatch && utf8FilenameMatch[1]) {
+      filename = decodeURIComponent(utf8FilenameMatch[1]);
+    } else {
+      // فرمت پشتیبان برای filename="..."
+      const regularFilenameMatch = disposition.match(/filename="?([^";]+)"?/i);
+      if (regularFilenameMatch && regularFilenameMatch[1]) {
+        filename = regularFilenameMatch[1];
+      }
+    }
+  } else {
+    // در صورت عدم وجود هدر، از انتخابی پشتیبان استفاده می‌شود
+    filename = path.split("/").pop() || "file";
+  }
+
+  // 2. دانلود فایل با نام درست
   const blob = await response.blob();
   const downloadUrl = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = downloadUrl;
-  link.download = path.split("/").pop() || "file";
+  link.download = filename; // قرار دادن نام استخراج شده
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

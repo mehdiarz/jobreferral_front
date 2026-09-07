@@ -121,6 +121,235 @@ const getDepartmentName = (id: number | null | undefined): string => {
   }
 };
 
+const isFilled = (value: unknown): boolean => {
+  if (value === null || value === undefined) return false;
+
+  if (typeof value === "string") {
+    return value.trim().length > 0;
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value);
+  }
+
+  return true;
+};
+
+const isAnsweredBoolean = (value: unknown): value is boolean =>
+  typeof value === "boolean";
+
+function validateAppraisalForm(
+  form: PropertyAppraisalInputDto,
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+
+  if (!isFilled(form.applicantName)) {
+    errors.applicantName = "نام متقاضی الزامی است";
+  }
+
+  if (!isFilled(form.loanType)) {
+    errors.loanType = "نوع تسهیلات الزامی است";
+  }
+
+  if (!isFilled(form.loanAmount) || Number(form.loanAmount) <= 0) {
+    errors.loanAmount = "میزان تسهیلات باید صحیح وارد شود";
+  }
+
+  if (!isFilled(form.ownerName)) {
+    errors.ownerName = "نام مالک الزامی است";
+  }
+
+  if (!isFilled(form.ownerAddress)) {
+    errors.ownerAddress = "نشانی ملک الزامی است";
+  }
+
+  if (!isFilled(form.propertyOccupierCode)) {
+    errors.propertyOccupierCode = "متصرف ملک را انتخاب کنید";
+  }
+
+  if (!isFilled(form.propertyOccupierDescription)) {
+    errors.propertyOccupierDescription = "توضیحات متصرف الزامی است";
+  }
+
+  if (!isFilled(form.propertyNumber)) {
+    errors.propertyNumber = "شماره ملک الزامی است";
+  }
+
+  if (!isFilled(form.seperatedFrom)) {
+    errors.seperatedFrom = "مفروز و مجزی از الزامی است";
+  }
+
+  if (!isFilled(form.separationPiece)) {
+    errors.separationPiece = "قطعه تفکیکی الزامی است";
+  }
+
+  if (!isFilled(form.part)) {
+    errors.part = "بخش الزامی است";
+  }
+
+  if (!isFilled(form.city)) {
+    errors.city = "شهر الزامی است";
+  }
+
+  if (!isAnsweredBoolean(form.hasDefinitiveOwnershipDocument)) {
+    errors.hasDefinitiveOwnershipDocument =
+      "وضعیت سند قطعی مالکیت را مشخص کنید";
+  } else if (form.hasDefinitiveOwnershipDocument === true) {
+    if (!isFilled(form.definitiveOwnershipDocumentTypeCode)) {
+      errors.definitiveOwnershipDocumentTypeCode = "نوع سند الزامی است";
+    }
+    if (!isFilled(form.pageCount) || Number(form.pageCount) < 1) {
+      errors.pageCount = "تعداد جلد/برگه الزامی است";
+    }
+    if (!isFilled(form.dong) || Number(form.dong) <= 0) {
+      errors.dong = "تعداد دانگ الزامی است";
+    }
+  }
+
+  if (!isFilled(form.titleDeedNumber)) {
+    errors.titleDeedNumber = "شماره ورقه مالکیت الزامی است";
+  }
+
+  if (!isFilled(form.municipalArea)) {
+    errors.municipalArea = "منطقه شهرداری الزامی است";
+  }
+
+  if (!isFilled(form.propertyType)) {
+    errors.propertyType = "نوع ملک الزامی است";
+  }
+
+  if (!isFilled(form.useAccordingToTheCompletionOfTheWork)) {
+    errors.useAccordingToTheCompletionOfTheWork =
+      "کاربری طبق پایان کار الزامی است";
+  }
+
+  if (!isFilled(form.typeOfWorkCompletionCode)) {
+    errors.typeOfWorkCompletionCode = "نوع پایان کار را انتخاب کنید";
+  }
+
+  if (!isFilled(form.typeOfUseOfTheProperty)) {
+    errors.typeOfUseOfTheProperty = "نوع استفاده از ملک الزامی است";
+  }
+
+  if (!isAnsweredBoolean(form.hasMatchingTheAreaWithTheDocument)) {
+    errors.hasMatchingTheAreaWithTheDocument =
+      "وضعیت مطابقت مساحت با سند را مشخص کنید";
+  } else if (
+    form.hasMatchingTheAreaWithTheDocument === false &&
+    !isFilled(form.explanationInCaseOfDisagreement)
+  ) {
+    errors.explanationInCaseOfDisagreement = "توضیحات عدم مطابقت الزامی است";
+  }
+
+  if (!isFilled(form.evaluationTopicCode)) {
+    errors.evaluationTopicCode = "موضوع ارزیابی را انتخاب کنید";
+  }
+
+  // جدول ارزیابی
+  const tableFields: Array<{
+    field: keyof PropertyAppraisalInputDto;
+    label: string;
+  }> = [
+    { field: "landArea", label: "مساحت عرصه" },
+    { field: "landUnitPrice", label: "قیمت واحد عرصه" },
+    { field: "landTotalPrice", label: "قیمت کل عرصه" },
+    { field: "landShareArea", label: "مساحت سهم عرصه" },
+    { field: "landShareUnitPrice", label: "قیمت واحد سهم عرصه" },
+    { field: "landShareTotalPrice", label: "قیمت کل سهم عرصه" },
+    { field: "basementArea", label: "مساحت زیرزمین" },
+    { field: "basementUnitPrice", label: "قیمت واحد زیرزمین" },
+    { field: "basementTotalPrice", label: "قیمت کل زیرزمین" },
+    { field: "groundFloorArea", label: "مساحت همکف" },
+    { field: "groundFloorUnitPrice", label: "قیمت واحد همکف" },
+    { field: "groundFloorTotalPrice", label: "قیمت کل همکف" },
+    { field: "mezzanineArea", label: "مساحت نیم‌طبقه" },
+    { field: "mezzanineUnitPrice", label: "قیمت واحد نیم‌طبقه" },
+    { field: "mezzanineTotalPrice", label: "قیمت کل نیم‌طبقه" },
+    { field: "floor1Area", label: "مساحت طبقه اول" },
+    { field: "floor1UnitPrice", label: "قیمت واحد طبقه اول" },
+    { field: "floor1TotalPrice", label: "قیمت کل طبقه اول" },
+    { field: "floor2Area", label: "مساحت طبقه دوم" },
+    { field: "floor2UnitPrice", label: "قیمت واحد طبقه دوم" },
+    { field: "floor2TotalPrice", label: "قیمت کل طبقه دوم" },
+    { field: "floor3Area", label: "مساحت طبقه سوم" },
+    { field: "floor3UnitPrice", label: "قیمت واحد طبقه سوم" },
+    { field: "floor3TotalPrice", label: "قیمت کل طبقه سوم" },
+    { field: "floor4Area", label: "مساحت طبقه چهارم" },
+    { field: "floor4UnitPrice", label: "قیمت واحد طبقه چهارم" },
+    { field: "floor4TotalPrice", label: "قیمت کل طبقه چهارم" },
+    { field: "floor5Area", label: "مساحت طبقه پنجم" },
+    { field: "floor5UnitPrice", label: "قیمت واحد طبقه پنجم" },
+    { field: "floor5TotalPrice", label: "قیمت کل طبقه پنجم" },
+    { field: "otherFloorsArea", label: "مساحت سایر طبقات" },
+    { field: "otherFloorsUnitPrice", label: "قیمت واحد سایر طبقات" },
+    { field: "otherFloorsTotalPrice", label: "قیمت کل سایر طبقات" },
+    { field: "landscapingArea", label: "مساحت محوطه‌سازی" },
+    { field: "landscapingUnitPrice", label: "قیمت واحد محوطه‌سازی" },
+    { field: "landscapingTotalPrice", label: "قیمت کل محوطه‌سازی" },
+    { field: "facilitiesArea", label: "مساحت تأسیسات" },
+    { field: "facilitiesUnitPrice", label: "قیمت واحد تأسیسات" },
+    { field: "facilitiesTotalPrice", label: "قیمت کل تأسیسات" },
+    { field: "totalArea", label: "مساحت کل" },
+    { field: "totalUnitPrice", label: "قیمت واحد کل" },
+    { field: "totalPrice", label: "قیمت کل" },
+    { field: "goodwillAdjustment", label: "تعدیل سرقفلی" },
+    { field: "finalPrice", label: "قیمت نهایی" },
+    { field: "finalPriceInWords", label: "قیمت نهایی به حروف" },
+  ];
+
+  tableFields.forEach(({ field, label }) => {
+    if (!isFilled(form[field])) {
+      errors[field] = `${label} الزامی است`;
+    }
+  });
+
+  if (!isFilled(form.totalFloors)) {
+    errors.totalFloors = "تعداد طبقات الزامی است";
+  }
+
+  if (!isFilled(form.usageBreakdown)) {
+    errors.usageBreakdown = "تعداد واحدها به تفکیک کاربری الزامی است";
+  }
+
+  if (!isFilled(form.structureTypeCode) && !isFilled(form.structureTypeOther)) {
+    errors.structureTypeCode = "نوع سازه یا سایر الزامی است";
+    errors.structureTypeOther = "نوع سازه یا سایر الزامی است";
+  }
+
+  if (!isFilled(form.facadeType)) {
+    errors.facadeType = "نماسازی الزامی است";
+  }
+
+  if (!isFilled(form.buildingAgeCalculation)) {
+    errors.buildingAgeCalculation = "نحوه محاسبه قدمت بنا الزامی است";
+  }
+
+  if (!isFilled(form.parkingCount) || Number(form.parkingCount) < 0) {
+    errors.parkingCount = "تعداد پارکینگ الزامی است";
+  } else if (Number(form.parkingCount) > 0 && form.hasParking !== true) {
+    errors.hasParking = "با توجه به تعداد پارکینگ، تیک پارکینگ الزامی است";
+  }
+
+  if (!isFilled(form.storageCount) || Number(form.storageCount) < 0) {
+    errors.storageCount = "تعداد انباری الزامی است";
+  } else if (Number(form.storageCount) > 0 && form.hasStorage !== true) {
+    errors.hasStorage = "با توجه به تعداد انباری، تیک انباری الزامی است";
+  }
+
+  if (!isFilled(form.storageArea) || Number(form.storageArea) < 0) {
+    errors.storageArea = "مساحت انباری الزامی است";
+  }
+
+  if (!isFilled(form.elevatorCount) || Number(form.elevatorCount) < 0) {
+    errors.elevatorCount = "تعداد آسانسور الزامی است";
+  }
+
+  if (!isFilled(form.otherPrivileges)) {
+    errors.otherPrivileges = "امتیازات مشاعی/اختصاصی دیگر الزامی است";
+  }
+
+  return errors;
+}
 export function DepartmentRequestReferralPage({
   departmentType,
 }: RequestReferralPageProps) {
@@ -173,6 +402,9 @@ export function DepartmentRequestReferralPage({
 
   // state های جدید در کامپوننت
   const [detailDocs, setDetailDocs] = useState<DetailDocWithFiles[]>([]);
+  const [validationErrors, setValidationErrors] = useState<
+    Record<string, string>
+  >({});
 
   const statusesQuery = useQuery({
     queryKey: ["request-statuses"],
@@ -383,6 +615,13 @@ export function DepartmentRequestReferralPage({
     },
     [],
   );
+  const clearError = useCallback((field: string) => {
+    setValidationErrors((prev) => {
+      const newErrors = { ...prev };
+      delete newErrors[field];
+      return newErrors;
+    });
+  }, []);
 
   function getErrorMessage(error: unknown, fallback: string) {
     return error instanceof Error && error.message ? error.message : fallback;
@@ -508,6 +747,7 @@ export function DepartmentRequestReferralPage({
   );
 
   const handleOpenAssetModal = useCallback(() => {
+    setValidationErrors({});
     if (currentAppraisal) {
       setAssetForm(currentAppraisal);
     } else {
@@ -527,6 +767,26 @@ export function DepartmentRequestReferralPage({
       showToast("درخواست انتخاب نشده است", "error");
       return;
     }
+
+    const errors = validateAppraisalForm(assetForm);
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      const firstError = Object.values(errors)[0];
+      showToast(firstError, "warning");
+
+      // اسکرول به اولین خطا
+      const firstErrorKey = Object.keys(errors)[0];
+      setTimeout(() => {
+        const element = document.querySelector(
+          `[data-field="${firstErrorKey}"]`,
+        );
+        element?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
+
+      return;
+    }
+
+    setValidationErrors({});
 
     setIsSavingAppraisal(true);
 
@@ -670,6 +930,13 @@ export function DepartmentRequestReferralPage({
   const submit = useCallback(
     async (accepted: boolean) => {
       if (!selectedRequest) return;
+      if (!currentAppraisal) {
+        showToast(
+          `ابتدا باید فرم ارزیابی ملک توسط ${departmentType.name} تکمیل و ذخیره شود`,
+          "warning",
+        );
+        return;
+      }
       setSubmitting(true);
       try {
         if (
@@ -1135,6 +1402,8 @@ export function DepartmentRequestReferralPage({
         lookups={lookups}
         signatures={requestSignatures}
         isSaving={isSavingAppraisal}
+        validationErrors={validationErrors}
+        onClearError={clearError}
         isGeneratingPdf={isGeneratingPdf}
         onChange={handleFormChange}
         onSave={handleSaveAppraisal}

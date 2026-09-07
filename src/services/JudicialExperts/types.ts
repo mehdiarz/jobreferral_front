@@ -1,3 +1,17 @@
+export interface RegionOutputDto {
+  id: number;
+  name?: string | null;
+  code?: string | null;
+  [key: string]: unknown;
+}
+
+export interface BranchOutputDto {
+  id: number;
+  code?: number | null;
+  name?: string | null;
+  [key: string]: unknown;
+}
+
 export interface JudicialExpertRegionInputDto {
   regionId: number;
   branchCodes?: number[] | null;
@@ -5,37 +19,40 @@ export interface JudicialExpertRegionInputDto {
 
 export interface JudicialExpertRegionOutputDto {
   regionId: number;
-  region?: unknown | null;
+  region?: RegionOutputDto | null;
   branchCodes?: number[] | null;
-  branches?: unknown[] | null;
+  branches?: BranchOutputDto[] | null;
 }
 
 export interface ExpertiseZoneItem {
   id: number;
   title?: string | null;
   code?: string | null;
+  description?: string | null;
+  creationTime: string;
+  lastModificationTime?: string | null;
+  deletionTime?: string | null;
+  isDeleted: boolean;
 }
 
 /**
- * مدل ارسالی برای ثبت کارشناس
+ * مدل ارسالی برای ثبت کارشناس (JudicialExpertInputDto)
  */
 export interface CreateExpertBody {
+  id?: number;
   firstName?: string | null;
   lastName?: string | null;
-  code?: string | null;
-  rank: number;
+  code: string; // در OpenAPI الزامی است
+  rank?: number;
   licenseIssueDate?: string | null;
   licenseExpireDate?: string | null;
   licenseNumber?: string | null;
   phoneNumber?: string | null;
   mobileNumber?: string | null;
   email?: string | null;
-  isActive: boolean;
+  isActive?: boolean;
+  expertiseZoneCodes?: string[] | null;
   regions?: JudicialExpertRegionInputDto[] | null;
-
-  /**
-   * شناسه حوزه‌های تخصصی انتخاب‌شده
-   */
   expertiseZoneIds?: number[] | null;
 }
 
@@ -47,7 +64,7 @@ export interface EditExpertBody extends CreateExpertBody {
 }
 
 /**
- * مدل دریافتی کارشناس از API
+ * مدل خروجی کارشناس (JudicialExpertOutputDto)
  */
 export interface ExpertItem {
   id: number;
@@ -61,30 +78,21 @@ export interface ExpertItem {
   phoneNumber: string | null;
   mobileNumber: string | null;
   email: string | null;
-
   isActive: boolean;
-  regions: JudicialExpertRegionOutputDto[] | null;
-
-  /**
-   * شناسه حوزه‌های تخصصی کارشناس
-   */
-  expertiseZoneIds: number[] | null;
-
-  /**
-   * اطلاعات کامل حوزه‌های تخصصی؛ در صورت ارسال Backend
-   */
-  expertiseZones: ExpertiseZoneItem[] | null;
-
+  isDeleted: boolean;
   creationTime: string;
   lastModificationTime: string | null;
-  isDeleted: boolean;
+  expertiseZoneCodes: string[] | null;
+  regions: JudicialExpertRegionOutputDto[] | null;
+  expertiseZones: ExpertiseZoneItem[] | null;
 }
 
 export interface GetAllExpertsParams {
   firstName?: string;
   lastName?: string;
   code?: string;
-  expertiseZoneTitle?: string;
+  expertiseZoneTitle?: string | string[];
+  expertiseZoneCodes?: string[];
   licenseNumber?: string;
   isCapital?: boolean;
   sorting?: string;

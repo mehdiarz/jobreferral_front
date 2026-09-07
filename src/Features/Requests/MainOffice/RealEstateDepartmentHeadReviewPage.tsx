@@ -34,6 +34,7 @@ import { getDocumentAllFiles } from "../../../services/FileService/GetDocumentAl
 import { downloadFile } from "../../../services/FileService/download";
 import type { DocumentItem } from "../../../services/DocumentCrud/types";
 import type { DocumentFile } from "../../../services/FileService/GetDocumentAllFiles";
+import { downloadBatchAsZipByRequestId } from "../../../services/FileService/DownloadBatchAsZipByRequestId.ts";
 
 import type { RequestItem } from "../../../services/RequestCrud/types";
 import type {
@@ -609,6 +610,9 @@ export function DepartmentRealEstateDepartmentHeadReviewPage({
               getUserData={getUserCacheData}
               onDownloadFile={(file) =>
                 downloadFile(file.filePath, file.documentId)
+              }
+              onDownloadAllFiles={() =>
+                downloadBatchAsZipByRequestId(selectedRequest.id)
               }
             >
               <RequestDetailSection

@@ -35,6 +35,7 @@ import { getDocumentAllFiles } from "../../../services/FileService/GetDocumentAl
 import { downloadFile } from "../../../services/FileService/download";
 import type { DocumentItem } from "../../../services/DocumentCrud/types";
 import type { DocumentFile } from "../../../services/FileService/GetDocumentAllFiles";
+import { downloadBatchAsZipByRequestId } from "../../../services/FileService/DownloadBatchAsZipByRequestId.ts";
 
 import type { RequestItem } from "../../../services/RequestCrud/types";
 import type {
@@ -489,7 +490,7 @@ export function DepartmentRegionRequestReviewPage({
               isLoading={isSubmitting}
             />
             <FormButton
-              title="تأیید"
+              title="ارجاع"
               variant="success"
               onClick={() => handleAction(true)}
               isLoading={isSubmitting}
@@ -510,6 +511,9 @@ export function DepartmentRegionRequestReviewPage({
               getUserData={getUserCacheData}
               onDownloadFile={(file) =>
                 downloadFile(file.filePath, file.documentId)
+              }
+              onDownloadAllFiles={() =>
+                downloadBatchAsZipByRequestId(selectedRequest.id)
               }
             >
               <RequestDetailSection
