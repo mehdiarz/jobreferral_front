@@ -12,6 +12,8 @@ export async function editCollatral(
     lastName: body.lastName ?? null,
     nationalCode: body.nationalCode ?? null,
     personTypeId: body.personTypeId ?? 1,
+    orgRegistrationPlate: body.orgRegistrationPlate ?? null,
+    subRegistrationPlate: body.subRegistrationPlate ?? null,
     expertiseZoneCodes: body.expertiseZoneCodes ?? [],
   };
 

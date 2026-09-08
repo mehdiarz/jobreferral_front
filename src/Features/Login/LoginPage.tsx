@@ -75,7 +75,7 @@ export default function LoginForm() {
             ورود به سامانه
           </h2>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            سامانه ارجاع کار به کارشناس دادگستری
+            سامانه ارزیابی وثایق ملکی
           </p>
         </div>
 
@@ -136,7 +136,7 @@ export default function LoginForm() {
           ورود به سامانه
         </h2>
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          سامانه ارجاع کار به کارشناس دادگستری
+          سامانه ارزیابی وثایق ملکی
         </p>
       </div>
 

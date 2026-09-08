@@ -13,6 +13,8 @@ export interface CollatralItem {
   lastName?: string | null;
   nationalCode?: string | null;
   personTypeId?: number | null;
+  orgRegistrationPlate?: string | null;
+  subRegistrationPlate?: string | null;
   expertiseZoneCodes?: string[] | null;
   expertiseZones?: ExpertiseZoneItem[] | null;
   creationTime?: string;
@@ -29,6 +31,8 @@ export interface CreateCollatralBody {
   lastName?: string | null;
   nationalCode?: string | null;
   personTypeId?: number; // پیش‌فرض 1
+  orgRegistrationPlate?: string | null;
+  subRegistrationPlate?: string | null;
   expertiseZoneCodes?: string[] | null;
 }
 
@@ -40,6 +44,8 @@ export interface EditCollatralBody {
   lastName?: string | null;
   nationalCode?: string | null;
   personTypeId?: number; // پیش‌فرض 1
+  orgRegistrationPlate?: string | null;
+  subRegistrationPlate?: string | null;
   expertiseZoneCodes?: string[] | null;
 }
 

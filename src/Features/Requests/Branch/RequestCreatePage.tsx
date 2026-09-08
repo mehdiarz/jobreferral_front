@@ -61,6 +61,7 @@ import { onlyDigits } from "../../../utils/iranValidators.ts";
 import { toPersianDigits } from "../../../utils/numberUtils.ts";
 import ModalTemplate from "../../../baseComponents/Modal";
 import FormMultiSelectModal from "../../../baseComponents/FormMultiSelectModal.tsx";
+import { FormPlateInput } from "../../../baseComponents/FormPlateInput.tsx";
 
 // ─── Types ───
 type CollateralForm = {
@@ -70,6 +71,8 @@ type CollateralForm = {
   firstName: string;
   lastName: string;
   nationalCode: string;
+  orgRegistrationPlate: string;
+  subRegistrationPlate: string;
 };
 
 type RequestForm = {
@@ -109,6 +112,8 @@ const emptyCollateral: CollateralForm = {
   firstName: "",
   lastName: "",
   nationalCode: "",
+  orgRegistrationPlate: "",
+  subRegistrationPlate: "",
 };
 const emptyRequest: RequestForm = {
   requestTypeId: null,
@@ -545,7 +550,9 @@ export function DepartmentRequestCreatePage({
     );
 
   // ─── Submit ───
+  // ─── Submit ───
   const handleSubmit = async () => {
+    // ۱. اعتبارسنجی اطلاعات پرونده
     if (!requestForm.requestTypeId) {
       showToast("نوع درخواست الزامی است", "error");
       return;
@@ -578,6 +585,68 @@ export function DepartmentRequestCreatePage({
       return;
     }
 
+    // ۲. اعتبارسنجی حداقل یک وثیقه‌گذار و اجباری بودن تمام فیلدهای آن
+    if (!collaterals || collaterals.length === 0) {
+      showToast("ثبت حداقل یک وثیقه‌گذار الزامی است", "error");
+      return;
+    }
+
+    for (let i = 0; i < collaterals.length; i++) {
+      const col = collaterals[i];
+      const colNum = i + 1;
+
+      if (!col.personTypeId) {
+        showToast(
+          `نوع شخص برای وثیقه‌گذار ${toPersianDigits(colNum)} الزامی است`,
+          "error",
+        );
+        return;
+      }
+      if (!col.expertiseZoneCodes || col.expertiseZoneCodes.length === 0) {
+        showToast(
+          `نوع وثیقه برای وثیقه‌گذار ${toPersianDigits(colNum)} الزامی است`,
+          "error",
+        );
+        return;
+      }
+      if (!col.firstName.trim()) {
+        showToast(
+          `نام وثیقه‌گذار ${toPersianDigits(colNum)} الزامی است`,
+          "error",
+        );
+        return;
+      }
+      if (!col.lastName.trim()) {
+        showToast(
+          `نام خانوادگی وثیقه‌گذار ${toPersianDigits(colNum)} الزامی است`,
+          "error",
+        );
+        return;
+      }
+      const colNatCode = onlyDigits(col.nationalCode);
+      if (!colNatCode || !isValidNationalIdentity(colNatCode)) {
+        showToast(
+          `کد ملی / شناسه ملی وثیقه‌گذار ${toPersianDigits(colNum)} نامعتبر است`,
+          "error",
+        );
+        return;
+      }
+      if (!col.subRegistrationPlate.trim()) {
+        showToast(
+          `پلاک ثبتی فرعی برای وثیقه‌گذار ${toPersianDigits(colNum)} الزامی است`,
+          "error",
+        );
+        return;
+      }
+      if (!col.orgRegistrationPlate.trim()) {
+        showToast(
+          `پلاک ثبتی اصلی برای وثیقه‌گذار ${toPersianDigits(colNum)} الزامی است`,
+          "error",
+        );
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
       const body = {
@@ -592,16 +661,13 @@ export function DepartmentRequestCreatePage({
         amount,
         description: requestForm.description || "",
         personalTypeId: requestForm.personalTypeId,
-        // currentApprovalStepId: 0,
-        // requestStatusCode: 0,
       };
 
-      console.log(body);
       // 1. Create Request
       const requestRes = await createRequest(body);
       const requestId = extractEntityId(requestRes, "درخواست");
 
-      // 1.5 Save expert comment (اگه نوشته باشه)
+      // 1.5 Save expert comment (اگر یادداشت وارد شده باشد)
       if (expertComment.trim()) {
         await createRequestComment({
           requestId,
@@ -612,21 +678,17 @@ export function DepartmentRequestCreatePage({
 
       // 2. Create Collaterals
       for (const col of collaterals) {
-        if (
-          col.personTypeId &&
-          col.expertiseZoneCodes.length > 0 &&
-          col.firstName
-        ) {
-          await createCollatral({
-            requestId,
-            firstName: col.firstName,
-            lastName: col.lastName,
-            collatralTypeId: 0,
-            nationalCode: col.nationalCode,
-            personTypeId: col.personTypeId,
-            expertiseZoneCodes: col.expertiseZoneCodes,
-          });
-        }
+        await createCollatral({
+          requestId,
+          firstName: col.firstName.trim(),
+          lastName: col.lastName.trim(),
+          collatralTypeId: 0,
+          nationalCode: onlyDigits(col.nationalCode),
+          personTypeId: col.personTypeId!,
+          expertiseZoneCodes: col.expertiseZoneCodes,
+          orgRegistrationPlate: col.orgRegistrationPlate.trim(),
+          subRegistrationPlate: col.subRegistrationPlate.trim(),
+        });
       }
 
       // 3. Group completed files by documentTypeId
@@ -643,14 +705,12 @@ export function DepartmentRequestCreatePage({
       const batchItems: { uploadId: string; documentId: number }[] = [];
 
       for (const [docTypeId, files] of filesByType) {
-        // Create document
         const docRes = await createDocument({
           documentTypeId: docTypeId,
           requestId,
         });
         const documentId = extractEntityId(docRes, "سند");
 
-        // Attach all files to this document
         for (const file of files) {
           if (file.uploadId) {
             batchItems.push({ uploadId: file.uploadId, documentId });
@@ -1213,6 +1273,7 @@ export function DepartmentRequestCreatePage({
                     value={col.firstName}
                     onChange={(v) => updateCollateral(i, "firstName", v)}
                     dir="rtl"
+                    required
                   />
                 </FluidCol>
 
@@ -1224,6 +1285,7 @@ export function DepartmentRequestCreatePage({
                     value={col.lastName}
                     onChange={(v) => updateCollateral(i, "lastName", v)}
                     dir="rtl"
+                    required
                   />
                 </FluidCol>
 
@@ -1235,6 +1297,23 @@ export function DepartmentRequestCreatePage({
                     value={col.nationalCode}
                     onChange={(v) => updateCollateral(i, "nationalCode", v)}
                     dir="ltr"
+                    required
+                  />
+                </FluidCol>
+                {/* ردیف پلاک ثبتی فرعی / اصلی با استفاده از کامپوننت پایه */}
+                <FluidCol colSpan="col-span-12">
+                  <FormPlateInput
+                    id={`cplate-${i}`}
+                    label="پلاک ثبتی (فرعی / اصلی)"
+                    subValue={col.subRegistrationPlate}
+                    orgValue={col.orgRegistrationPlate}
+                    onSubChange={(v) =>
+                      updateCollateral(i, "subRegistrationPlate", v)
+                    }
+                    onOrgChange={(v) =>
+                      updateCollateral(i, "orgRegistrationPlate", v)
+                    }
+                    required
                   />
                 </FluidCol>
               </FluidGrid>

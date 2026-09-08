@@ -42,6 +42,7 @@ export interface FeeSettingItem {
   deletionTime: string | null;
   lastModificationTime: string | null;
   creationTime: string;
+  isActiveSideEffect: string;
 }
 
 export interface GetAllFeeSettingsParams {

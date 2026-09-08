@@ -179,8 +179,8 @@ export default function DashboardPage() {
         <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
           <div>
             <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
-              <Sparkles className="h-3.5 w-3.5" /> داشبورد سامانه ارجاع کار به
-              کارشناس رسمی دادگستری
+              <Sparkles className="h-3.5 w-3.5" /> داشبورد سامانه ارزیابی وثایق
+              ملکی
             </div>
             <h1 className="text-2xl font-black text-slate-900 dark:text-white sm:text-3xl">
               {name} عزیز، خوش آمدید
