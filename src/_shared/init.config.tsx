@@ -454,4 +454,21 @@ export const defaultMenuItems = [
       },
     ],
   },
+  {
+    id: "reports",
+    title: "گزارش‌ها",
+    icon: "bar-chart-3",
+    children: [
+      {
+        id: "request-report",
+        title: "گزارش درخواست‌ها",
+        path: "/dashboard/reports/requests",
+      },
+      {
+        id: "request-history-report",
+        title: "گزارش تاریخچه درخواست‌ها",
+        path: "/dashboard/reports/request-history",
+      },
+    ],
+  },
 ];

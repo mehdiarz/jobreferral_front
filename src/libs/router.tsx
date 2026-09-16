@@ -911,6 +911,34 @@ const profileRoute = createRoute({
     );
   },
 });
+
+const requestReportRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/reports/requests",
+  component: () => {
+    const Page = lazy(() => import("../Features/Reports/RequestReportPage"));
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
+
+const requestHistoryReportRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/reports/request-history",
+  component: () => {
+    const Page = lazy(
+      () => import("../Features/Reports/RequestHistoryReportPage"),
+    );
+    return (
+      <SuspenseLoading>
+        <Page />
+      </SuspenseLoading>
+    );
+  },
+});
 // ----------------------------------------
 // Route Tree
 // ----------------------------------------
@@ -924,6 +952,8 @@ const routeTree = rootRoute.addChildren([
     createUserRoute,
     rolesRoute,
     profileRoute,
+    requestReportRoute,
+    requestHistoryReportRoute,
     expertsRoute,
     expertiseZonesRoute,
     regionsRoute,

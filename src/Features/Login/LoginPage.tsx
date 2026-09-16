@@ -41,6 +41,7 @@ export default function LoginForm() {
           data.surname,
           data.isActive,
           data.creationTime,
+          data.orgUnitTag,
         );
         const permissions =
           data.roleIds?.length > 0

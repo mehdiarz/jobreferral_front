@@ -45,6 +45,7 @@ export default function LoginWithBranch() {
           nationalId: "1234567890",
           fullName: "Bypass User",
           branchName: "Bypass Branch",
+          orgUnitTag: 3,
         };
       }
 
@@ -70,6 +71,7 @@ export default function LoginWithBranch() {
           data.surname,
           data.isActive,
           data.creationTime,
+          data.orgUnitTag,
         );
 
         console.log("👤 Auth login done. roleIds:", data.roleIds);

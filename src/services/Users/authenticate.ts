@@ -12,6 +12,15 @@ export interface AuthenticateRequest {
   rememberClient: boolean;
 }
 
+export const OrgUnitTag = {
+  Region: 1,
+  Branch: 2,
+  Setad: 3,
+  InDependentBranch: 4,
+} as const;
+
+export type OrgUnitTagType = (typeof OrgUnitTag)[keyof typeof OrgUnitTag];
+
 export interface UserObject {
   userName: string;
   name: string;
@@ -25,6 +34,7 @@ export interface UserObject {
   roleNames: string[];
   /** Role ids with names (e.g. ["1:ADMIN", "3:Reporter"]) - id before colon. Optional. */
   roles?: string[];
+  orgUnitTag?: OrgUnitTagType | number;
   id: number;
   sid?: string;
   bid?: string;
@@ -82,6 +92,7 @@ export interface AuthLoginPayload {
   surname?: string;
   isActive?: boolean;
   creationTime?: string;
+  orgUnitTag?: OrgUnitTagType | number;
 }
 
 /** Authenticate with p and tok (POST /api/TokenAuth/AuthenticateWithPTok) */
@@ -178,5 +189,6 @@ function parseAuthResult(
     surname: user?.surname,
     isActive: user?.isActive,
     creationTime: user?.creationTime,
+    orgUnitTag: user?.orgUnitTag,
   };
 }

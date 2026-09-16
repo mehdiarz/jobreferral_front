@@ -79,6 +79,8 @@ function PriceRow({
   onChange,
   validationErrors,
   onClearError,
+  isAreaRequired = false,
+  isTotalPriceRequired = false,
 }: {
   title: string;
   areaField: keyof PropertyAppraisalInputDto;
@@ -91,6 +93,8 @@ function PriceRow({
   ) => void;
   validationErrors?: Record<string, string>;
   onClearError?: (field: string) => void;
+  isAreaRequired?: boolean;
+  isTotalPriceRequired?: boolean;
 }) {
   const areaError = validationErrors?.[String(areaField)];
   const unitPriceError = validationErrors?.[String(unitPriceField)];
@@ -102,7 +106,10 @@ function PriceRow({
       <div className="grid grid-cols-3 gap-3">
         <div data-field={String(areaField)}>
           <label className={labelClass}>
-            مساحت <span className="text-red-500 font-bold">*</span>
+            مساحت{" "}
+            {isAreaRequired && (
+              <span className="text-red-500 font-bold">*</span>
+            )}
           </label>
           <input
             type="number"
@@ -127,9 +134,7 @@ function PriceRow({
           )}
         </div>
         <div data-field={String(unitPriceField)}>
-          <label className={labelClass}>
-            بهای واحد (ریال) <span className="text-red-500 font-bold">*</span>
-          </label>
+          <label className={labelClass}>بهای واحد (ریال)</label>
           <input
             type="text"
             className={`${inputClass} ${
@@ -154,7 +159,10 @@ function PriceRow({
         </div>
         <div data-field={String(totalPriceField)}>
           <label className={labelClass}>
-            مبلغ کل (ریال) <span className="text-red-500 font-bold">*</span>
+            مبلغ کل (ریال){" "}
+            {isTotalPriceRequired && (
+              <span className="text-red-500 font-bold">*</span>
+            )}
           </label>
           <input
             type="text"
@@ -606,7 +614,6 @@ export default function PropertyAppraisalFormModal({
                 "propertyOccupierDescription",
                 2,
                 "md:col-span-2",
-                true,
               )}
             </div>
           </div>
@@ -772,6 +779,8 @@ export default function PropertyAppraisalFormModal({
                 onChange={onChange}
                 validationErrors={validationErrors}
                 onClearError={onClearError}
+                isAreaRequired={true}
+                isTotalPriceRequired={true}
               />
               <PriceRow
                 title="قدرالسهم"
@@ -895,30 +904,13 @@ export default function PropertyAppraisalFormModal({
               />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 border-t pt-4">
-              {renderField(
-                "جمع کل مساحت",
-                "totalArea",
-                "number",
-                "col-span-1",
-                true,
-              )}
-              {renderCurrencyField(
-                "بهای کل",
-                "totalUnitPrice",
-                "col-span-1",
-                true,
-              )}
-              {renderCurrencyField(
-                "جمع کل مبلغ",
-                "totalPrice",
-                "col-span-1",
-                true,
-              )}
+              {renderField("جمع کل مساحت", "totalArea", "number", "col-span-1")}
+              {renderCurrencyField("بهای کل", "totalUnitPrice", "col-span-1")}
+              {renderCurrencyField("جمع کل مبلغ", "totalPrice", "col-span-1")}
               {renderCurrencyField(
                 "سرقفلی",
                 "goodwillAdjustment",
                 "col-span-1",
-                true,
               )}
               {renderCurrencyField(
                 "مبلغ نهایی (عدد)",
@@ -945,14 +937,12 @@ export default function PropertyAppraisalFormModal({
                 "totalFloors",
                 "number",
                 "col-span-1",
-                true,
               )}
               {renderField(
                 "تعداد واحدها به تفکیک کاربری",
                 "usageBreakdown",
                 "text",
                 "col-span-1",
-                true,
               )}
               {renderSelect(
                 "نوع سازه",
@@ -960,7 +950,7 @@ export default function PropertyAppraisalFormModal({
                 toOptions(lookups.structureTypes),
               )}
               {renderField("سایر (نوع سازه)", "structureTypeOther")}
-              {renderField("نماسازی", "facadeType", "text", "col-span-1", true)}
+              {renderField("نماسازی", "facadeType", "text", "col-span-1")}
               {renderField(
                 "نحوه محاسبه قدمت بنا",
                 "buildingAgeCalculation",
@@ -1061,7 +1051,6 @@ export default function PropertyAppraisalFormModal({
               "otherPrivileges",
               2,
               "md:col-span-2",
-              true,
             )}
           </div>
 

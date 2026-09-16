@@ -113,45 +113,52 @@ function validateAppraisalForm(
 ): Record<string, string> {
   const errors: Record<string, string> = {};
 
-  // Basic Information Validation
+  // ============ بخش ۱: مشخصات ملک و متقاضی ============
   if (!isFilled(form.applicantName)) {
     errors.applicantName = "نام متقاضی الزامی است";
   }
+
   if (!isFilled(form.loanType)) {
     errors.loanType = "نوع تسهیلات الزامی است";
   }
+
   if (!isFilled(form.loanAmount) || Number(form.loanAmount) <= 0) {
     errors.loanAmount = "میزان تسهیلات باید صحیح وارد شود";
   }
+
   if (!isFilled(form.ownerName)) {
     errors.ownerName = "نام مالک الزامی است";
   }
+
   if (!isFilled(form.ownerAddress)) {
     errors.ownerAddress = "نشانی ملک الزامی است";
   }
+
   if (!isFilled(form.propertyOccupierCode)) {
     errors.propertyOccupierCode = "متصرف ملک را انتخاب کنید";
   }
-  if (!isFilled(form.propertyOccupierDescription)) {
-    errors.propertyOccupierDescription = "توضیحات متصرف الزامی است";
-  }
+
+  // ============ بخش ۲: اطلاعات ثبتی ============
   if (!isFilled(form.propertyNumber)) {
     errors.propertyNumber = "شماره ملک الزامی است";
   }
+
   if (!isFilled(form.seperatedFrom)) {
     errors.seperatedFrom = "مفروز و مجزی از الزامی است";
   }
+
   if (!isFilled(form.separationPiece)) {
     errors.separationPiece = "قطعه تفکیکی الزامی است";
   }
+
   if (!isFilled(form.part)) {
     errors.part = "بخش الزامی است";
   }
+
   if (!isFilled(form.city)) {
     errors.city = "شهر الزامی است";
   }
 
-  // Ownership Document Validation
   if (!isAnsweredBoolean(form.hasDefinitiveOwnershipDocument)) {
     errors.hasDefinitiveOwnershipDocument =
       "وضعیت سند قطعی مالکیت را مشخص کنید";
@@ -167,28 +174,32 @@ function validateAppraisalForm(
     }
   }
 
-  // Property Details Validation
   if (!isFilled(form.titleDeedNumber)) {
     errors.titleDeedNumber = "شماره ورقه مالکیت الزامی است";
   }
+
+  // ============ بخش ۳: مشخصات ملک و کاربری ============
   if (!isFilled(form.municipalArea)) {
     errors.municipalArea = "منطقه شهرداری الزامی است";
   }
+
   if (!isFilled(form.propertyType)) {
     errors.propertyType = "نوع ملک الزامی است";
   }
+
   if (!isFilled(form.useAccordingToTheCompletionOfTheWork)) {
     errors.useAccordingToTheCompletionOfTheWork =
       "کاربری طبق پایان کار الزامی است";
   }
+
   if (!isFilled(form.typeOfWorkCompletionCode)) {
     errors.typeOfWorkCompletionCode = "نوع پایان کار را انتخاب کنید";
   }
+
   if (!isFilled(form.typeOfUseOfTheProperty)) {
     errors.typeOfUseOfTheProperty = "نوع استفاده از ملک الزامی است";
   }
 
-  // Check for area matching
   if (!isAnsweredBoolean(form.hasMatchingTheAreaWithTheDocument)) {
     errors.hasMatchingTheAreaWithTheDocument =
       "وضعیت مطابقت مساحت با سند را مشخص کنید";
@@ -199,87 +210,31 @@ function validateAppraisalForm(
     errors.explanationInCaseOfDisagreement = "توضیحات عدم مطابقت الزامی است";
   }
 
-  if (!isFilled(form.evaluationTopicCode)) {
-    errors.evaluationTopicCode = "موضوع ارزیابی را انتخاب کنید";
+  // ============ بخش ۴: جدول ارزیابی ============
+  // فقط مساحت و مبلغ کل عرصه اجباری است
+  if (!isFilled(form.landArea) || Number(form.landArea) <= 0) {
+    errors.landArea = "مساحت عرصه الزامی است";
   }
 
-  // Appraisal Table Fields Validation
-  const tableFields: Array<{
-    field: keyof PropertyAppraisalInputDto;
-    label: string;
-  }> = [
-    { field: "landArea", label: "مساحت عرصه" },
-    { field: "landUnitPrice", label: "قیمت واحد عرصه" },
-    { field: "landTotalPrice", label: "قیمت کل عرصه" },
-    { field: "landShareArea", label: "مساحت سهم عرصه" },
-    { field: "landShareUnitPrice", label: "قیمت واحد سهم عرصه" },
-    { field: "landShareTotalPrice", label: "قیمت کل سهم عرصه" },
-    { field: "basementArea", label: "مساحت زیرزمین" },
-    { field: "basementUnitPrice", label: "قیمت واحد زیرزمین" },
-    { field: "basementTotalPrice", label: "قیمت کل زیرزمین" },
-    { field: "groundFloorArea", label: "مساحت همکف" },
-    { field: "groundFloorUnitPrice", label: "قیمت واحد همکف" },
-    { field: "groundFloorTotalPrice", label: "قیمت کل همکف" },
-    { field: "mezzanineArea", label: "مساحت نیم‌طبقه" },
-    { field: "mezzanineUnitPrice", label: "قیمت واحد نیم‌طبقه" },
-    { field: "mezzanineTotalPrice", label: "قیمت کل نیم‌طبقه" },
-    { field: "floor1Area", label: "مساحت طبقه اول" },
-    { field: "floor1UnitPrice", label: "قیمت واحد طبقه اول" },
-    { field: "floor1TotalPrice", label: "قیمت کل طبقه اول" },
-    { field: "floor2Area", label: "مساحت طبقه دوم" },
-    { field: "floor2UnitPrice", label: "قیمت واحد طبقه دوم" },
-    { field: "floor2TotalPrice", label: "قیمت کل طبقه دوم" },
-    { field: "floor3Area", label: "مساحت طبقه سوم" },
-    { field: "floor3UnitPrice", label: "قیمت واحد طبقه سوم" },
-    { field: "floor3TotalPrice", label: "قیمت کل طبقه سوم" },
-    { field: "floor4Area", label: "مساحت طبقه چهارم" },
-    { field: "floor4UnitPrice", label: "قیمت واحد طبقه چهارم" },
-    { field: "floor4TotalPrice", label: "قیمت کل طبقه چهارم" },
-    { field: "floor5Area", label: "مساحت طبقه پنجم" },
-    { field: "floor5UnitPrice", label: "قیمت واحد طبقه پنجم" },
-    { field: "floor5TotalPrice", label: "قیمت کل طبقه پنجم" },
-    { field: "otherFloorsArea", label: "مساحت سایر طبقات" },
-    { field: "otherFloorsUnitPrice", label: "قیمت واحد سایر طبقات" },
-    { field: "otherFloorsTotalPrice", label: "قیمت کل سایر طبقات" },
-    { field: "landscapingArea", label: "مساحت محوطه‌سازی" },
-    { field: "landscapingUnitPrice", label: "قیمت واحد محوطه‌سازی" },
-    { field: "landscapingTotalPrice", label: "قیمت کل محوطه‌سازی" },
-    { field: "facilitiesArea", label: "مساحت تأسیسات" },
-    { field: "facilitiesUnitPrice", label: "قیمت واحد تأسیسات" },
-    { field: "facilitiesTotalPrice", label: "قیمت کل تأسیسات" },
-    { field: "totalArea", label: "مساحت کل" },
-    { field: "totalUnitPrice", label: "قیمت واحد کل" },
-    { field: "totalPrice", label: "قیمت کل" },
-    { field: "goodwillAdjustment", label: "تعدیل سرقفلی" },
-    { field: "finalPrice", label: "قیمت نهایی" },
-    { field: "finalPriceInWords", label: "قیمت نهایی به حروف" },
-  ];
+  if (!isFilled(form.landTotalPrice) || Number(form.landTotalPrice) <= 0) {
+    errors.landTotalPrice = "مبلغ کل عرصه الزامی است";
+  }
 
-  tableFields.forEach(({ field, label }) => {
-    if (!isFilled(form[field])) {
-      errors[field] = `${label} الزامی است`;
-    }
-  });
+  // فقط مبلغ نهایی اجباری است
+  if (!isFilled(form.finalPrice) || Number(form.finalPrice) <= 0) {
+    errors.finalPrice = "مبلغ نهایی (عدد) الزامی است";
+  }
 
-  // Additional Property Details Validation
-  if (!isFilled(form.totalFloors)) {
-    errors.totalFloors = "تعداد طبقات الزامی است";
+  if (!isFilled(form.finalPriceInWords)) {
+    errors.finalPriceInWords = "مبلغ نهایی (حروف) الزامی است";
   }
-  if (!isFilled(form.usageBreakdown)) {
-    errors.usageBreakdown = "تعداد واحدها به تفکیک کاربری الزامی است";
-  }
-  if (!isFilled(form.structureTypeCode) && !isFilled(form.structureTypeOther)) {
-    errors.structureTypeCode = "نوع سازه یا سایر الزامی است";
-    errors.structureTypeOther = "نوع سازه یا سایر الزامی است";
-  }
-  if (!isFilled(form.facadeType)) {
-    errors.facadeType = "نماسازی الزامی است";
-  }
+
+  // ============ بخش ۵: توضیحات تکمیلی ============
   if (!isFilled(form.buildingAgeCalculation)) {
     errors.buildingAgeCalculation = "نحوه محاسبه قدمت بنا الزامی است";
   }
 
-  // Parking and Storage Validation
+  // ============ بخش ۸: امکانات ============
   if (!isFilled(form.parkingCount) || Number(form.parkingCount) < 0) {
     errors.parkingCount = "تعداد پارکینگ الزامی است";
   } else if (Number(form.parkingCount) > 0 && form.hasParking !== true) {
@@ -295,11 +250,9 @@ function validateAppraisalForm(
   if (!isFilled(form.storageArea) || Number(form.storageArea) < 0) {
     errors.storageArea = "مساحت انباری الزامی است";
   }
+
   if (!isFilled(form.elevatorCount) || Number(form.elevatorCount) < 0) {
     errors.elevatorCount = "تعداد آسانسور الزامی است";
-  }
-  if (!isFilled(form.otherPrivileges)) {
-    errors.otherPrivileges = "امتیازات مشاعی/اختصاصی دیگر الزامی است";
   }
 
   return errors;

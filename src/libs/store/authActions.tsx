@@ -9,6 +9,7 @@ interface AuthState {
   isLoading: boolean;
   fullName?: string;
   branchName?: string;
+  orgUnitTag?: number;
   permissions: string[];
 }
 
@@ -17,6 +18,7 @@ export const authStore = new Store<AuthState>({
   user: null,
   token: null,
   isLoading: false,
+  orgUnitTag: undefined,
   permissions: [],
 });
 
@@ -36,6 +38,7 @@ export const authActions = {
     surname?: string,
     isActive?: boolean,
     creationTime?: string,
+    orgUnitTag?: number,
   ) => {
     // Create user object matching User interface
     const user = {
@@ -52,6 +55,7 @@ export const authActions = {
       surname,
       isActive,
       creationTime,
+      orgUnitTag,
     };
 
     authStore.setState((state) => ({
@@ -62,6 +66,7 @@ export const authActions = {
       isLoading: false,
       fullName,
       branchName,
+      orgUnitTag,
     }));
 
     // Store in localStorage
@@ -69,6 +74,9 @@ export const authActions = {
     localStorage.setItem("auth_user", JSON.stringify(userName));
     localStorage.setItem("roles", JSON.stringify(roles));
     localStorage.setItem("auth_national_Id", JSON.stringify(nationalId));
+    if (orgUnitTag !== undefined && orgUnitTag !== null) {
+      localStorage.setItem("auth_orgUnitTag", String(orgUnitTag));
+    }
     if (pid) localStorage.setItem("auth_pid", pid);
     if (bid) localStorage.setItem("auth_bid", bid);
     if (fullName) localStorage.setItem("auth_fullName", fullName);
@@ -98,6 +106,7 @@ export const authActions = {
       isLoading: false,
       fullName: undefined,
       branchName: undefined,
+      orgUnitTag: undefined,
       permissions: [],
     }));
     // Clear localStorage
@@ -108,6 +117,7 @@ export const authActions = {
     localStorage.removeItem("auth_national_Id");
     localStorage.removeItem("auth_fullName");
     localStorage.removeItem("auth_branchName");
+    localStorage.removeItem("auth_orgUnitTag");
     localStorage.removeItem("auth_pid");
     localStorage.removeItem("auth_bid");
     localStorage.removeItem("auth_sid");
@@ -132,6 +142,7 @@ export const authActions = {
     const nationalId = localStorage.getItem("auth_national_Id");
     const rolesStr = localStorage.getItem("roles");
     const permissionsStr = localStorage.getItem("permissions");
+    const orgUnitTagStr = localStorage.getItem("auth_orgUnitTag");
     const pid = localStorage.getItem("auth_pid") || undefined;
     const bid = localStorage.getItem("auth_bid") || undefined;
     const sid = localStorage.getItem("auth_sid") || undefined;
@@ -146,6 +157,9 @@ export const authActions = {
         const roles = rolesStr ? JSON.parse(rolesStr) : [];
         const permissions = permissionsStr ? JSON.parse(permissionsStr) : [];
         const nationalIdValue = nationalId ? JSON.parse(nationalId) : "";
+        const orgUnitTag = orgUnitTagStr
+          ? parseInt(orgUnitTagStr, 10)
+          : undefined;
 
         // Reconstruct user object matching User interface
         const user = {
@@ -162,6 +176,7 @@ export const authActions = {
           surname,
           isActive,
           creationTime,
+          orgUnitTag,
         };
 
         authStore.setState((state) => ({
@@ -172,6 +187,7 @@ export const authActions = {
           isLoading: false,
           fullName,
           branchName,
+          orgUnitTag,
           permissions: Array.isArray(permissions) ? permissions : [],
         }));
       } catch (error) {
